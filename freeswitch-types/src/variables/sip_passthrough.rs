@@ -36,7 +36,7 @@ impl std::fmt::Display for InvalidHeaderName {
         }
         write!(
             f,
-            "invalid SIP header name ({} bytes): contains CR or LF",
+            "invalid SIP header name ({} bytes): contains CR, LF or NUL",
             self.0
                 .len()
         )

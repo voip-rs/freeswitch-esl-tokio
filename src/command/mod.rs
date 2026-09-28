@@ -41,14 +41,12 @@ impl fmt::Debug for Secret {
     }
 }
 
-/// Validate that a user-provided string contains no newline characters.
-///
-/// ESL commands are line-delimited; embedded newlines would allow injection
-/// of arbitrary protocol commands.
-fn validate_no_newlines(s: &str, context: &str) -> EslResult<()> {
+/// Refuse a user-provided string carrying a line break, which injects a
+/// command, or a NUL, which cuts one short.
+fn validate_wire_text(s: &str, context: &str) -> EslResult<()> {
     if contains_wire_terminator(s) {
         return Err(EslError::ProtocolError {
-            message: format!("{} must not contain newlines", context),
+            message: format!("{} must not contain a line break or NUL", context),
         });
     }
     Ok(())
@@ -88,10 +86,10 @@ impl CommandBuilder {
 
     /// Add header to command.
     ///
-    /// Returns an error if the name or value contains newline characters.
+    /// Returns an error if the name or value contains a line break or NUL.
     pub fn header(mut self, name: &str, value: &str) -> EslResult<Self> {
-        validate_no_newlines(name, "header name")?;
-        validate_no_newlines(value, "header value")?;
+        validate_wire_text(name, "header name")?;
+        validate_wire_text(value, "header value")?;
         self.headers
             .insert(name.to_string(), value.to_string());
         Ok(self)
@@ -361,57 +359,57 @@ impl EslCommand {
     /// Runs before any formatting so no half-built command reaches the wire.
     fn validate(&self) -> EslResult<()> {
         match self {
-            EslCommand::Auth { password } => validate_no_newlines(&password.0, "password"),
+            EslCommand::Auth { password } => validate_wire_text(&password.0, "password"),
             EslCommand::UserAuth { user, password } => {
-                validate_no_newlines(user, "user")?;
-                validate_no_newlines(&password.0, "password")
+                validate_wire_text(user, "user")?;
+                validate_wire_text(&password.0, "password")
             }
-            EslCommand::Api { command } => validate_no_newlines(command, "api command"),
-            EslCommand::BgApi { command } => validate_no_newlines(command, "bgapi command"),
+            EslCommand::Api { command } => validate_wire_text(command, "api command"),
+            EslCommand::BgApi { command } => validate_wire_text(command, "bgapi command"),
             EslCommand::Events { format, events } => {
-                validate_no_newlines(format, "event format")?;
-                validate_no_newlines(events, "event list")
+                validate_wire_text(format, "event format")?;
+                validate_wire_text(events, "event list")
             }
             EslCommand::Filter { header, value } => {
-                validate_no_newlines(header, "filter header")?;
-                validate_no_newlines(value, "filter value")
+                validate_wire_text(header, "filter header")?;
+                validate_wire_text(value, "filter value")
             }
             EslCommand::SendMsg { uuid, .. } => match uuid {
-                Some(u) => validate_no_newlines(u, "sendmsg uuid"),
+                Some(u) => validate_wire_text(u, "sendmsg uuid"),
                 None => Ok(()),
             },
             EslCommand::Execute {
                 app, args, uuid, ..
             } => {
-                validate_no_newlines(app, "execute app")?;
+                validate_wire_text(app, "execute app")?;
                 if let Some(a) = args {
-                    validate_no_newlines(a, "execute args")?;
+                    validate_wire_text(a, "execute args")?;
                 }
                 match uuid {
-                    Some(u) => validate_no_newlines(u, "execute uuid"),
+                    Some(u) => validate_wire_text(u, "execute uuid"),
                     None => Ok(()),
                 }
             }
-            EslCommand::Log { level } => validate_no_newlines(level, "log level"),
+            EslCommand::Log { level } => validate_wire_text(level, "log level"),
             EslCommand::SendEvent { event } => {
-                validate_no_newlines(&Self::sendevent_name(event)?, "sendevent event name")
+                validate_wire_text(&Self::sendevent_name(event)?, "sendevent event name")
             }
             EslCommand::MyEvents { format, uuid } => {
-                validate_no_newlines(format, "myevents format")?;
+                validate_wire_text(format, "myevents format")?;
                 match uuid {
-                    Some(u) => validate_no_newlines(u, "myevents uuid"),
+                    Some(u) => validate_wire_text(u, "myevents uuid"),
                     None => Ok(()),
                 }
             }
-            EslCommand::NixEvent { events } => validate_no_newlines(events, "nixevent list"),
+            EslCommand::NixEvent { events } => validate_wire_text(events, "nixevent list"),
             EslCommand::FilterDelete { header, value } => {
-                validate_no_newlines(header, "filter delete header")?;
+                validate_wire_text(header, "filter delete header")?;
                 match value {
-                    Some(v) => validate_no_newlines(v, "filter delete value"),
+                    Some(v) => validate_wire_text(v, "filter delete value"),
                     None => Ok(()),
                 }
             }
-            EslCommand::GetVar { name } => validate_no_newlines(name, "getvar name"),
+            EslCommand::GetVar { name } => validate_wire_text(name, "getvar name"),
             EslCommand::Exit
             | EslCommand::NoLog
             | EslCommand::NoOp

@@ -7,7 +7,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WireTokenFault {
     Empty,
-    Newline,
+    Terminator,
     Space,
 }
 
@@ -16,7 +16,7 @@ impl WireTokenFault {
         if s.is_empty() {
             Some(Self::Empty)
         } else if crate::wire_safety::contains_wire_terminator(s) {
-            Some(Self::Newline)
+            Some(Self::Terminator)
         } else if s.contains(' ') {
             Some(Self::Space)
         } else {
@@ -28,7 +28,7 @@ impl WireTokenFault {
 /// Error returned when an [`EventSubscription`] builder method receives invalid input.
 ///
 /// Custom subclasses and filter values are validated against ESL wire-safety
-/// constraints: no newlines, carriage returns, or (for subclasses) spaces.
+/// constraints: no line breaks, NULs, or (for subclasses) spaces.
 /// `Display` names the character class that made the value unusable and the
 /// value's size; the value itself is subscriber data and stays on the field.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +38,7 @@ impl fmt::Display for EventSubscriptionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let class = match WireTokenFault::classify(&self.0) {
             Some(WireTokenFault::Empty) => return f.write_str("event subscription token is empty"),
-            Some(WireTokenFault::Newline) => "a newline",
+            Some(WireTokenFault::Terminator) => "a line break or NUL",
             Some(WireTokenFault::Space) => "a space",
             None => "an unusable character",
         };
@@ -90,7 +90,7 @@ pub struct EventSubscription {
     filters: Vec<(String, String)>,
 }
 
-/// What a field accepts beyond the newline ban every wire value carries.
+/// What a field accepts beyond the line-break and NUL ban every wire value carries.
 #[derive(Debug, Clone, Copy)]
 struct WireTokenRules {
     reject_empty: bool,
@@ -114,7 +114,7 @@ impl WireTokenRules {
 fn validate_wire_token(s: &str, rules: WireTokenRules) -> Result<(), EventSubscriptionError> {
     let rejected = match WireTokenFault::classify(s) {
         Some(WireTokenFault::Empty) => rules.reject_empty,
-        Some(WireTokenFault::Newline) => true,
+        Some(WireTokenFault::Terminator) => true,
         Some(WireTokenFault::Space) => rules.reject_space,
         None => false,
     };
@@ -261,7 +261,7 @@ impl EventSubscription {
     /// Add a single event by wire name.
     ///
     /// Escape hatch for events the [`EslEventType`] enum hasn't yet been
-    /// updated to cover. The argument is validated for newline injection,
+    /// updated to cover. The argument is validated for line breaks and NUL,
     /// spaces, and emptiness.
     ///
     /// Raw events appear on the wire alongside typed events when
@@ -293,7 +293,7 @@ impl EventSubscription {
 
     /// Add a custom subclass (e.g. `"sofia::register"`).
     ///
-    /// Returns `Err` if the subclass contains spaces, newlines, or is empty.
+    /// Returns `Err` if the subclass contains spaces, line breaks, NUL, or is empty.
     pub fn custom_subclass(
         mut self,
         subclass: impl Into<String>,
@@ -376,7 +376,7 @@ impl EventSubscription {
 
     /// Add a filter with raw header and value strings.
     ///
-    /// Both header and value are validated against newline injection.
+    /// Both header and value are validated against line breaks and NUL.
     pub fn filter_raw(
         self,
         header: impl Into<String>,
@@ -427,7 +427,7 @@ impl EventSubscription {
     ///
     /// Direct push to this list bypasses [`event_raw`](Self::event_raw)'s
     /// validation. Callers are responsible for ensuring entries contain no
-    /// newlines, spaces, or empty strings.
+    /// line breaks, NULs, spaces, or empty strings.
     pub fn event_types_raw_mut(&mut self) -> &mut Vec<String> {
         &mut self.raw_events
     }
@@ -952,8 +952,8 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("newline"),
-            "error should mention newline: {err}"
+            err.contains("line break"),
+            "error should mention the line break: {err}"
         );
     }
 
@@ -978,7 +978,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err.to_string(),
-            "event subscription token contains a newline (4 bytes)"
+            "event subscription token contains a line break or NUL (4 bytes)"
         );
         assert_eq!(err.0, "val\n");
     }
