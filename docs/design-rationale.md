@@ -653,7 +653,9 @@ text as received. The value types and parsers stay in sip-header's pre-1.0
 releases, where their shapes still move. A consumer brings its own sip-header,
 whose typed accessors reach every store here through the catalog's row trait,
 so a sip-header minor is the consumer's upgrade rather than a major here, and
-this crate names no value type and re-exports neither parser crate.
+this crate names no value type and re-exports neither parser crate. A feature
+that only switched on part of sip-header goes with the re-export; the consumer
+enables it on its own sip-header.
 
 ### The ARRAY encoding problem
 
