@@ -191,38 +191,45 @@ fn strip_brackets(s: &str) -> &str {
     s
 }
 
-/// The one splitter every list-valued lookup here goes through: bracket
-/// unwrapping, then `ARRAY::` splitting, falling back to the RFC comma split.
-fn split_entries_ref(value: &str) -> Result<Vec<&str>, EslArrayError> {
+/// One row per header occurrence: bracket unwrapping, then `ARRAY::` splitting.
+/// A value without the prefix is one occurrence and stays whole.
+fn split_rows(value: &str) -> Result<Vec<&str>, EslArrayError> {
     let value = strip_brackets(value);
-    match value.strip_prefix(EslArray::PREFIX) {
-        Some(body) => {
-            let items: Vec<&str> = body
+    let Some(body) = value.strip_prefix(EslArray::PREFIX) else {
+        return Ok(vec![value]);
+    };
+    let items: Vec<&str> = body
+        .split(EslArray::SEPARATOR)
+        .take(MAX_ARRAY_ITEMS + 1)
+        .collect();
+    if items.len() > MAX_ARRAY_ITEMS {
+        return Err(EslArrayError::TooManyItems {
+            count: body
                 .split(EslArray::SEPARATOR)
-                .collect();
-            if items.len() > MAX_ARRAY_ITEMS {
-                return Err(EslArrayError::TooManyItems {
-                    count: items.len(),
-                    max: MAX_ARRAY_ITEMS,
-                });
-            }
-            Ok(items)
-        }
-        None => {
-            let value = value.trim();
-            if value.is_empty() {
-                Ok(Vec::new())
-            } else {
-                Ok(sip_header::split_comma_entries(value))
-            }
-        }
+                .count(),
+            max: MAX_ARRAY_ITEMS,
+        });
     }
+    Ok(items)
+}
+
+/// List entries of a raw value: every row comma-split, since `from_entries`
+/// takes entries a transport already delimited.
+fn split_entries_ref(value: &str) -> Result<Vec<&str>, EslArrayError> {
+    Ok(split_rows(value)?
+        .into_iter()
+        .filter(|row| {
+            !row.trim()
+                .is_empty()
+        })
+        .flat_map(sip_header::split_comma_entries)
+        .collect())
 }
 
 /// A structurally invalid ESL encoding hands the value back whole, so the RFC
 /// parser reports it rather than this layer dropping entries.
-fn entries_or_whole(value: &str) -> Vec<&str> {
-    split_entries_ref(value).unwrap_or_else(|_| vec![value])
+fn rows_or_whole(value: &str) -> Vec<&str> {
+    split_rows(value).unwrap_or_else(|_| vec![value])
 }
 
 impl EslHeaders {
@@ -271,7 +278,7 @@ impl EslHeaders {
     /// Split one comma-list SIP header value held as an ESL variable into its
     /// entries, applying the same decoding as [`parse_uri_info`](Self::parse_uri_info)
     /// and [`parse_history_info`](Self::parse_history_info): bracket unwrapping,
-    /// then `ARRAY::` splitting, falling back to the RFC comma split.
+    /// `ARRAY::` splitting, then the RFC comma split of each item.
     ///
     /// Only for headers that are lists (`Call-Info`, `Alert-Info`,
     /// `History-Info`, `Diversion`, …). A header whose value legitimately
@@ -299,9 +306,9 @@ impl EslHeaders {
             .collect())
     }
 
-    /// Entries of a header `sip-header` marks multi-valued, for
-    /// [`sip_header_all_str`](SipHeaderLookup::sip_header_all_str). Any other
-    /// header answers with its value whole: only a list may be split.
+    /// Rows of a header `sip-header` marks multi-valued, one per occurrence, for
+    /// [`sip_header_all_str`](SipHeaderLookup::sip_header_all_str). Commas are
+    /// left to the accessor, which knows whether the header is a list.
     #[doc(hidden)]
     pub fn split_multi_value<'a>(value: Option<&'a str>, name: &str) -> Vec<&'a str> {
         let Some(value) = value else {
@@ -311,7 +318,7 @@ impl EslHeaders {
             .parse::<sip_header::SipHeader>()
             .is_ok_and(|h| h.is_multi_valued());
         if multi {
-            entries_or_whole(value)
+            rows_or_whole(value)
         } else {
             vec![value]
         }
