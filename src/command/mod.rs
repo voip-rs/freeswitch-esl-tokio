@@ -968,4 +968,29 @@ mod tests {
         let result = CommandBuilder::new("test").header("X-Key", "bad\nvalue");
         assert!(result.is_err());
     }
+
+    /// The switch reads a command as a C string, so a NUL cuts it short.
+    #[test]
+    fn nul_rejected_at_the_wire() {
+        let api = EslCommand::Api {
+            command: "uuid_setvar abc sip_h_X-Tag a\0b".to_string(),
+        };
+        assert!(api
+            .to_wire_format()
+            .is_err());
+
+        let auth = EslCommand::Auth {
+            password: Secret("pass\0word".to_string()),
+        };
+        assert!(auth
+            .to_wire_format()
+            .is_err());
+
+        assert!(CommandBuilder::new("test")
+            .header("X-Key", "bad\0value")
+            .is_err());
+        assert!(CommandBuilder::new("test")
+            .header("X-Bad\0", "value")
+            .is_err());
+    }
 }

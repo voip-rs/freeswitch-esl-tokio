@@ -1014,6 +1014,16 @@ mod tests {
     }
 
     #[test]
+    fn filter_raw_rejects_nul() {
+        assert!(EventSubscription::new(EventFormat::Plain)
+            .filter_raw("Header", "bad\0value")
+            .is_err());
+        assert!(EventSubscription::new(EventFormat::Plain)
+            .filter_raw("Bad\0Header", "value")
+            .is_err());
+    }
+
+    #[test]
     fn filter_typed_rejects_newline_in_value() {
         let result = EventSubscription::new(EventFormat::Plain)
             .filter(EventHeader::CallDirection, "bad\nvalue");

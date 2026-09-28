@@ -508,6 +508,7 @@ mod tests {
     fn raw_rejects_newlines() {
         assert!(SipPassthroughHeader::request_raw("X-Bad\nHeader").is_err());
         assert!(SipPassthroughHeader::request_raw("X-Bad\rHeader").is_err());
+        assert!(SipPassthroughHeader::request_raw("X-Bad\0Header").is_err());
         assert!(SipPassthroughHeader::request_raw("").is_err());
     }
 
