@@ -147,14 +147,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `EslHeaders::parse_uri_info` and `parse_history_info` flatten the ARRAY error
-
-Both map an `EslArrayError` into `UriInfoError::Malformed(String)` /
-`HistoryInfoError::Malformed(String)`, so a caller cannot tell a cap breach
-from a malformed URI without matching message text, and the source chain is
-gone. The fix is an `EslHeaders`-owned error wrapping both, which changes the
-return type.
-
 ### `SipPassthroughHeader::is_array_header` answers `false` for unknown headers
 
 An unknown header name is neither single- nor multi-valued; `bool` cannot say

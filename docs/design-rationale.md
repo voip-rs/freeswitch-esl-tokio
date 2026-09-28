@@ -402,9 +402,7 @@ read subscriber data off it. Three protections keep both out of logs:
    them. Interpolated, they reach every line a consumer logs from `{e}`, around
    the redaction it applies to that same value on its own path. This binds
    warnings as much as errors, and errors a macro generates as much as ones
-   written by hand. Two exceptions: a codec string the caller wrote, and errors
-   sip-header renders with a URI parser's text embedded; the second closes when
-   that chain stops quoting, and the floor moves with it.
+   written by hand. One exception: a codec string the caller wrote.
 
 These exist because production ESL daemons run with debug logging enabled
 during incident investigation. A sysadmin grepping logs should not find an ESL
@@ -648,21 +646,14 @@ Call-Info parser for a testing harness — had to pull in ESL event types,
 channel state machines, and originate command builders they would never
 use, from a crate whose name signalled "this is for FreeSWITCH users."
 
-Those modules were extracted into a standalone `sip-header` crate
-(MIT OR Apache-2.0, matching `sip-uri`), which `freeswitch-types` now
-depends on. The result is a layered ecosystem: `sip-uri` handles URI
-parsing (RFC 3261 addr-spec), `sip-header` handles header-level parsing
-(name-addr with header params, Call-Info, History-Info, Geolocation,
-conference-info), and `freeswitch-types` re-exports everything from
-`sip-header` while adding ESL protocol types, channel state, and command
-builders on top. Existing users see no API change — all types remain
-importable from `freeswitch_types::`.
-
-The requirement on sip-header is a caret on one minor. Its types are re-exported
-here and sit in this crate's own signatures, so a breaking sip-header minor is a
-breaking `freeswitch-types` release, and a range spanning minors lets a
-downstream resolve build a published version against one it no longer compiles
-with. Moving to a new sip-header minor is therefore a major here.
+Those modules live in `sip-header` (MIT OR Apache-2.0, matching `sip-uri`).
+`freeswitch-types` depends publicly on its stable catalog alone: the header
+names, `define_header_enum!`, and the row trait and holders that carry header
+text as received. The value types and parsers stay in sip-header's pre-1.0
+releases, where their shapes still move. A consumer brings its own sip-header,
+whose typed accessors reach every store here through the catalog's row trait,
+so a sip-header minor is the consumer's upgrade rather than a major here, and
+this crate names no value type and re-exports neither parser crate.
 
 ### The ARRAY encoding problem
 
@@ -694,15 +685,16 @@ would hide a transport distinction that callers need to reason about.
 
 ### EslHeaders: making the transport boundary visible
 
-The clean solution was a newtype. [`EslHeaders`](../freeswitch-types/src/variables/esl_headers.rs)
-wraps `IndexMap<String, String>` and overrides one `SipHeaderLookup` method,
-the multi-occurrence lookup every list-valued default in sip-header reads
-through, to peel the FreeSWITCH encoding (`ARRAY::` splitting and `[...]`
-bracket stripping) for the headers sip-header itself marks multi-valued.
-Overriding a named few parsers instead leaves the rest failing on the same
-wire value the crate knows is ARRAY-encoded, so the seam is the predicate, not
-a list. Raw lookups (`sip_header_str`) return the stored value untouched, so
-callers who want the wire form see exactly what FreeSWITCH sent. `EslEvent` and
+[`EslHeaders`](../freeswitch-types/src/variables/esl_headers.rs) wraps
+`IndexMap<String, String>` and answers the catalog's row trait: a header the
+catalog marks repeatable yields one row per occurrence, with FreeSWITCH's
+`[...]` wrapping and `ARRAY::` encoding peeled, and any other header is one row,
+whole. Commas stay for the accessor, which alone knows whether a header is a
+list; splitting them here would cut an authentication header's parameters into
+rows, which RFC 3261 section 7.3.1 forbids joining in the first place. An
+`ARRAY::` value past the item cap is a row error, never a fallback to the whole
+value, so every accessor fails on it rather than reading garbage. The rows are
+the decoded view; the stored value is `HeaderLookup::header_str`. `EslEvent` and
 `EslResponse` are carriers around an `EslHeaders`; there is no second store.
 
 The type makes visible what was previously hidden:
@@ -712,29 +704,18 @@ The type makes visible what was previously hidden:
 | `HashMap<String, String>` | RFC comma-separated | no | no |
 | `EslHeaders` | RFC + ARRAY + brackets | yes (`variable_` prefix) | yes |
 
-`sip-header` provides `UriInfo::from_entries()` and
-`HistoryInfo::from_entries()` that accept
-`impl IntoIterator<Item = &str>`, so `EslHeaders` can split via
-`EslArray` and pass pre-split entries without `sip-header` knowing
-anything about the ARRAY format.
+A raw channel-variable value, such as `sip_call_info` fetched over ESL, goes
+through the same decoder into the catalog's single-header holder, which the
+caller types with its own sip-header. There is one decoder for the map and the
+raw value, and neither returns a sip-header value type.
 
-The same peeling is exposed as the associated functions
-`EslHeaders::parse_uri_info` / `parse_history_info`, for callers that hold a
-raw channel-variable string (e.g. `sip_call_info` fetched over ESL) rather than
-a populated map — so they reuse the canonical decoder instead of re-deriving
-the ARRAY/bracket handling.
+### HeaderLookup requires only the catalog's row trait
 
-### HeaderLookup as a supertrait of SipHeaderLookup
-
-After extraction, `SipHeaderLookup` lives in `sip-header` along with its
-`HashMap<String, String>` impl, so the previous blanket
-`impl<T: HeaderLookup> SipHeaderLookup for T` would conflict with that
-foreign impl under Rust coherence. The fix was making `SipHeaderLookup` a
-supertrait of `HeaderLookup`. The same orphan rules forced dropping the
-`IndexMap<String, String>` blanket `HeaderLookup` impl: ESL callers want
-the `EslHeaders` newtype anyway because ARRAY decoding, bracket stripping,
-and `variable_` prefix handling are correct for ESL data and wrong for a
-plain `IndexMap`.
+Every typed SIP accessor comes from sip-header's blanket implementation over the
+catalog's row trait, so any `HeaderLookup` store is typed by whichever sip-header
+the consumer depends on. There is no `HeaderLookup` impl for a bare `IndexMap`:
+ARRAY decoding, bracket stripping and `variable_` prefixes are right for ESL
+data and wrong for an arbitrary map.
 
 ## Unified SIP passthrough headers over per-prefix enums
 
@@ -749,8 +730,8 @@ pass raw strings like `"sip_h_Call-Info"` to `variable_str()`.
 This was both incomplete and the wrong shape. A fixed enum cannot
 cover the open-ended nature of SIP headers: `X-*` custom headers,
 extension RFCs, and vendor-specific headers all pass through the same
-`sip_h_*` mechanism. Meanwhile the typed `SipHeader` catalog in the
-`sip-header` crate already enumerates all IANA-registered headers.
+`sip_h_*` mechanism. Meanwhile the typed `SipHeader` in sip-header's
+catalog crate already enumerates all IANA-registered headers.
 Duplicating that catalog as `SipInviteHeader` variants created a
 maintenance burden (keeping two lists in sync) with no extra value.
 
