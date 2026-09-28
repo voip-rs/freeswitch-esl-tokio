@@ -273,6 +273,42 @@ fn title_case_dashes(s: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Serde carries the name the switch writes, the same text `Display` gives.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn header_enums_serialize_as_wire_names() {
+        use crate::variables::{
+            ChannelVariable, ConferenceVariable, CoreMediaVariable, LoopbackVariable, SofiaVariable,
+        };
+        let json = |v: serde_json::Value| v.to_string();
+        assert_eq!(
+            json(serde_json::to_value(EventHeader::UniqueId).unwrap()),
+            "\"Unique-ID\""
+        );
+        assert_eq!(
+            json(serde_json::to_value(ChannelVariable::Uuid).unwrap()),
+            "\"uuid\""
+        );
+        assert_eq!(
+            json(serde_json::to_value(SofiaVariable::SipFromUser).unwrap()),
+            "\"sip_from_user\""
+        );
+        assert_eq!(
+            json(serde_json::to_value(ConferenceVariable::ConferenceName).unwrap()),
+            "\"conference_name\""
+        );
+        assert_eq!(
+            json(serde_json::to_value(CoreMediaVariable::RtpAudioInRawBytes).unwrap()),
+            "\"rtp_audio_in_raw_bytes\""
+        );
+        assert_eq!(
+            json(serde_json::to_value(LoopbackVariable::IsLoopback).unwrap()),
+            "\"is_loopback\""
+        );
+        let back: EventHeader = serde_json::from_str("\"Unique-ID\"").unwrap();
+        assert_eq!(back, EventHeader::UniqueId);
+    }
+
     #[test]
     fn display_round_trip() {
         assert_eq!(EventHeader::UniqueId.to_string(), "Unique-ID");
