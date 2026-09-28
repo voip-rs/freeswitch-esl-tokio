@@ -97,6 +97,19 @@ assert_eq!(pai.entries()[0].display_name(), Some("Alice"));
 # Ok::<(), sip_header::ParseError>(())
 ```
 
+A raw value held outside a store, such as the `sip_call_info` channel variable
+fetched over ESL, goes through the same decoder into a `SipHeaderField`:
+
+```rust
+use freeswitch_types::{EslHeaders, SipHeader};
+use sip_header::prelude::*;
+
+let raw = "ARRAY::<sip:a@example.com>;purpose=icon|:<sip:b@example.com>";
+let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)?;
+assert_eq!(field.call_info()?.unwrap().len(), 2);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ### Command builders (requires `esl` feature)
 
 ```rust

@@ -16,7 +16,7 @@
 //! explains the layering.
 
 use indexmap::IndexMap;
-use sip_header_catalog::{RowError, SipHeader, SipHeaderRows};
+use sip_header_catalog::{RowError, SipHeader, SipHeaderField, SipHeaderRows};
 
 use crate::headers::{case_alias_key, normalize_header_key};
 use crate::lookup::{variable_key, HeaderLookup};
@@ -215,6 +215,44 @@ fn value_rows<'a>(name: &str, value: Option<&'a str>) -> Result<Vec<&'a str>, Ro
         ));
     }
     Ok(items)
+}
+
+impl EslHeaders {
+    /// A raw value of `header`, such as the `sip_call_info` channel variable
+    /// fetched over ESL, decoded into the rows a stored header gives.
+    ///
+    /// Type the field with sip-header's accessors, as any store here:
+    ///
+    /// ```
+    /// use freeswitch_types::{EslHeaders, SipHeader};
+    /// use sip_header::prelude::*;
+    ///
+    /// let raw = "ARRAY::<urn:emergency:uid:callid:bcf.test>;purpose=emergency-CallId\
+    ///            |:<urn:emergency:uid:incidentid:bcf.test>;purpose=emergency-IncidentId";
+    /// let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)?;
+    /// assert_eq!(field.call_info()?.unwrap().len(), 2);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_entries`].
+    pub fn decode_value(header: SipHeader, raw: &str) -> Result<SipHeaderField<'_>, RowError> {
+        Self::decode_value_raw(header.as_str(), raw)
+    }
+
+    /// [`decode_value`](Self::decode_value) for a header by name, one the
+    /// catalog does not register included; such a value is one row, whole.
+    ///
+    /// # Errors
+    ///
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_entries`].
+    pub fn decode_value_raw<'a>(
+        name: &'a str,
+        raw: &'a str,
+    ) -> Result<SipHeaderField<'a>, RowError> {
+        Ok(SipHeaderField::new(name, value_rows(name, Some(raw))?))
+    }
 }
 
 impl SipHeaderRows for EslHeaders {
@@ -552,8 +590,8 @@ mod tests {
     fn a_raw_call_info_array_types_through_its_field() {
         let raw = "ARRAY::<urn:emergency:uid:callid:abc>;purpose=emergency-CallId\
                    |:<urn:emergency:uid:incidentid:def>;purpose=emergency-IncidentId";
-        let field =
-            EslHeaders::decode_value("Call-Info", raw).expect("two items are under the cap");
+        let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)
+            .expect("two items are under the cap");
         assert_eq!(field.name(), "Call-Info");
         assert_eq!(
             field
@@ -603,7 +641,7 @@ mod tests {
                 .call_info()
                 .unwrap_or_else(|e| panic!("{label}: {e}"))
                 .unwrap_or_else(|| panic!("{label}: header is present"));
-            let field = EslHeaders::decode_value("Call-Info", value)
+            let field = EslHeaders::decode_value(SipHeader::CallInfo, value)
                 .unwrap_or_else(|e| panic!("{label} as a raw value: {e}"));
             let from_value = field
                 .call_info()
@@ -624,21 +662,43 @@ mod tests {
 
     #[test]
     fn a_raw_over_cap_array_is_a_row_error() {
-        let err = EslHeaders::decode_value("Call-Info", &over_cap_array("<sip:a@example.com>"))
-            .expect_err("over-cap ARRAY must fail");
-        assert_eq!(err.kind(), RowErrorKind::TooManyEntries);
+        let raw = over_cap_array("<sip:a@example.com>");
+        for err in [
+            EslHeaders::decode_value(SipHeader::CallInfo, &raw),
+            EslHeaders::decode_value_raw("Call-Info", &raw),
+        ] {
+            let err = err.expect_err("over-cap ARRAY must fail");
+            assert_eq!(err.kind(), RowErrorKind::TooManyEntries);
+        }
     }
 
     #[test]
     fn a_raw_value_of_an_unregistered_header_is_one_row() {
         let field =
-            EslHeaders::decode_value("X-Custom", "ARRAY::a|:b").expect("no framing to fail");
+            EslHeaders::decode_value_raw("X-Custom", "ARRAY::a|:b").expect("no framing to fail");
+        assert_eq!(field.name(), "X-Custom");
         assert_eq!(
             field
                 .rows()
                 .collect::<Vec<_>>(),
             ["ARRAY::a|:b"]
         );
+    }
+
+    /// A registered name spelled by hand, in any casing, decodes as the typed header does,
+    /// keeping the name as sent.
+    #[test]
+    fn a_registered_name_decodes_raw_as_typed() {
+        let raw = "ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>";
+        let typed = EslHeaders::decode_value(SipHeader::CallInfo, raw).unwrap();
+        assert_eq!(typed.name(), SipHeader::CallInfo.as_str());
+        for name in ["Call-Info", "call-info", "CALL-INFO"] {
+            let field = EslHeaders::decode_value_raw(name, raw).unwrap();
+            assert_eq!(field.name(), name);
+            assert!(field
+                .rows()
+                .eq(typed.rows()));
+        }
     }
 
     #[test]

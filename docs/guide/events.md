@@ -146,7 +146,8 @@ assert_eq!(ch.call_info()?.unwrap().entries()[0].purpose(), Some("icon"));
 ```rust
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody, SipPassthroughHeader};
 use freeswitch_esl_tokio::HeaderLookup;
-use freeswitch_esl_tokio::SipHeader;
+use freeswitch_esl_tokio::{EslHeaders, SipHeader};
+use sip_header::prelude::*;
 # use freeswitch_esl_tokio::commands::Variables;
 # fn demo(event: &impl HeaderLookup, vars: &mut Variables, raw_multipart: &str) {
 
@@ -161,6 +162,12 @@ if let Some(raw) = pai {
     if let Ok(arr) = EslArray::parse(raw) {
         for identity in arr.items() {
             println!("P-Asserted-Identity: {}", identity);
+        }
+    }
+    // Or typed through sip-header, which peels the same ARRAY encoding:
+    if let Ok(field) = EslHeaders::decode_value(SipHeader::PAssertedIdentity, raw) {
+        if let Ok(Some(identities)) = field.p_asserted_identity() {
+            println!("{} identities", identities.len());
         }
     }
 }
