@@ -356,23 +356,16 @@ pure data, `freeswitch-esl-tokio` is transport. The two crates version
 independently so a breaking change in either layer does not force a major
 bump on the other.
 
-## Wire security: newline injection prevention
+## User strings reach the wire without a line break or NUL
 
-ESL is a text protocol where `\n\n` terminates a command. Any user-provided
-string that reaches the wire without validation can inject arbitrary ESL
-commands. For example, `api("status\n\nevent plain ALL")` would execute
-`status` then silently subscribe to all events.
-
-This was discovered during the pre-v1.0 security review. The fix:
-`to_wire_format()` validates all user-supplied fields (command strings,
-header names/values, passwords, app names/args) and returns
-`EslError::ProtocolError` if `\n` or `\r` is present. The validation
-happens at the wire boundary, not at construction time, because command
-builders are `Display` types (infallible formatting) and the wire format
-is the only place where newlines are dangerous.
-
-The same principle applies to `CommandBuilder::header()` and `body()` —
-they reject newlines in both names and values.
+ESL is a text protocol where `\n\n` ends a command, and the switch reads the
+command as a C string, so a NUL ends it early and the rest is dropped without
+an error. A user string carrying either runs a command the caller never wrote —
+`api("status\n\nevent plain ALL")` subscribes to every event — or a truncated
+one. `to_wire_format()` refuses CR, LF and NUL in every user-supplied field,
+command-builder headers and bodies included. The check sits at the wire
+boundary rather than at construction because builders are `Display` types with
+infallible formatting, and the wire is the only place these bytes are dangerous.
 
 A value that cannot be represented at all is refused earlier than that. An empty
 variable value and one closing a bracket it never opened have no working
@@ -382,6 +375,13 @@ config load included. A newline is safe as data and dangerous only on the wire;
 these are impossible at any layer, and a silent drop is indistinguishable from
 success for as long as nobody reads the channel back. Text the switch itself
 produced is exempt: the switch accepts it, so such a pair is reported, not refused.
+
+A variable the switch turns into an outgoing SIP header must hold a value a
+header field can carry, so it also refuses every control character but tab at
+each boundary that can fail. The switch copies the value into the message
+verbatim, and its SIP stack ends a field only at a line break: the character
+reaches the peer in a header that forbids it, or turns a registered header into
+a parse error.
 
 ## Credentials and wire content in logs
 

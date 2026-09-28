@@ -253,9 +253,11 @@ a library crate — panics crash the caller's application. Return `Result` or
 (document why with a comment), and even then prefer `debug_assert!`.
 
 **Wire security: validate user strings.** ESL is a text protocol where
-`\n\n` terminates a command. Any user-provided string reaching the wire
-without validation can inject arbitrary ESL commands. `to_wire_format()`
-validates all user-supplied fields and rejects `\n`/`\r`. See
+`\n\n` terminates a command and a NUL truncates it. Any user-provided string
+reaching the wire without validation can inject or cut ESL commands.
+`to_wire_format()` validates all user-supplied fields and rejects `\n`, `\r`
+and NUL. A value bound for an outgoing SIP header (the `sip_h_`-style
+prefixes) also rejects every control character but tab. See
 [docs/design-rationale.md](docs/design-rationale.md) for the full story.
 
 **Never autonomously send commands to the server.** The library puts a command
