@@ -24,6 +24,43 @@ fn an_empty_value_is_refused_at_the_boundary() {
     );
 }
 
+/// sofia copies a header-bound variable into the outgoing message verbatim, and
+/// its parser ends a field only at CR/LF, so any other control character ships.
+#[test]
+fn a_control_character_in_a_header_bound_value_is_refused() {
+    for block in [
+        "{sip_h_X-Tag=a\u{1}b}",
+        "{sip_rh_X-Tag=a\u{1b}b}",
+        "{sip_ph_X-Tag=a\u{7f}b}",
+        "{sip_bye_h_X-Tag=a\u{1}b}",
+        "{SIP_H_X-Tag=a\u{1}b}",
+    ] {
+        assert!(
+            block
+                .parse::<Variables>()
+                .is_err(),
+            "{block:?} parsed"
+        );
+    }
+    assert!(serde_json::from_str::<Variables>("{\"sip_h_X-Tag\":\"a\\u0001b\"}").is_err());
+}
+
+#[test]
+fn a_tab_or_a_control_character_outside_a_header_passes() {
+    for block in [
+        "{sip_h_X-Tag=a\tb}",
+        "{probe=a\u{1}b}",
+        "{sip_i_x_tag=a\u{1}b}",
+    ] {
+        assert!(
+            block
+                .parse::<Variables>()
+                .is_ok(),
+            "{block:?} refused"
+        );
+    }
+}
+
 /// The switch finds a block's end by counting bracket depth and honours no
 /// escape while doing so, so a value closing a bracket it never opened ends
 /// the block early and the rest becomes dial-string text.
