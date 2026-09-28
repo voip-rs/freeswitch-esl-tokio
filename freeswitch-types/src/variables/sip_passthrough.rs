@@ -95,6 +95,32 @@ impl SipHeaderPrefix {
             Self::NoBye => "sip_nobye_h_",
         }
     }
+
+    /// Whether mod_sofia copies a variable under this prefix into an outgoing
+    /// SIP message as a header.
+    #[cfg(feature = "esl")]
+    pub(crate) const fn emits_header(self) -> bool {
+        matches!(
+            self,
+            Self::Request | Self::Response | Self::Provisional | Self::Bye
+        )
+    }
+}
+
+/// Whether `var` names a variable mod_sofia sends as an outgoing SIP header.
+/// The prefix matches case-insensitively, as `sofia_glue_get_extra_headers` does.
+#[cfg(feature = "esl")]
+pub(crate) fn names_outgoing_header(var: &str) -> bool {
+    SipHeaderPrefix::ALL
+        .iter()
+        .filter(|p| p.emits_header())
+        .any(|p| {
+            var.get(
+                ..p.as_str()
+                    .len(),
+            )
+            .is_some_and(|head| head.eq_ignore_ascii_case(p.as_str()))
+        })
 }
 
 impl std::fmt::Display for SipHeaderPrefix {

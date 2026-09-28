@@ -16,3 +16,11 @@
 pub fn contains_wire_terminator(s: &str) -> bool {
     s.contains(['\n', '\r', '\0'])
 }
+
+/// `true` if `s` carries a control character other than tab, which no SIP
+/// header field value may hold.
+#[doc(hidden)]
+pub fn contains_header_control(s: &str) -> bool {
+    s.chars()
+        .any(|c| c.is_ascii_control() && c != '\t')
+}

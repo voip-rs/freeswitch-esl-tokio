@@ -10,6 +10,8 @@ mod esl_headers;
 mod loopback;
 mod sip_multipart;
 mod sip_passthrough;
+#[cfg(feature = "esl")]
+pub(crate) use sip_passthrough::names_outgoing_header;
 mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};

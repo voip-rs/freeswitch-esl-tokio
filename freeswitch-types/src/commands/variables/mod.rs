@@ -9,6 +9,8 @@ use crate::switch_passes::brackets::{check_separator, same_header, unbalanced, B
 use crate::switch_passes::escape::{escape_text, escape_value, EscapedField};
 use crate::switch_passes::originate_legs::{splits_into_threads, ENTERPRISE_DELIM};
 use crate::switch_passes::{pipeline, PipelineError};
+use crate::variables::names_outgoing_header;
+use crate::wire_safety::contains_header_control;
 
 mod target;
 #[cfg(test)]
@@ -144,6 +146,12 @@ fn check_representable(
              pairs it with the next quote in the dial string before it parses \
              the block, whatever escaping precedes either. Use default scope, \
              or keep the quote out of the value"
+        )));
+    }
+    if names_outgoing_header(key) && contains_header_control(value) {
+        return Err(OriginateError::ParseError(format!(
+            "variable {key} carries a control character: the switch copies it verbatim \
+             into an outgoing SIP header, whose field value cannot hold one"
         )));
     }
     if value.is_empty() {

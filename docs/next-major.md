@@ -49,6 +49,10 @@ nowhere, and one carrying `:_:`, an unbalanced bracket, a quote in channel
 scope or the block's `^^` separator is split or paired before the switch
 installs it. One carrying `[` is read as an array index and installed under the
 text before it, and two differing only in case install as one.
+A value carrying a control character but tab under a prefix mod_sofia sends
+as an outgoing header is the seventh: it ships in a header field that cannot
+hold it. `UuidSetVar::new` and `set_var` carry the same values with no
+fallible step at all.
 Refusing them is the only correct handling,
 and it cannot live at render time — `Display` is infallible and `ToString`
 panics on a `fmt::Error`, which would put a panic in a library. Until these
