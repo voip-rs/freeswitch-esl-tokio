@@ -9,7 +9,7 @@ use crate::{
     protocol::{decode_serialized_event, DecodeOptions, EslMessage},
     EslHeaders, LossyValues,
 };
-use freeswitch_types::variable_key;
+use freeswitch_types::{variable_key, RowError, SipHeaderRows};
 use indexmap::IndexMap;
 
 /// Parse a FreeSWITCH API response body into a result.
@@ -422,12 +422,11 @@ impl EslResponse {
     }
 }
 
-impl freeswitch_types::sip_header::SipHeaderLookup for EslResponse {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        self.lookup_header(name)
+impl SipHeaderRows for EslResponse {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+        self.headers
+            .sip_header_rows_str(name)
     }
-
-    freeswitch_types::esl_sip_header_overrides!();
 }
 
 impl HeaderLookup for EslResponse {
@@ -754,11 +753,11 @@ mod tests {
         );
     }
 
-    // --- SipHeaderLookup over FreeSWITCH's ARRAY encoding ---
+    // --- sip-header accessors over FreeSWITCH's ARRAY encoding ---
 
     #[test]
     fn esl_response_call_info_array_encoding() {
-        use freeswitch_types::sip_header::SipHeaderLookup;
+        use sip_header::prelude::*;
 
         let headers: IndexMap<String, String> = [(
             "Call-Info".into(),
@@ -782,7 +781,7 @@ mod tests {
 
     #[test]
     fn esl_response_call_info_plain_value_unchanged() {
-        use freeswitch_types::sip_header::SipHeaderLookup;
+        use sip_header::prelude::*;
 
         let headers: IndexMap<String, String> = [(
             "Call-Info".into(),
@@ -931,7 +930,7 @@ mod tests {
 
     #[test]
     fn esl_response_alert_info_array_encoding() {
-        use freeswitch_types::sip_header::SipHeaderLookup;
+        use sip_header::prelude::*;
 
         let headers: IndexMap<String, String> = [(
             "Alert-Info".into(),

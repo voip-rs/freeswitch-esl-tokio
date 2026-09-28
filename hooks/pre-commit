@@ -33,7 +33,7 @@ if ! scripts/fmt-workspace.sh -- --check; then
     exit 1
 fi
 
-# --all-features throughout: sdp and conference-info are off by default, so
+# --all-features throughout: sdp is off by default, so
 # without it a whole module compiles, lints and tests nowhere.
 if ! cargo clippy --quiet --workspace --all-features --all-targets --message-format=short -- -D warnings; then
     echo "❌ Clippy found warnings. Fix them before committing."

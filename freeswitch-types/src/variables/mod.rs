@@ -76,7 +76,7 @@ impl_variable_name!(
 mod tests {
     use super::*;
     use crate::{HeaderLookup, VARIABLE_PREFIX};
-    use sip_header::SipHeader;
+    use sip_header_catalog::SipHeader;
     use std::collections::HashMap;
 
     #[test]

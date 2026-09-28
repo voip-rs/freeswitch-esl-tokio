@@ -1,14 +1,15 @@
 //! Typed mod_sofia / SIP channel variable names.
 
-use sip_header::SipHeader;
+use sip_header_catalog::SipHeader;
 
-sip_header::define_header_enum! {
+sip_header_catalog::define_header_enum! {
     tests_mod: sofia_variable_generated_tests,
     error_type: ParseSofiaVariableError => "unknown sofia variable",
     /// mod_sofia / SIP channel variable names (the part after the `variable_` prefix).
     ///
     /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for type-safe lookups.
     /// Core FreeSWITCH variables belong in [`ChannelVariable`](super::ChannelVariable).
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum SofiaVariable {
         // --- SIP From ---
         SipFromUser => "sip_from_user",

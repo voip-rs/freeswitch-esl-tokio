@@ -17,7 +17,7 @@
 //! while all other prefixes preserve the canonical SIP header casing
 //! (`sip_h_Call-Info`).
 
-use sip_header::SipHeader;
+use sip_header_catalog::{RowError, SipHeader, SipHeaderField, SipHeaderRows};
 
 /// Error returned when a raw header name is empty or carries a wire terminator.
 ///
@@ -170,7 +170,7 @@ impl std::error::Error for ParseSipPassthroughError {}
 ///
 /// ```
 /// use freeswitch_types::variables::{SipPassthroughHeader, SipHeaderPrefix};
-/// use sip_header::SipHeader;
+/// use freeswitch_types::SipHeader;
 ///
 /// let h = SipPassthroughHeader::request(SipHeader::CallInfo);
 /// assert_eq!(h.as_str(), "sip_h_Call-Info");
@@ -364,27 +364,41 @@ impl SipPassthroughHeader {
         &self.wire
     }
 
-    /// Extract this header's values from a raw SIP message.
+    /// This header's rows in a message's row store, one per occurrence
+    /// (RFC 3261 §7.3.1), held under the canonical name.
     ///
-    /// Returns each occurrence as a separate entry (RFC 3261 §7.3.1).
-    /// Delegates to [`sip_header::extract_header()`] using the canonical name.
-    pub fn extract_from(&self, message: &str) -> Vec<String> {
-        sip_header::extract_header(message, &self.canonical_name)
+    /// ```
+    /// use freeswitch_types::{SipHeader, SipPassthroughHeader};
+    /// use sip_header::prelude::*;
+    /// use sip_header::SipMessageHeaders;
+    ///
+    /// let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
+    ///            Call-Info: <sip:example.com>;answer-after=0\r\n\
+    ///            \r\n";
+    /// let message = SipMessageHeaders::new(msg);
+    /// let field = SipPassthroughHeader::invite(SipHeader::CallInfo).extract_from(&message)?;
+    /// assert_eq!(field.call_info()?.unwrap().len(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn extract_from<'a, S: SipHeaderRows + ?Sized>(
+        &self,
+        message: &'a S,
+    ) -> Result<SipHeaderField<'a>, RowError> {
+        Ok(SipHeaderField::new(
+            self.canonical_name
+                .clone(),
+            message.sip_header_rows_str(&self.canonical_name)?,
+        ))
     }
 
     /// Whether this header may contain ARRAY-encoded values when read from FreeSWITCH.
     ///
-    /// Only meaningful for the `Invite` prefix — FreeSWITCH stores multi-valued
-    /// incoming SIP headers in `ARRAY::val1|:val2` format. For other prefixes
-    /// (which are write-only), this always returns `false`.
+    /// Only meaningful for the `Invite` prefix — FreeSWITCH stores incoming SIP
+    /// headers that may repeat in `ARRAY::val1|:val2` format. For other
+    /// prefixes (which are write-only), this always returns `false`.
     pub fn is_array_header(&self) -> bool {
-        if self.prefix != SipHeaderPrefix::Invite {
-            return false;
-        }
-        self.canonical_name
-            .parse::<SipHeader>()
-            .map(|h| h.is_multi_valued())
-            .unwrap_or(false)
+        self.prefix == SipHeaderPrefix::Invite
+            && SipHeader::parse_name(&self.canonical_name).is_ok_and(|h| h.may_repeat())
     }
 }
 
@@ -789,9 +803,17 @@ mod tests {
         let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
                    Call-Info: <sip:example.com>;answer-after=0\r\n\
                    \r\n";
+        let message = sip_header::SipMessageHeaders::new(msg);
         let h = SipPassthroughHeader::invite(SipHeader::CallInfo);
+        let field = h
+            .extract_from(&message)
+            .expect("a message store has no framing to fail");
+        assert_eq!(field.name(), "Call-Info");
+        assert_eq!(field.header(), Some(SipHeader::CallInfo));
         assert_eq!(
-            h.extract_from(msg),
+            field
+                .rows()
+                .collect::<Vec<_>>(),
             vec!["<sip:example.com>;answer-after=0"]
         );
     }
@@ -801,10 +823,50 @@ mod tests {
         let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\
                    From: Alice <sip:alice@example.com>\r\n\
                    \r\n";
+        let message = sip_header::SipMessageHeaders::new(msg);
         let h = SipPassthroughHeader::invite(SipHeader::CallInfo);
-        assert!(h
-            .extract_from(msg)
-            .is_empty());
+        let field = h
+            .extract_from(&message)
+            .expect("a message store has no framing to fail");
+        assert_eq!(
+            field
+                .rows()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn extract_from_matches_the_compact_form() {
+        let fields = crate::SipHeaderFields::from(vec![
+            ("v", "SIP/2.0/UDP 192.0.2.1"),
+            ("Via", "SIP/2.0/TCP 192.0.2.2"),
+        ]);
+        let field = SipPassthroughHeader::invite(SipHeader::Via)
+            .extract_from(&fields)
+            .expect("a holder has no framing to fail");
+        assert_eq!(
+            field
+                .rows()
+                .collect::<Vec<_>>(),
+            ["SIP/2.0/UDP 192.0.2.1", "SIP/2.0/TCP 192.0.2.2"]
+        );
+    }
+
+    #[cfg(feature = "esl")]
+    #[test]
+    fn extract_from_an_esl_store_decodes_its_array() {
+        let mut h = crate::EslHeaders::new();
+        h.insert("Via", "ARRAY::SIP/2.0/UDP 192.0.2.1|:SIP/2.0/TCP 192.0.2.2");
+        let field = SipPassthroughHeader::invite(SipHeader::Via)
+            .extract_from(&h)
+            .expect("two items are under the cap");
+        assert_eq!(
+            field
+                .rows()
+                .len(),
+            2
+        );
     }
 
     // --- PREFIX_PATTERNS completeness ---

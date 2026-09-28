@@ -1,6 +1,6 @@
 //! Typed channel variable names from FreeSWITCH core.
 
-sip_header::define_header_enum! {
+sip_header_catalog::define_header_enum! {
     tests_mod: channel_variable_generated_tests,
     error_type: ParseChannelVariableError => "unknown channel variable",
     /// Core FreeSWITCH channel variable names (the part after the `variable_` prefix).
@@ -8,6 +8,7 @@ sip_header::define_header_enum! {
     /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for type-safe lookups. Only includes
     /// variables set by the FreeSWITCH core -- module-specific variables (SIP,
     /// conference, etc.) belong in separate enums.
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ChannelVariable {
         // --- Identity ---
         Uuid => "uuid",

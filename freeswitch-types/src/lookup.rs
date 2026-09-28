@@ -21,7 +21,7 @@ use crate::sofia::{
 use crate::variables::{
     LoopbackLeg, LoopbackResignation, LoopbackVariable, ParseLoopbackLegError, VariableName,
 };
-use sip_header::SipHeaderLookup;
+use sip_header_catalog::SipHeaderRows;
 use std::str::FromStr;
 
 /// Wire key of a channel variable: the [`VARIABLE_PREFIX`](crate::VARIABLE_PREFIX)
@@ -46,15 +46,14 @@ fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
 /// and get all typed accessors (`channel_state()`, `call_direction()`, `timetable()`,
 /// etc.) as default implementations.
 ///
-/// `HeaderLookup: SipHeaderLookup` — every `HeaderLookup` implementor must also
-/// implement [`sip_header::SipHeaderLookup`] so callers can reach the typed RFC
-/// SIP parsers (`call_info()`, `history_info()`, `geolocation()`) directly from
-/// the same value. For stores that treat ESL headers and SIP headers as the
-/// same flat key-value namespace, a one-line delegation from `sip_header_str`
-/// to `header_str` is the intended impl — see [`EslEvent`](crate::EslEvent)
-/// for the pattern. Stores with FreeSWITCH-specific transport encoding (ARRAY,
-/// `[bracket]` wrapping) should use [`EslHeaders`](crate::EslHeaders), which
-/// overrides the `SipHeaderLookup` parsers to strip those quirks.
+/// `HeaderLookup: SipHeaderRows` — every `HeaderLookup` implementor is also a
+/// [`SipHeaderRows`] store, which sip-header's blanket impl turns into the typed
+/// RFC SIP accessors (`call_info()`, `history_info()`, `geolocation()`) for a
+/// consumer that depends on sip-header. A store whose SIP headers sit in the
+/// same flat namespace as its ESL headers returns each value as one row.
+/// Stores with FreeSWITCH-specific transport encoding (ARRAY, `[bracket]`
+/// wrapping) should use [`EslHeaders`](crate::EslHeaders), whose rows have
+/// those quirks peeled.
 ///
 /// This trait must be in scope to call its methods on `EslEvent` -- including
 /// `unique_id()`, `hangup_cause()`, and `channel_state()`. Import it directly
@@ -71,16 +70,15 @@ fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
 /// ```
 /// use std::collections::HashMap;
 /// use freeswitch_types::{HeaderLookup, EventHeader, ChannelVariable, VARIABLE_PREFIX};
-/// use freeswitch_types::sip_header::SipHeaderLookup;
+/// use freeswitch_types::{RowError, SipHeaderRows};
 ///
 /// struct MyStore(HashMap<String, String>);
 ///
-/// // HeaderLookup has SipHeaderLookup as a supertrait. For stores that
-/// // treat ESL and SIP headers as one flat namespace, delegate
-/// // sip_header_str to the same lookup.
-/// impl SipHeaderLookup for MyStore {
-///     fn sip_header_str(&self, name: &str) -> Option<&str> {
-///         self.0.get(name).map(|s| s.as_str())
+/// // HeaderLookup has SipHeaderRows as a supertrait. The map already is a
+/// // row store, matching names as the catalog does.
+/// impl SipHeaderRows for MyStore {
+///     fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+///         self.0.sip_header_rows_str(name)
 ///     }
 /// }
 ///
@@ -105,7 +103,7 @@ fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
 /// assert_eq!(store.header(EventHeader::ChannelState), Some("CS_EXECUTE"));
 /// assert_eq!(store.variable(ChannelVariable::ReadCodec), Some("PCMU"));
 /// ```
-pub trait HeaderLookup: SipHeaderLookup {
+pub trait HeaderLookup: SipHeaderRows {
     /// Look up a header by its raw wire name (e.g. `"Unique-ID"`).
     fn header_str(&self, name: &str) -> Option<&str>;
 
@@ -657,11 +655,13 @@ mod tests {
 
     struct TestStore(HashMap<String, String>);
 
-    impl SipHeaderLookup for TestStore {
-        fn sip_header_str(&self, name: &str) -> Option<&str> {
+    impl SipHeaderRows for TestStore {
+        fn sip_header_rows_str<'a>(
+            &'a self,
+            name: &str,
+        ) -> Result<Vec<&'a str>, sip_header_catalog::RowError> {
             self.0
-                .get(name)
-                .map(|s| s.as_str())
+                .sip_header_rows_str(name)
         }
     }
 

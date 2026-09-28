@@ -102,19 +102,20 @@ let codec = event.variable(ChannelVariable::ReadCodec);    // Option<&str>
 
 ## Custom channel tracker with `HeaderLookup`
 
-The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share the same typed accessors as `EslEvent`. `HeaderLookup` requires the `SipHeaderLookup` supertrait, so implement three methods, get all typed accessors for free:
+The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share the same typed accessors as `EslEvent`. `HeaderLookup` requires the catalog's `SipHeaderRows` supertrait, which is also what sip-header's typed SIP accessors (`call_info()`, `p_asserted_identity()`, …) read, so implement three methods, get all typed accessors for free:
 
 ```rust
 use std::collections::HashMap;
-use freeswitch_esl_tokio::{HeaderLookup, SipHeaderLookup};
+use freeswitch_esl_tokio::{HeaderLookup, RowError, SipHeaderRows};
+use sip_header::prelude::*;
 
 struct TrackedChannel {
     data: HashMap<String, String>,
 }
 
-impl SipHeaderLookup for TrackedChannel {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        self.data.get(name).map(|s| s.as_str())
+impl SipHeaderRows for TrackedChannel {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+        self.data.sip_header_rows_str(name)
     }
 }
 
@@ -130,6 +131,12 @@ impl HeaderLookup for TrackedChannel {
 // Now TrackedChannel has all the same typed accessors:
 // ch.channel_state(), ch.call_direction(), ch.hangup_cause(),
 // ch.caller_timetable(), ch.header(EventHeader::UniqueId), etc.
+// and, through sip-header, the SIP ones:
+let mut data = HashMap::new();
+data.insert("Call-Info".to_string(), "<sip:pbx.example.com>;purpose=icon".to_string());
+let ch = TrackedChannel { data };
+assert_eq!(ch.call_info()?.unwrap().entries()[0].purpose(), Some("icon"));
+# Ok::<(), sip_header::ParseError>(())
 ```
 
 `cargo run --example channel_tracker` is a complete reference implementation using `HeaderLookup` for channel lifecycle monitoring.
@@ -139,7 +146,7 @@ impl HeaderLookup for TrackedChannel {
 ```rust
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody, SipPassthroughHeader};
 use freeswitch_esl_tokio::HeaderLookup;
-use freeswitch_esl_tokio::sip_header::SipHeader;
+use freeswitch_esl_tokio::SipHeader;
 # use freeswitch_esl_tokio::commands::Variables;
 # fn demo(event: &impl HeaderLookup, vars: &mut Variables, raw_multipart: &str) {
 

@@ -71,6 +71,7 @@ use crate::connection::EslClient;
 use crate::error::{EslError, EslResult};
 use freeswitch_types::event::{EslEvent, EslEventType};
 use freeswitch_types::lookup::HeaderLookup;
+use freeswitch_types::{RowError, SipHeaderRows};
 
 /// Tracks pending `bgapi` commands and correlates
 /// [`BackgroundJob`](EslEventType::BackgroundJob) events to their originating
@@ -294,13 +295,11 @@ impl<'a> BgJobResult<'a> {
     }
 }
 
-impl freeswitch_types::sip_header::SipHeaderLookup for BgJobResult<'_> {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
+impl SipHeaderRows for BgJobResult<'_> {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
         self.0
-            .header_str(name)
+            .sip_header_rows_str(name)
     }
-
-    freeswitch_types::esl_sip_header_overrides!();
 }
 
 impl HeaderLookup for BgJobResult<'_> {
@@ -453,7 +452,7 @@ mod tests {
 
     #[test]
     fn bgjob_result_call_info_array_encoding() {
-        use freeswitch_types::sip_header::SipHeaderLookup;
+        use sip_header::prelude::*;
 
         let mut event = bg_job_event("uuid-1", "+OK");
         event.set_header(

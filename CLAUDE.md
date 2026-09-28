@@ -182,7 +182,7 @@ cargo check -p freeswitch-types --no-default-features --message-format=short
 
 The first two fix rather than check. The third is the one build the hook never
 does: it is `--all-features` throughout, so an item that should sit behind
-`#[cfg(feature = "sdp")]` or `"conference-info"` and does not passes every hook
+`#[cfg(feature = "sdp")]` or `"esl"` and does not passes every hook
 stage and breaks only for a consumer on the default feature set.
 
 **When adding new `EslEventType` variants**, check whether they belong in any

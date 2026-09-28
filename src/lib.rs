@@ -150,34 +150,35 @@ pub use freeswitch_types::sdp;
 pub use freeswitch_types::{
     channel, commands, event, headers, lookup, lossy_values, prelude, sofia, variables,
 };
-pub use freeswitch_types::{sip_header, sip_uri};
+pub use freeswitch_types::{
+    define_header_enum, ParseSipHeaderError, RowError, RowErrorKind, SipHeader, SipHeaderField,
+    SipHeaderFields, SipHeaderRows, SipHeaderRowsExt,
+};
 
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
-    case_alias_key, channel_driver, extract_header, normalize_header_key, AnswerState, Application,
-    BlockParse, BridgeDialString, BridgeDialStringDisplay, CallDirection, CallState, CarriedHeader,
+    case_alias_key, channel_driver, normalize_header_key, AnswerState, Application, BlockParse,
+    BridgeDialString, BridgeDialStringDisplay, CallDirection, CallState, CarriedHeader,
     ChannelState, ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString,
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointDisplay,
     EndpointFieldFault, EslArray, EslArrayError, EslEvent, EslEventPriority, EslEventType,
     EslHeaders, EventFormat, EventHeader, EventSubscription, EventSubscriptionError, ExecuteOn,
     ExecuteOnFault, FreeswitchVersion, GatewayPingStatus, GatewayRegState, GroupCallOrder,
-    HangupCause, HeaderLookup, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
-    InvalidArgvSeparator, InvalidHeaderName, LogLevel, LossyValue, LossyValues, MultipartBody,
-    MultipartBodyError, MultipartItem, Originate, OriginateDisplay, OriginateError,
-    OriginateTarget, ParseAnswerStateError, ParseBlockParseError, ParseCallDirectionError,
-    ParseCallStateError, ParseChannelStateError, ParseChannelVariableError,
-    ParseCoreMediaVariableError, ParseDialplanTypeError, ParseEventFormatError,
-    ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
+    HangupCause, HeaderLookup, InvalidArgvSeparator, InvalidHeaderName, LogLevel, LossyValue,
+    LossyValues, MultipartBody, MultipartBodyError, MultipartItem, Originate, OriginateDisplay,
+    OriginateError, OriginateTarget, ParseAnswerStateError, ParseBlockParseError,
+    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
+    ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
     ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
     ParseHangupCauseError, ParseHeaderError, ParseHoldActionError, ParseLogLevelError,
-    ParseMuteActionError, ParsePriorityError, ParseSipHeaderAddrError, ParseSipHeaderError,
-    ParseSipPassthroughError, ParseSipUserPingStatusError, ParseSofiaEventSubclassError,
-    ParseTimetableError, RtpStatUnit, SipGeolocation, SipGeolocationRef, SipHeader, SipHeaderAddr,
-    SipHeaderLookup, SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName,
-    SofiaEventSubclass, TimetableField, TimetablePrefix, UnvouchedVersion, UriInfo, UriInfoEntry,
-    UriInfoError, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
-    UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesDisplay,
-    VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT, MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
+    ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,
+    ParseSipUserPingStatusError, ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit,
+    SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName, SofiaEventSubclass,
+    TimetableField, TimetablePrefix, UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect,
+    UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName,
+    Variables, VariablesDisplay, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
 };
 
 #[cfg(doctest)]

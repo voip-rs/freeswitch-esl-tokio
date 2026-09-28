@@ -12,16 +12,15 @@
 //! see the [`freeswitch-esl-tokio`](https://docs.rs/freeswitch-esl-tokio) crate which
 //! re-exports everything from this crate.
 //!
-//! # SIP header types
+//! # SIP headers
 //!
-//! General-purpose SIP header parsing is provided by the
-//! [`sip-header`](https://docs.rs/sip-header) crate, re-exported here for convenience.
-//! Types like [`SipHeaderAddr`], [`UriInfo`], [`HistoryInfo`], and [`SipGeolocation`]
-//! are available from the crate root.
-
-pub use sip_header;
-pub use sip_header::define_header_enum;
-pub use sip_header::sip_uri;
+//! Header names and the row trait come from
+//! [`sip-header-catalog`](https://docs.rs/sip-header-catalog), re-exported at
+//! the crate root. Every header store here ([`HeaderLookup`] implementors,
+//! [`EslHeaders`] and the stores built on it) is a [`SipHeaderRows`] store, so
+//! the typed accessors of [`sip-header`](https://docs.rs/sip-header) reach it
+//! through that crate's blanket impl: depend on sip-header and
+//! `use sip_header::prelude::*`. This crate names no sip-header value type.
 
 #[macro_use]
 mod macros;
@@ -87,10 +86,9 @@ pub use log_level::{LogLevel, ParseLogLevelError};
 pub use lookup::{variable_key, HeaderLookup, ParseHeaderError};
 #[cfg(feature = "esl")]
 pub use lossy_values::{LossyValue, LossyValues};
-pub use sip_header::{
-    extract_header, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
-    ParseSipHeaderAddrError, ParseSipHeaderError, SipGeolocation, SipGeolocationRef, SipHeader,
-    SipHeaderAddr, SipHeaderLookup, UriInfo, UriInfoEntry, UriInfoError,
+pub use sip_header_catalog::{
+    define_header_enum, ParseSipHeaderError, RowError, RowErrorKind, SipHeader, SipHeaderField,
+    SipHeaderFields, SipHeaderRows, SipHeaderRowsExt,
 };
 pub use sofia::{
     GatewayPingStatus, GatewayRegState, ParseGatewayPingStatusError, ParseGatewayRegStateError,

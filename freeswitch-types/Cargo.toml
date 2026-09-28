@@ -23,16 +23,15 @@ exclude = [
 
 [features]
 default = ["serde", "esl"]
-serde = ["dep:serde", "sip-header/serde", "indexmap?/serde"]
+serde = ["dep:serde", "sip-header-catalog/serde", "indexmap?/serde"]
 esl = ["dep:indexmap"]
-conference-info = ["sip-header/conference-info"]
 sdp = ["dep:sdp-types"]
 
 [package.metadata.docs.rs]
 all-features = true
 
 [dependencies]
-sip-header = { version = "0.3.13", features = ["draft"] }
+sip-header-catalog = { version = "0.1", path = "../../../../sip-header/crates/sip-header-catalog" }
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = "2"
 indexmap = { version = "2", optional = true }
@@ -46,3 +45,4 @@ required-features = ["esl", "serde"]
 serde_json = "1.0"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 freeswitch-c-oracle = { path = "../freeswitch-c-oracle" }
+sip-header = { path = "../../../../sip-header" }

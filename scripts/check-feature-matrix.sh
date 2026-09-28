@@ -14,7 +14,7 @@ CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$CRATE_DIR"
 
 # Keep in sync with [features] in freeswitch-types/Cargo.toml.
-FEATURES=(esl serde conference-info sdp)
+FEATURES=(esl serde sdp)
 
 echo "checking freeswitch-types with no default features"
 cargo check -p freeswitch-types --no-default-features --message-format=short
@@ -27,12 +27,9 @@ for feature in "${FEATURES[@]}"; do
         --message-format=short
 done
 
-# Keep in sync with [features] in the root Cargo.toml -- both forward to a
+# Keep in sync with [features] in the root Cargo.toml -- each forwards to a
 # freeswitch-types feature and must stay reachable from the ESL crate.
 echo "checking freeswitch-esl-tokio with --features sdp"
 cargo check -p freeswitch-esl-tokio --features sdp --message-format=short
-
-echo "checking freeswitch-esl-tokio with --features conference-info"
-cargo check -p freeswitch-esl-tokio --features conference-info --message-format=short
 
 echo "feature matrix ok"

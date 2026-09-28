@@ -19,7 +19,6 @@ exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
 
 [features]
 sdp = ["freeswitch-types/sdp"]
-conference-info = ["freeswitch-types/conference-info"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -46,6 +45,7 @@ nix = { version = "0.31", features = ["fs"] }
 serde = { version = "1.0", features = ["derive"] }
 yaml_serde = "0.10"
 libc = "0.2"
+sip-header = { path = "../../../sip-header" }
 
 [[example]]
 name = "sdp_codec_string"

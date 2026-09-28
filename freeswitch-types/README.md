@@ -3,17 +3,19 @@
 [![crates.io](https://img.shields.io/crates/v/freeswitch-types)](https://crates.io/crates/freeswitch-types)
 [![docs.rs](https://img.shields.io/docsrs/freeswitch-types)](https://docs.rs/freeswitch-types)
 
-FreeSWITCH protocol types and general-purpose SIP header parser. No async
-runtime dependency.
+FreeSWITCH protocol types. No async runtime dependency.
 
-Includes `SipHeaderAddr`, a standalone RFC 3261 `name-addr` parser with
-header-level parameters — usable in any SIP project, not just FreeSWITCH.
-With `default-features = false`, the only dependencies are `sip-header` and
-`percent-encoding`.
+Provides FreeSWITCH ESL types (channel state, events, commands, variables) for
+CDR parsing, config generation, command building, or channel variable
+validation without pulling in tokio. With `default-features = false`, the only
+dependencies are `sip-header-catalog` and `percent-encoding`.
 
-Also provides FreeSWITCH ESL types (channel state, events, commands,
-variables) for CDR parsing, config generation, command building, or
-channel variable validation without pulling in tokio.
+SIP header names and the header row trait come from
+[`sip-header-catalog`](https://docs.rs/sip-header-catalog), re-exported at the
+crate root. Every header store here is a `SipHeaderRows` store, so the typed SIP
+accessors of [`sip-header`](https://docs.rs/sip-header) (`call_info()`,
+`p_asserted_identity()`, …) reach it through that crate's blanket impl: add
+sip-header to your own dependencies and `use sip_header::prelude::*`.
 
 For async ESL transport (connecting to FreeSWITCH, sending commands, receiving
 events), see [`freeswitch-esl-tokio`](https://crates.io/crates/freeswitch-esl-tokio)
@@ -27,7 +29,7 @@ which re-exports everything from this crate.
 | `headers` | `EventHeader` enum (typed event header names) |
 | `lookup` | `HeaderLookup` trait (typed accessors for any key-value store) |
 | `lossy_values` | `LossyValues`/`LossyValue` — non-UTF-8 header-value signal *(requires `esl` feature)* |
-| `prelude` | `HeaderLookup`, `SipHeaderLookup`, and the header/variable enums, for a single glob import |
+| `prelude` | `HeaderLookup`, the catalog's `SipHeaderRows`/`SipHeaderRowsExt`, and the header/variable enums, for a single glob import |
 | `sofia` | `SofiaChannelName` (borrow-based `sofia/<profile>/<user>@<host>` parser), `SofiaEventSubclass`, `GatewayRegState`, `SipUserPingStatus` |
 | `variables` | `ChannelVariable`, `CoreMediaVariable` (`unit()` → `RtpStatUnit`), `SofiaVariable`, `LoopbackVariable` (+ `LoopbackResignation`, the bowout marker, and `LoopbackChannelName`/`LoopbackLeg` — the name is the one field a resignation does not copy onto the surviving channel), `ConferenceVariable`, `SipPassthroughHeader` (unified `sip_h_*`/`sip_i_*`/etc. with `extract_from()`), `EslArray`, `MultipartBody`, `CarriedHeader` (the exhaustive mapping `SofiaVariable::carried_header()` returns from a channel variable to the SIP header(s) it carries) |
 | `event` | `EslEvent`, `EslEventType`, `EventFormat`, `EslEventPriority`, `LossyValues`/`LossyValue` (non-UTF-8 header-value signal) *(requires `esl` feature)* |
@@ -35,23 +37,20 @@ which re-exports everything from this crate.
 | `version` | `FreeswitchVersion`, the version an application states it targets |
 | `sdp` | `CodecString`/`CodecStringEntry` (the FreeSWITCH codec-string grammar, parse and emit, with `dedup`/`simplify` ported from the switch), `SdpCodecs` (SDP offer → typed codec list, plus `SdpMediaSection` for every `m=` line the offer carried — held streams included — and `NonCodecPayload` for what the switch negotiates outside the string), `CodecImplementation` (filter a codec string against what a switch has loaded) *(requires `sdp` feature)* |
 
-`SipHeaderAddr`, `extract_header`, `SipHeader`, `SipHeaderLookup`, and the
-RFC 4575 `conference-info+xml` types (behind the `conference-info` feature)
-are not modules of this crate -- they come from the re-exported
-[`sip-header`](https://docs.rs/sip-header) crate, reachable from the crate
-root or through `sip_header::conference_info`.
+`SipHeader`, `define_header_enum!`, `SipHeaderRows`, `RowError` and the
+`SipHeaderField`/`SipHeaderFields` holders are re-exported from
+sip-header-catalog. SIP value types (`SipHeaderAddr`, `UriInfo`,
+`HistoryInfo`, …), their parsers and the RFC 4575 conference-info types live in
+sip-header, which this crate does not re-export.
 
 ## Features
 
 - **`esl`** (enabled by default) — ESL event and command types (`EslEvent`,
   `Originate`, `Variables`, etc.). Pulls in `indexmap` for ordered header
-  storage. Disable if you only need `SipHeaderAddr` or channel state enums.
+  storage. Disable if you only need channel state or variable enums.
 - **`serde`** (enabled by default) — adds `Serialize`/`Deserialize` impls for
   all public types. Disable with `default-features = false` if you only need
   wire-format parsing (`Display`/`FromStr`) without pulling in serde.
-- **`conference-info`** — enables `ConferenceInfo::from_xml()`/`to_xml()` for
-  parsing RFC 4575 `application/conference-info+xml` documents (pulls in
-  `quick-xml`). Type definitions are always available without this feature.
 - **`sdp`** — enables the `sdp` module (`CodecString`, `SdpCodecs`,
   `CodecImplementation`), pulling in `sdp-types`.
 
@@ -62,29 +61,40 @@ root or through `sip_header::conference_info`.
 freeswitch-types = "1"
 ```
 
-SIP header parsing only (no FreeSWITCH dependencies):
+Typed SIP header values come from your own sip-header:
 
 ```toml
 [dependencies]
-freeswitch-types = { version = "1", default-features = false }
+freeswitch-types = "1"
+sip-header = "0.4"
 ```
 
-### SIP header address parsing
+### SIP headers on ESL stores (requires `esl` feature)
 
-`SipHeaderAddr` parses the `(name-addr / addr-spec) *(SEMI generic-param)`
-production from SIP headers like `From`, `To`, `Contact`, and `Refer-To`.
-It replaces `sip_uri::NameAddr` (deprecated since sip-uri 0.2.0) by
-handling header-level parameters that follow the URI. General-purpose SIP
-— no FreeSWITCH dependency.
+`EslHeaders`, `EslEvent` and every other store here hand sip-header one row per
+header occurrence, with FreeSWITCH's `ARRAY::` encoding and `[...]` wrapping
+peeled for a header that may repeat. Commas are left to the accessor, so an
+authentication header keeps its parameters together.
 
 ```rust
-use freeswitch_types::SipHeaderAddr;
+use freeswitch_types::EslHeaders;
+use sip_header::prelude::*;
 
-let addr: SipHeaderAddr =
-    r#""Alice" <sip:alice@example.com>;tag=abc123"#.parse().unwrap();
-assert_eq!(addr.display_name(), Some("Alice"));
-assert_eq!(addr.tag(), Some("abc123"));
-assert_eq!(addr.sip_uri().unwrap().user(), Some("alice"));
+let mut h = EslHeaders::new();
+h.insert(
+    "Call-Info",
+    "ARRAY::<urn:emergency:uid:callid:abc>;purpose=emergency-CallId\
+     |:<https://adr.example.com/info>;purpose=EmergencyCallData.ProviderInfo",
+);
+h.insert("P-Asserted-Identity", "\"Alice\" <sip:+15551234567@example.com>");
+
+let ci = h.call_info()?.unwrap();
+assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
+assert_eq!(ci.len(), 2);
+
+let pai = h.p_asserted_identity()?.unwrap();
+assert_eq!(pai.entries()[0].display_name(), Some("Alice"));
+# Ok::<(), sip_header::ParseError>(())
 ```
 
 ### Command builders (requires `esl` feature)
@@ -117,14 +127,15 @@ the revision `display_with` renders for, see
 ### Typed event accessors
 
 ```rust
-use freeswitch_types::{HeaderLookup, SipHeaderLookup, EventHeader, ChannelVariable};
+use freeswitch_types::{HeaderLookup, RowError, SipHeaderRows, EventHeader, ChannelVariable};
 
 // HeaderLookup works with any key-value store, not just EslEvent
 struct MyHeaders(std::collections::HashMap<String, String>);
 
-impl SipHeaderLookup for MyHeaders {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        self.0.get(name).map(|s| s.as_str())
+// The SIP row trait HeaderLookup requires; the map already implements it.
+impl SipHeaderRows for MyHeaders {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+        self.0.sip_header_rows_str(name)
     }
 }
 
@@ -160,29 +171,28 @@ println!("{}", cmd);
 
 ### Raw SIP message header extraction
 
-`extract_header` pulls header values from raw SIP message text, handling
-case-insensitive matching, header folding, and multi-occurrence extraction
-per RFC 3261 §7.3.1. Pairs naturally with the existing value parsers:
+sip-header reads a raw message into a row store (`SipMessageHeaders`).
+`SipPassthroughHeader::extract_from()` takes that header's rows out of any row
+store as a `SipHeaderField`, which the same accessors type:
 
 ```rust
-use freeswitch_types::{extract_header, SipHeaderAddr, UriInfo};
+use freeswitch_types::{SipHeader, SipPassthroughHeader};
+use sip_header::prelude::*;
+use sip_header::SipMessageHeaders;
 
 let raw_invite = "INVITE sip:sos@bcf.example.com SIP/2.0\r\n\
     Call-Info: <urn:emergency:uid:callid:abc>;purpose=emergency-CallId\r\n\
     P-Asserted-Identity: \"Alice\" <sip:+15551234567@example.com>\r\n\
     \r\n";
+let message = SipMessageHeaders::new(raw_invite);
 
-let ci_vals = extract_header(raw_invite, "Call-Info");
-let ci = UriInfo::parse(&ci_vals[0]).unwrap();
-assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
+let ci = SipPassthroughHeader::invite(SipHeader::CallInfo).extract_from(&message)?;
+assert_eq!(ci.call_info()?.unwrap().entries()[0].purpose(), Some("emergency-CallId"));
 
-let pai_vals = extract_header(raw_invite, "P-Asserted-Identity");
-let pai: SipHeaderAddr = pai_vals[0].parse().unwrap();
-assert_eq!(pai.display_name(), Some("Alice"));
+let pai = message.p_asserted_identity()?.unwrap();
+assert_eq!(pai.entries()[0].display_name(), Some("Alice"));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
-
-`SipPassthroughHeader` and `SipHeader` also provide `extract_from()` for
-convenience when working with typed header enums.
 
 ### Variable parsers
 
