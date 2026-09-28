@@ -983,6 +983,31 @@ mod tests {
     }
 
     #[test]
+    fn esl_event_over_cap_array_fails_every_accessor() {
+        use sip_header::SipHeaderLookup;
+
+        let over_cap = |item: &str| {
+            format!(
+                "ARRAY::{}",
+                vec![item; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
+            )
+        };
+        let mut event = EslEvent::new();
+        event.set_header("Call-Info", over_cap("<sip:a@example.com>"));
+        event.set_header("History-Info", over_cap("<sip:a@example.com>;index=1"));
+        event.set_header("P-Asserted-Identity", over_cap("<sip:a@example.com>"));
+        assert!(event
+            .call_info()
+            .is_err());
+        assert!(event
+            .history_info()
+            .is_err());
+        assert!(event
+            .p_asserted_identity()
+            .is_err());
+    }
+
+    #[test]
     fn esl_event_call_info_array_encoding() {
         use sip_header::SipHeaderLookup;
 

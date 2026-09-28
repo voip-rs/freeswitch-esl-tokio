@@ -596,6 +596,33 @@ mod tests {
         assert_eq!(values[1].realm(), Some("r2"));
     }
 
+    fn over_cap_array(item: &str) -> String {
+        format!(
+            "ARRAY::{}",
+            vec![item; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
+        )
+    }
+
+    #[test]
+    fn an_over_cap_array_fails_every_accessor() {
+        let mut h = EslHeaders::new();
+        h.insert("Call-Info", over_cap_array("<sip:a@example.com>"));
+        h.insert(
+            "History-Info",
+            over_cap_array("<sip:a@example.com>;index=1"),
+        );
+        h.insert("P-Asserted-Identity", over_cap_array("<sip:a@example.com>"));
+        assert!(h
+            .call_info()
+            .is_err());
+        assert!(h
+            .history_info()
+            .is_err());
+        assert!(h
+            .p_asserted_identity()
+            .is_err());
+    }
+
     #[test]
     fn a_list_header_still_splits_on_commas() {
         let mut h = EslHeaders::new();
