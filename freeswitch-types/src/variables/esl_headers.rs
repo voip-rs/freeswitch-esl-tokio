@@ -549,6 +549,99 @@ mod tests {
     }
 
     #[test]
+    fn a_raw_call_info_array_types_through_its_field() {
+        let raw = "ARRAY::<urn:emergency:uid:callid:abc>;purpose=emergency-CallId\
+                   |:<urn:emergency:uid:incidentid:def>;purpose=emergency-IncidentId";
+        let field =
+            EslHeaders::decode_value("Call-Info", raw).expect("two items are under the cap");
+        assert_eq!(field.name(), "Call-Info");
+        assert_eq!(
+            field
+                .rows()
+                .len(),
+            2
+        );
+        let ci = field
+            .call_info()
+            .expect("both entries parse")
+            .expect("header is present");
+        assert_eq!(ci.len(), 2);
+        assert_eq!(ci.entries()[1].purpose(), Some("emergency-IncidentId"));
+    }
+
+    /// The stored-header path and the raw-value one must agree, so every
+    /// transport form runs through both.
+    #[test]
+    fn a_raw_value_decodes_like_a_stored_header() {
+        let forms = [
+            (
+                "rfc",
+                "<sip:alice@example.test>;purpose=icon",
+                vec![Some("icon")],
+            ),
+            (
+                "array",
+                "ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>;purpose=info",
+                vec![Some("icon"), Some("info")],
+            ),
+            (
+                "bracketed",
+                "[<sip:alice@example.test>;purpose=icon]",
+                vec![Some("icon")],
+            ),
+            (
+                "bracketed array",
+                "[ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>]",
+                vec![Some("icon"), None],
+            ),
+        ];
+
+        for (label, value, purposes) in forms {
+            let mut h = EslHeaders::new();
+            h.insert("Call-Info", value);
+            let from_header = h
+                .call_info()
+                .unwrap_or_else(|e| panic!("{label}: {e}"))
+                .unwrap_or_else(|| panic!("{label}: header is present"));
+            let field = EslHeaders::decode_value("Call-Info", value)
+                .unwrap_or_else(|e| panic!("{label} as a raw value: {e}"));
+            let from_value = field
+                .call_info()
+                .unwrap_or_else(|e| panic!("{label} as a raw value: {e}"))
+                .unwrap_or_else(|| panic!("{label}: field holds the header"));
+            assert_eq!(from_header, from_value, "{label}");
+            assert_eq!(
+                from_header
+                    .entries()
+                    .iter()
+                    .map(|e| e.purpose())
+                    .collect::<Vec<_>>(),
+                purposes,
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_raw_over_cap_array_is_a_row_error() {
+        let err = EslHeaders::decode_value("Call-Info", &over_cap_array("<sip:a@example.com>"))
+            .expect_err("over-cap ARRAY must fail");
+        assert_eq!(err.kind(), RowErrorKind::TooManyEntries);
+    }
+
+    #[test]
+    fn a_raw_value_of_an_unregistered_header_is_one_row() {
+        let field =
+            EslHeaders::decode_value("X-Custom", "ARRAY::a|:b").expect("no framing to fail");
+        assert_eq!(
+            field
+                .rows()
+                .collect::<Vec<_>>(),
+            ["ARRAY::a|:b"]
+        );
+    }
+
+    #[test]
     fn history_info_array_encoding() {
         let mut h = EslHeaders::new();
         h.insert(
