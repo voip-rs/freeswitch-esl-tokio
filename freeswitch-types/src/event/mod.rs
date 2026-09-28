@@ -967,6 +967,22 @@ mod tests {
     // --- SipHeaderLookup over FreeSWITCH's ARRAY encoding ---
 
     #[test]
+    fn esl_event_authorization_keeps_its_parameter_commas() {
+        use sip_header::SipHeaderLookup;
+
+        let mut event = EslEvent::new();
+        event.set_header(
+            "Authorization".to_string(),
+            "Digest username=\"alice\", realm=\"example.com\", nonce=\"abc\"".to_string(),
+        );
+        let values = event
+            .authorization()
+            .expect("one Digest value parses");
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].username(), Some("alice"));
+    }
+
+    #[test]
     fn esl_event_call_info_array_encoding() {
         use sip_header::SipHeaderLookup;
 

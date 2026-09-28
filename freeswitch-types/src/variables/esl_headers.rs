@@ -551,6 +551,57 @@ mod tests {
         assert_eq!(h.sip_header_all_str("Subject"), vec!["one, two"]);
     }
 
+    /// RFC 3261 section 7.3.1 forbids comma-joining the auth headers, so the
+    /// commas between their parameters never separate rows.
+    #[test]
+    fn an_auth_header_keeps_its_parameter_commas() {
+        let digest = "Digest username=\"alice\", realm=\"example.com\", nonce=\"abc\"";
+        let mut h = EslHeaders::new();
+        h.insert("Authorization", digest);
+        h.insert("Proxy-Authorization", digest);
+        h.insert("WWW-Authenticate", digest);
+        h.insert("Proxy-Authenticate", digest);
+
+        for values in [
+            h.authorization(),
+            h.proxy_authorization(),
+            h.www_authenticate(),
+            h.proxy_authenticate(),
+        ] {
+            let values = values.expect("one Digest value parses");
+            assert_eq!(values.len(), 1);
+            assert_eq!(values[0].username(), Some("alice"));
+            assert_eq!(values[0].realm(), Some("example.com"));
+        }
+    }
+
+    #[test]
+    fn an_array_of_auth_headers_is_one_row_per_occurrence() {
+        let mut h = EslHeaders::new();
+        h.insert(
+            "Authorization",
+            "ARRAY::Digest username=\"a\", realm=\"r1\"|:Digest username=\"b\", realm=\"r2\"",
+        );
+        let values = h
+            .authorization()
+            .expect("both Digest values parse");
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[1].realm(), Some("r2"));
+    }
+
+    #[test]
+    fn a_list_header_still_splits_on_commas() {
+        let mut h = EslHeaders::new();
+        h.insert("Call-Info", "<sip:a@example.com>, <sip:b@example.com>");
+        assert_eq!(
+            h.call_info()
+                .expect("both entries parse")
+                .expect("header is present")
+                .len(),
+            2
+        );
+    }
+
     #[test]
     fn header_str_passthrough() {
         let mut h = EslHeaders::new();
