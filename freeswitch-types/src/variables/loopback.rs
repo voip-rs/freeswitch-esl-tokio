@@ -3,12 +3,12 @@
 
 sip_header_catalog::define_header_enum! {
     tests_mod: loopback_variable_generated_tests,
+    serde(cfg(feature = "serde")),
     error_type: ParseLoopbackVariableError => "unknown loopback variable",
     /// mod_loopback channel variable names (the part after the `variable_` prefix).
     ///
     /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for
     /// type-safe lookups.
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum LoopbackVariable {
         // --- Set by mod_loopback ---
         IsLoopback => "is_loopback",

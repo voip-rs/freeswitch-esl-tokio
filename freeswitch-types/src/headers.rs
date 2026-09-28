@@ -2,13 +2,13 @@
 
 sip_header_catalog::define_header_enum! {
     tests_mod: event_header_generated_tests,
+    serde(cfg(feature = "serde")),
     error_type: ParseEventHeaderError => "unknown event header",
     /// Top-level header names that appear in FreeSWITCH ESL events.
     ///
     /// These are the headers on the parsed event itself (not protocol framing
     /// headers like `Content-Type`). Use with [`EslEvent::header()`](crate::EslEvent::header) for
     /// type-safe lookups.
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum EventHeader {
         EventName => "Event-Name",
         EventSubclass => "Event-Subclass",

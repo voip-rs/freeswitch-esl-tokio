@@ -2,12 +2,12 @@
 
 sip_header_catalog::define_header_enum! {
     tests_mod: conference_variable_generated_tests,
+    serde(cfg(feature = "serde")),
     error_type: ParseConferenceVariableError => "unknown conference variable",
     /// mod_conference channel variable names (the part after the `variable_` prefix).
     ///
     /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for
     /// type-safe lookups.
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ConferenceVariable {
         // --- Set by mod_conference ---
         ConferenceName => "conference_name",

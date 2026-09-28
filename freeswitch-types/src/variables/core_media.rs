@@ -46,13 +46,13 @@ impl fmt::Display for RtpStatUnit {
 
 sip_header_catalog::define_header_enum! {
     tests_mod: core_media_variable_generated_tests,
+    serde(cfg(feature = "serde")),
     error_type: ParseCoreMediaVariableError => "unknown core media variable",
     /// RTP media statistics channel variable names (the part after the `variable_` prefix).
     ///
     /// Set by `switch_core_media_set_stats()` at channel teardown for each media type
     /// (audio, video, text). Use with
     /// [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for type-safe lookups.
-    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum CoreMediaVariable {
         // --- Audio Inbound ---
         RtpAudioInRawBytes => "rtp_audio_in_raw_bytes",
