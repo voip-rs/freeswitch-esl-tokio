@@ -21,6 +21,11 @@ one itself, and one that does floats to later betas of that version and to any
 later stable in the major. Move the floor to the version being released each
 time; never `=`-pin the exact beta.
 
+Prerelease identifiers are dot-separated: `-alpha.1`, `-beta.2`, `-rc.3`.
+SemVer compares a numeric identifier numerically only when it stands alone, so
+an undotted `beta10` sorts before `beta9`. A series keeps the spelling it
+started with until its stable release, because `rc.3` sorts before `rc2`.
+
 ## Evaluating Feature and Bug Requests
 
 Read [docs/evaluating-requests.md](docs/evaluating-requests.md) in full before

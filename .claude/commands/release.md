@@ -38,7 +38,9 @@ git switch master
    - **Patch**: only bug fixes, dependency bumps, build changes, docs.
    - **Minor**: new features (`feat:`), new crates, new public API surface.
    - **Major**: breaking API changes, removed crates, incompatible config changes.
-3. Bump the version accordingly from the last tag.
+3. Bump the version accordingly from the last tag. A prerelease carries a
+   dot-separated identifier (`-beta.1`, `-rc.2`), unless its series already
+   started undotted: keep that spelling until the stable release.
 4. If the computed type is **major**, stop and confirm with the user before proceeding.
    For patch and minor, proceed automatically.
 
