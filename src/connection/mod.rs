@@ -482,7 +482,7 @@ impl EslClient {
     /// After `accept_outbound`, you MUST call [`Self::connect_session`] before
     /// any other command. Calling [`Self::api`], [`Self::subscribe_events`],
     /// etc. before `connect_session()` will leave the channel in an undefined
-    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
     /// for full context.
     pub async fn accept_outbound(listener: &TcpListener) -> EslResult<(Self, EslEventStream)> {
         Self::accept_outbound_with_options(listener, EslConnectOptions::default()).await
@@ -493,7 +493,7 @@ impl EslClient {
     /// After accepting, you MUST call [`Self::connect_session`] before any
     /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
     /// before `connect_session()` will leave the channel in an undefined
-    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
     /// for full context.
     pub async fn accept_outbound_with_options(
         listener: &TcpListener,
@@ -518,7 +518,7 @@ impl EslClient {
     /// After this call, you MUST call [`Self::connect_session`] before any
     /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
     /// before `connect_session()` will leave the channel in an undefined
-    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
     /// for full context.
     pub fn accept_outbound_stream(stream: TcpStream) -> (Self, EslEventStream) {
         Self::accept_outbound_stream_with_options(stream, EslConnectOptions::default())
@@ -530,7 +530,7 @@ impl EslClient {
     /// After this call, you MUST call [`Self::connect_session`] before any
     /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
     /// before `connect_session()` will leave the channel in an undefined
-    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
     /// for full context.
     pub fn accept_outbound_stream_with_options(
         stream: TcpStream,

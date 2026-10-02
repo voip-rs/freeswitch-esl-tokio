@@ -69,7 +69,7 @@
 //! <action application="socket" data="127.0.0.1:8040 async full"/>
 //! ```
 //!
-//! See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+//! See [`docs/outbound-esl-quirks.md`](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
 //! for protocol details and command availability by mode.
 //!
 //! ## Command Builders

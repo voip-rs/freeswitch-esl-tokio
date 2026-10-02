@@ -112,7 +112,7 @@ assert_eq!(parsed.to_string(), cmd.to_string());
 Variable values are escaped for the switch's bracket-block parser as measured on
 one build; `BlockParse::for_version` maps the FreeSWITCH version you target to
 the revision `display_with` renders for, see
-[parser revisions](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/dial-string-format.md#parser-revisions).
+[parser revisions](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/dial-string-format.md#parser-revisions).
 
 ### Typed event accessors
 

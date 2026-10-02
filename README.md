@@ -1,6 +1,6 @@
 # freeswitch-esl-tokio
 
-[![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)][ci]
+[![CI](https://github.com/voip-rs/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)][ci]
 [![Tests][tests-badge]][ci]
 [![crates.io](https://img.shields.io/crates/v/freeswitch-esl-tokio)](https://crates.io/crates/freeswitch-esl-tokio)
 [![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)][docs]
@@ -12,7 +12,7 @@
 | [![SipHeaderPrefix][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
 | [![CoreMediaVariable][cmv-badge]][ci] | |
 
-[ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
+[ci]: https://github.com/voip-rs/freeswitch-esl-tokio/actions/workflows/ci.yml
 [docs]: https://docs.rs/freeswitch-esl-tokio
 [tests-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json
 [evt-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json

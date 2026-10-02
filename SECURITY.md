@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report privately through GitHub's
-[private vulnerability reporting](https://github.com/ticpu/freeswitch-esl-tokio/security/advisories/new),
+[private vulnerability reporting](https://github.com/voip-rs/freeswitch-esl-tokio/security/advisories/new),
 or by email to <jeromepoulin@gmail.com> if you would rather not use GitHub.
 
 Please do not open a public issue for a suspected vulnerability.

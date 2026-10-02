@@ -860,7 +860,7 @@ impl EslClient {
     /// a `sendmsg` reply arrives only once the application has returned, so the
     /// default bounds a prompt rather than a round trip and any real
     /// `play_and_get_digits` outlives it. See
-    /// [outbound-esl-quirks.md](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md).
+    /// [outbound-esl-quirks.md](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md).
     pub fn set_command_timeout(&self, duration: Duration) {
         self.shared
             .command_timeout_ms
