@@ -93,6 +93,14 @@ pub enum OriginateError {
         /// What the switch does with it.
         fault: ExecuteOnFault,
     },
+    /// More legs in a group, or more groups, than the switch splits off: the last keeps the rest
+    /// of the text, separators included, and nothing past it is dialled.
+    TooManyLegs {
+        /// Index of the group, or `None` when the groups are too many.
+        group: Option<usize>,
+        /// The most legs or groups the switch splits off.
+        max: usize,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -164,6 +172,19 @@ impl std::fmt::Display for OriginateError {
             Self::UndeliverableExecuteOn { part, fault } => {
                 write!(f, "the {part} of an execute_on value {fault}")
             }
+            Self::TooManyLegs {
+                group: Some(group),
+                max,
+            } => write!(
+                f,
+                "group {group} has more legs than the {max} the switch splits off; \
+                 it dials the rest as the last leg's endpoint"
+            ),
+            Self::TooManyLegs { group: None, max } => write!(
+                f,
+                "more groups than the {max} the switch splits off; \
+                 it dials the rest as the last group"
+            ),
         }
     }
 }
@@ -189,7 +210,8 @@ impl std::error::Error for OriginateError {
             | Self::UndeliverableEndpointField { .. }
             | Self::BracketSpansLegs { .. }
             | Self::UnexpandedExpression { .. }
-            | Self::UndeliverableExecuteOn { .. } => None,
+            | Self::UndeliverableExecuteOn { .. }
+            | Self::TooManyLegs { .. } => None,
         }
     }
 }

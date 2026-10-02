@@ -18,6 +18,9 @@ pub(crate) struct Cut {
     /// A quote was still open at the end of the text.
     #[cfg(feature = "esl")]
     pub(crate) open_quote: bool,
+    /// Delimiters the scan split on.
+    #[cfg(feature = "esl")]
+    pub(crate) delimiters: usize,
 }
 
 /// The text after its leading spaces; only a space counts.
@@ -45,6 +48,8 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
     let mut inside_quotes = false;
     #[cfg(feature = "esl")]
     let mut held_delimiter = false;
+    #[cfg(feature = "esl")]
+    let mut delimiters = 0;
     let mut stop = text.len();
     let mut i = 0;
     while i < text.len() {
@@ -68,6 +73,10 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
         } else if c == delim && !inside_quotes {
             spans.push(start..i);
             begin = None;
+            #[cfg(feature = "esl")]
+            {
+                delimiters += 1;
+            }
         } else if c == delim {
             #[cfg(feature = "esl")]
             {
@@ -85,6 +94,8 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
         held_delimiter,
         #[cfg(feature = "esl")]
         open_quote: inside_quotes,
+        #[cfg(feature = "esl")]
+        delimiters,
     }
 }
 
@@ -105,6 +116,7 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
     let mut begin = 0;
     let mut inside_quotes = false;
     let mut held_delimiter = false;
+    let mut delimiters = 0;
     let mut stop = text.len();
     let mut i = 0;
     while i < text.len() {
@@ -133,6 +145,7 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
                     inside_quotes = !inside_quotes;
                 } else if c == ' ' && !inside_quotes {
                     spans.push(begin..i);
+                    delimiters += 1;
                     state = State::SkipEndingSpace;
                 } else if c == ' ' {
                     held_delimiter = true;
@@ -148,6 +161,7 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
         spans,
         held_delimiter,
         open_quote: inside_quotes,
+        delimiters,
     }
 }
 
@@ -281,6 +295,8 @@ pub(crate) struct Split {
     pub(crate) open_quote: bool,
     /// The text opened with [`Head::Unreadable`].
     pub(crate) unreadable_head: bool,
+    /// Delimiters the last token keeps because the split stopped at its limit.
+    pub(crate) unsplit: usize,
 }
 
 /// One token of a [`Split`], as indices into its buffer.
@@ -385,14 +401,32 @@ impl CBuffer {
             self.0
                 .len(),
         )..];
-        let cut = match (limit, delim) {
-            (0, _) => Cut {
+        let scan = |text: &[Traced], limit| match delim {
+            ' ' => blank_delim(text, limit),
+            delim => char_delim(text, delim, limit),
+        };
+        let cut = match limit {
+            0 => Cut {
                 spans: Vec::new(),
                 held_delimiter: false,
                 open_quote: false,
+                delimiters: 0,
             },
-            (_, ' ') => blank_delim(text, limit),
-            (_, delim) => char_delim(text, delim, limit),
+            limit => scan(text, limit),
+        };
+        let unsplit = match cut
+            .spans
+            .last()
+        {
+            Some(last)
+                if cut
+                    .spans
+                    .len()
+                    == limit =>
+            {
+                scan(&text[last.start..], usize::MAX).delimiters
+            }
+            _ => 0,
         };
         for span in &cut.spans {
             if self.at(index + span.end) == delim {
@@ -414,6 +448,7 @@ impl CBuffer {
             held_delimiter: cut.held_delimiter,
             open_quote: cut.open_quote,
             unreadable_head: false,
+            unsplit,
         }
     }
 
@@ -551,14 +586,18 @@ pub(crate) fn find(text: &[Traced], needle: &str) -> Option<usize> {
     })
 }
 
+/// What [`separate_string_string`] cut.
+#[cfg(feature = "esl")]
+pub(crate) struct StringSplit {
+    pub(crate) spans: Vec<Range<usize>>,
+    /// Delimiters the last token keeps because the split stopped at its limit.
+    pub(crate) unsplit: usize,
+}
+
 /// `switch_separate_string_string`: a plain substring split with no quote or escape
 /// handling, keeping at most `limit` tokens.
 #[cfg(feature = "esl")]
-pub(crate) fn separate_string_string(
-    text: &[Traced],
-    delim: &str,
-    limit: usize,
-) -> Vec<Range<usize>> {
+pub(crate) fn separate_string_string(text: &[Traced], delim: &str, limit: usize) -> StringSplit {
     let width = delim
         .chars()
         .count();
@@ -571,8 +610,16 @@ pub(crate) fn separate_string_string(
         spans.push(start..start + at);
         start += at + width;
     }
+    let mut unsplit = 0;
+    if spans.len() + 1 == limit {
+        let mut rest = start;
+        while let Some(at) = find(&text[rest..], delim) {
+            unsplit += 1;
+            rest += at + width;
+        }
+    }
     spans.push(start..text.len());
-    spans
+    StringSplit { spans, unsplit }
 }
 
 /// `separate_string_char_delim` on a non-space `delim`, each token through [`cleanup`].

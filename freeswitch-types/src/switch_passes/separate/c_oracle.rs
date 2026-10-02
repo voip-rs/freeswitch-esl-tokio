@@ -201,6 +201,7 @@ fn string_split_matches_the_switch() {
             let text = trace(&input);
             let port = owned(
                 separate_string_string(&text, delim, limit as usize)
+                    .spans
                     .into_iter()
                     .map(|span| untrace(&text[span])),
             );

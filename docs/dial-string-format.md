@@ -717,6 +717,26 @@ have its own `{}` global variables.
 
 Constant: `SWITCH_ENT_ORIGINATE_DELIM = ":_:"` in `switch_types.h`.
 
+### At most 128 threads, groups or legs
+
+`switch_ivr_enterprise_originate` splits threads, and `switch_ivr_originate`
+groups and legs, into arrays of `MAX_PEERS` (128, `switch_ivr_originate.c`).
+`switch_separate_string_string` and `separate_string_char_delim`
+(`switch_utils.c`) stop once the array is full, so the 128th thread, group or
+leg keeps the rest of the text, separators included:
+
+```
+null/0,null/1,...,null/126,null/127,null/128
+```
+
+is 128 legs, the last dialling the endpoint `null/127,null/128`. Nothing past
+the limit is dialled on its own.
+
+`BridgeDialString` refuses such a group, or more than 128 groups, with
+`OriginateError::TooManyLegs`, at parse and at config load. `FlattenedDialString`
+reads the list as the switch does and reports `ListWarning::LegsPastLimit`,
+naming the split and how many separators its last token keeps.
+
 ### Combined example
 
 ```

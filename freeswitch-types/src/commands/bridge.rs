@@ -12,7 +12,7 @@ use super::variables::{
     installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,
 };
 use crate::switch_passes::brackets::Block;
-use crate::switch_passes::originate_legs::Leg;
+use crate::switch_passes::originate_legs::{Leg, MAX_PEERS};
 use crate::switch_passes::pipeline;
 
 /// A bridge dial string is the argument of a dialplan application, which
@@ -181,8 +181,29 @@ impl BridgeDialString {
                 .first(),
         )?;
 
+        let past_limit = |group| {
+            list.past_limit
+                .iter()
+                .any(|cut| cut.group == group)
+        };
+        if past_limit(None) {
+            return Err(OriginateError::TooManyLegs {
+                group: None,
+                max: MAX_PEERS,
+            });
+        }
         let mut groups = Vec::new();
-        for group in &thread.groups {
+        for (k, group) in thread
+            .groups
+            .iter()
+            .enumerate()
+        {
+            if past_limit(Some(k)) {
+                return Err(OriginateError::TooManyLegs {
+                    group: Some(groups.len()),
+                    max: MAX_PEERS,
+                });
+            }
             let legs: Vec<&Leg> = group
                 .iter()
                 .filter(|leg| {
@@ -250,8 +271,27 @@ impl BridgeDialString {
         Ok(bridge)
     }
 
-    /// Refuse a group whose legs the switch's comma scan reads across.
+    /// Refuse more legs or groups than the switch splits off, then a group whose legs the
+    /// switch's comma scan reads across.
     fn check_legs(&self, block_parse: BlockParse) -> Result<(), OriginateError> {
+        let too_many = |group| OriginateError::TooManyLegs {
+            group,
+            max: MAX_PEERS,
+        };
+        if self
+            .groups
+            .len()
+            > MAX_PEERS
+        {
+            return Err(too_many(None));
+        }
+        if let Some(group) = self
+            .groups
+            .iter()
+            .position(|group| group.len() > MAX_PEERS)
+        {
+            return Err(too_many(Some(group)));
+        }
         let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
         match self
             .groups

@@ -16,7 +16,9 @@ use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
 use crate::switch_passes::brackets::{Block, Pair, PairEffect};
 use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::expansion::names_a_variable;
-use crate::switch_passes::originate_legs::{resolve, DialList, Leg, Thread, ENTERPRISE_DELIM};
+use crate::switch_passes::originate_legs::{
+    resolve, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM, MAX_PEERS,
+};
 use crate::switch_passes::{pipeline, PipelineError};
 use crate::variables::VariableName;
 
@@ -170,6 +172,18 @@ pub enum ListWarning {
         /// Index among the list's blocks and then each thread's, in reading order.
         block: usize,
     },
+    /// A split stopped at the switch's `MAX_PEERS` with text left: its last thread, group or leg
+    /// keeps the rest, separators included, and nothing past it is dialled.
+    LegsPastLimit {
+        /// Index among [`FlattenedDialString::threads`] of the thread whose groups or legs were
+        /// split, `None` for the `:_:` split.
+        thread: Option<usize>,
+        /// Index among [`FlattenedThread::groups`] of the group whose legs were split, `None`
+        /// for a `:_:` or `|` split.
+        group: Option<usize>,
+        /// Separators the last thread, group or leg keeps.
+        unsplit: usize,
+    },
 }
 
 /// What stops the switch from reading the dial string at all.
@@ -224,7 +238,12 @@ impl FlattenedDialString {
             threads,
             quote_spans_legs,
             carrier_expands,
+            past_limit,
         } = list;
+        let past_limit: Vec<ListWarning> = past_limit
+            .into_iter()
+            .map(|cut| ListWarning::past_limit(&threads, cut))
+            .collect();
         let unreadable = blocks
             .iter()
             .chain(
@@ -249,6 +268,7 @@ impl FlattenedDialString {
         .into_iter()
         .filter_map(|(raised, warning)| raised.then_some(warning))
         .chain(unreadable)
+        .chain(past_limit)
         .collect();
         let mut kept: Vec<(Range<usize>, FlattenedThread)> = Vec::new();
         for thread in threads {
@@ -752,6 +772,37 @@ impl LegWarning {
     }
 }
 
+impl ListWarning {
+    /// `cut`, its indices counting only the threads and groups [`FlattenedThread::read`] keeps.
+    fn past_limit(threads: &[Thread], cut: PastLimit) -> Self {
+        let kept_groups = |thread: &Thread, before: usize| {
+            thread
+                .groups
+                .iter()
+                .take(before)
+                .filter(|group| !group.is_empty())
+                .count()
+        };
+        Self::LegsPastLimit {
+            thread: cut
+                .thread
+                .map(|t| {
+                    threads
+                        .iter()
+                        .take(t)
+                        .filter(|thread| kept_groups(thread, usize::MAX) > 0)
+                        .count()
+                }),
+            group: cut
+                .thread
+                .and_then(|t| threads.get(t))
+                .zip(cut.group)
+                .map(|(thread, g)| kept_groups(thread, g)),
+            unsplit: cut.unsplit,
+        }
+    }
+}
+
 impl FlattenedDialStringError {
     fn from_pipeline(error: PipelineError) -> Self {
         match error {
@@ -841,6 +892,24 @@ impl fmt::Display for ListWarning {
             ),
             Self::BlockRewritesFollowingText { block } => {
                 write!(f, "parsing list block {block} rewrites the text after it")
+            }
+            Self::LegsPastLimit {
+                thread,
+                group,
+                unsplit,
+            } => {
+                match (thread, group) {
+                    (Some(thread), Some(group)) => {
+                        write!(f, "the leg split of group {group} in thread {thread}")?
+                    }
+                    (Some(thread), None) => write!(f, "the group split of thread {thread}")?,
+                    (None, _) => f.write_str("the thread split")?,
+                }
+                write!(
+                    f,
+                    " stops at the switch's limit of {MAX_PEERS}; \
+                     its last token keeps {unsplit} more separators"
+                )
             }
         }
     }

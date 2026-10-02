@@ -15,7 +15,7 @@ mod c_oracle;
 
 /// `MAX_PEERS` in `switch_ivr_originate.c`: the most threads, groups or legs a
 /// split keeps.
-const MAX_PEERS: usize = 128;
+pub(crate) const MAX_PEERS: usize = 128;
 
 /// `SWITCH_ENT_ORIGINATE_DELIM`.
 pub(crate) const ENTERPRISE_DELIM: &str = ":_:";
@@ -54,6 +54,20 @@ pub(crate) struct DialList {
     /// The dialplan carrier substitutes a `${}` or `$${}` reference with a value
     /// only the switch knows; the reference text is kept as written.
     pub(crate) carrier_expands: bool,
+    /// Splits that stopped at [`MAX_PEERS`] with text left, in reading order.
+    pub(crate) past_limit: Vec<PastLimit>,
+}
+
+/// A split that stopped at [`MAX_PEERS`], its last token keeping the rest of the text. The split
+/// is the `:_:` one with no thread, a thread's `|` one with no group, else a group's `,` one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PastLimit {
+    /// Index among the list's threads.
+    pub(crate) thread: Option<usize>,
+    /// Index among the thread's groups.
+    pub(crate) group: Option<usize>,
+    /// Delimiters the last token keeps.
+    pub(crate) unsplit: usize,
 }
 
 /// `switch_ivr_originate`'s passes over `text`, what the carrier's pass left of the input bytes
@@ -68,35 +82,40 @@ pub(crate) fn dial_list(
         block_parse,
         legs: 0,
         quote_spans_legs: false,
+        past_limit: Vec::new(),
     };
     let (blocks, threads) = if find(text, ENTERPRISE_DELIM).is_some() {
         let head = head_blocks(text, &[('<', '>')], 0, block_parse)?;
         let scanned = &head.text[..head.data_end];
-        let mut threads: Vec<Thread> =
-            separate_string_string(&scanned[head.data..], ENTERPRISE_DELIM, MAX_PEERS)
-                .into_iter()
-                .enumerate()
-                .map(|(k, span)| {
-                    let span = head.span(k, span);
-                    reader.thread(
-                        &scanned[span.clone()],
-                        byte_range(scanned, raw.clone(), span),
-                    )
-                })
-                .collect::<Result<_, _>>()?;
+        let split = separate_string_string(&scanned[head.data..], ENTERPRISE_DELIM, MAX_PEERS);
+        reader.record(None, None, split.unsplit);
+        let mut threads: Vec<Thread> = split
+            .spans
+            .into_iter()
+            .enumerate()
+            .map(|(k, span)| {
+                let span = head.span(k, span);
+                reader.thread(
+                    k,
+                    &scanned[span.clone()],
+                    byte_range(scanned, raw.clone(), span),
+                )
+            })
+            .collect::<Result<_, _>>()?;
         let inherited = enterprise_nests(&head.blocks, switch_true);
         for thread in &mut threads {
             thread.nested_vars |= inherited;
         }
         (head.blocks, threads)
     } else {
-        (Vec::new(), vec![reader.thread(text, raw)?])
+        (Vec::new(), vec![reader.thread(0, text, raw)?])
     };
     Ok(DialList {
         blocks,
         threads,
         quote_spans_legs: reader.quote_spans_legs,
         carrier_expands,
+        past_limit: reader.past_limit,
     })
 }
 
@@ -117,12 +136,30 @@ struct Reader {
     block_parse: BlockParse,
     legs: usize,
     quote_spans_legs: bool,
+    past_limit: Vec<PastLimit>,
 }
 
 impl Reader {
-    /// The thread `text`, which covers the input bytes `raw`. Its groups and legs are split in one
-    /// copy of the data, as `switch_ivr_originate` splits them in its own.
-    fn thread(&mut self, text: &[Traced], raw: Range<usize>) -> Result<Thread, PipelineError> {
+    /// A split at `thread` and `group` whose last token keeps `unsplit` delimiters.
+    fn record(&mut self, thread: Option<usize>, group: Option<usize>, unsplit: usize) {
+        if unsplit > 0 {
+            self.past_limit
+                .push(PastLimit {
+                    thread,
+                    group,
+                    unsplit,
+                });
+        }
+    }
+
+    /// The thread `text` at `index`, which covers the input bytes `raw`. Its groups and legs are
+    /// split in one copy of the data, as `switch_ivr_originate` splits them in its own.
+    fn thread(
+        &mut self,
+        index: usize,
+        text: &[Traced],
+        raw: Range<usize>,
+    ) -> Result<Thread, PipelineError> {
         let head = head_blocks(text, &[('<', '>'), ('{', '}')], self.legs, self.block_parse)?;
         let scanned = &head.text[..head.data_end];
         let data = &scanned[head.data..];
@@ -135,6 +172,7 @@ impl Reader {
             return Err(PipelineError::SplitSeparatorUnreadable);
         }
         self.quote_spans_legs |= split.held_delimiter;
+        self.record(Some(index), None, split.unsplit);
         let groups = split
             .tokens
             .into_iter()
@@ -143,6 +181,7 @@ impl Reader {
                 let span = head.span(k, group.raw);
                 self.group(
                     &mut buffer,
+                    (index, k),
                     group.start,
                     byte_range(scanned, raw.clone(), span),
                 )
@@ -156,11 +195,12 @@ impl Reader {
         })
     }
 
-    /// The group at `start` of `buffer`, which covers the input bytes `raw`. A leg the split reads
-    /// past the group's terminator covers none.
+    /// The group at `start` of `buffer`, `(thread, group)` in the list, which covers the input
+    /// bytes `raw`. A leg the split reads past the group's terminator covers none.
     fn group(
         &mut self,
         buffer: &mut CBuffer,
+        (thread, group): (usize, usize),
         start: usize,
         raw: Range<usize>,
     ) -> Result<Vec<Leg>, PipelineError> {
@@ -173,6 +213,7 @@ impl Reader {
             return Err(PipelineError::SplitSeparatorUnreadable);
         }
         self.quote_spans_legs |= split.held_delimiter;
+        self.record(Some(thread), Some(group), split.unsplit);
         split
             .tokens
             .into_iter()
