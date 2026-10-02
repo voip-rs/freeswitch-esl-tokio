@@ -7,7 +7,7 @@ use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{dial_list, switch_true, DialList};
+use super::{dial_list, switch_true, DialList, MAX_PEERS};
 use crate::commands::variables::BlockParse;
 use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled};
 use crate::switch_passes::brackets::{self, Block, PairEffect};
@@ -333,6 +333,41 @@ fn a_range_from_an_earlier_leg_rewrites_a_later_legs_block() {
                 second_leg(input, tree_block_parse(tree)),
                 want,
                 "tree {tree}"
+            );
+        }
+    }
+}
+
+/// Past `MAX_PEERS` the last thread, group or leg keeps the rest of the text, as in the switch.
+#[test]
+fn a_split_past_the_limit_keeps_the_rest_as_the_switch_does() {
+    for separator in [",", "|", ":_:"] {
+        let input = (0..=MAX_PEERS)
+            .map(|n| format!("null/{n}"))
+            .collect::<Vec<_>>()
+            .join(separator);
+        let read = |block_parse| {
+            dial_list(&trace(&input), 0..input.len(), false, block_parse)
+                .map(|list| port_view(&list))
+        };
+        let (_, threads) = read(BlockParse::default()).unwrap();
+        let last = threads
+            .iter()
+            .flat_map(|thread| {
+                thread
+                    .groups
+                    .iter()
+                    .flatten()
+            })
+            .last()
+            .map(|(_, endpoint)| endpoint.clone());
+        let rest = format!("null/{}{separator}null/{MAX_PEERS}", MAX_PEERS - 1);
+        assert_eq!(last, Some(rest.into_bytes()), "{separator}");
+        for (tree, c) in freeswitch_c_oracle::oracles() {
+            assert_eq!(
+                Ok(read(tree_block_parse(tree)).unwrap()),
+                switch_view(&c.dial(input.as_bytes())),
+                "tree {tree} on {separator}"
             );
         }
     }

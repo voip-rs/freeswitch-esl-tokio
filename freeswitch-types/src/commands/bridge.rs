@@ -896,6 +896,104 @@ mod tests {
         assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
     }
 
+    fn loopbacks(count: usize) -> Vec<Endpoint> {
+        (0..count)
+            .map(|n| LoopbackEndpoint::new(n.to_string()).into())
+            .collect()
+    }
+
+    fn joined(endpoints: &[Endpoint], separator: &str) -> String {
+        endpoints
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(separator)
+    }
+
+    /// Past `MAX_PEERS` the switch dials the rest of the text as the last leg's or group's
+    /// endpoint, which is refused as the limit, never as a bracket.
+    #[test]
+    fn a_group_past_the_leg_limit_is_refused_as_the_limit() {
+        let over = joined(&loopbacks(MAX_PEERS + 1), ",");
+        let err = over
+            .parse::<BridgeDialString>()
+            .unwrap_err();
+        assert_eq!(
+            err,
+            OriginateError::TooManyLegs {
+                group: Some(0),
+                max: MAX_PEERS
+            }
+        );
+        assert!(
+            err.to_string()
+                .contains(&MAX_PEERS.to_string()),
+            "{err}"
+        );
+        let at = joined(&loopbacks(MAX_PEERS), ",");
+        let bridge: BridgeDialString = at
+            .parse()
+            .unwrap();
+        assert_eq!(bridge.groups()[0].len(), MAX_PEERS);
+
+        let second = format!("loopback/a|{over}");
+        assert_eq!(
+            second.parse::<BridgeDialString>(),
+            Err(OriginateError::TooManyLegs {
+                group: Some(1),
+                max: MAX_PEERS
+            })
+        );
+    }
+
+    #[test]
+    fn groups_past_the_limit_are_refused_as_the_limit() {
+        let over = joined(&loopbacks(MAX_PEERS + 1), "|");
+        let err = over
+            .parse::<BridgeDialString>()
+            .unwrap_err();
+        assert_eq!(
+            err,
+            OriginateError::TooManyLegs {
+                group: None,
+                max: MAX_PEERS
+            }
+        );
+        assert!(
+            err.to_string()
+                .contains(&MAX_PEERS.to_string()),
+            "{err}"
+        );
+        let bridge: BridgeDialString = joined(&loopbacks(MAX_PEERS), "|")
+            .parse()
+            .unwrap();
+        assert_eq!(
+            bridge
+                .groups()
+                .len(),
+            MAX_PEERS
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn a_config_past_the_leg_limit_is_refused_as_the_limit() {
+        let load = |groups: Vec<Vec<Endpoint>>| {
+            let json = serde_json::to_value(BridgeDialString::new(groups)).unwrap();
+            serde_json::from_value::<BridgeDialString>(json).map_err(|e| e.to_string())
+        };
+        for groups in [
+            vec![loopbacks(MAX_PEERS + 1)],
+            vec![loopbacks(1); MAX_PEERS + 1],
+        ] {
+            let err = load(groups).unwrap_err();
+            assert!(err.contains(&MAX_PEERS.to_string()), "{err}");
+            assert!(!err.contains("bracket"), "{err}");
+        }
+        assert!(load(vec![loopbacks(MAX_PEERS)]).is_ok());
+        assert!(load(vec![loopbacks(1); MAX_PEERS]).is_ok());
+    }
+
     /// The dialplan carrier's expansion, the leg splits over a `[]` block and both of a block's own
     /// splits each read `\\` as one backslash, and none reads `\b` or `\d`.
     #[test]

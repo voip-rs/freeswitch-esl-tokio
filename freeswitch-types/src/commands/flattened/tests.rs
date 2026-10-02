@@ -1,5 +1,6 @@
 use super::*;
 use crate::commands::variables::{DialStringCarrier, DialStringTarget};
+use crate::switch_passes::originate_legs::MAX_PEERS;
 use crate::variables::ChannelVariable;
 
 const API: DialStringCarrier = DialStringCarrier::EslApi;
@@ -929,6 +930,76 @@ fn list_warnings_are_raised() {
     assert_eq!(
         parse("[k=${x}]loopback/9199/test", DIALPLAN).warnings(),
         [ListWarning::CarrierExpands]
+    );
+}
+
+fn nulls(count: usize, separator: &str) -> String {
+    (0..count)
+        .map(|n| format!("null/{n}"))
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+/// Past `MAX_PEERS` the switch stops splitting: the last thread, group or leg keeps the rest of
+/// the text, separators included, and nothing past it is dialled.
+#[test]
+fn a_split_past_the_limit_keeps_the_rest_in_its_last_token() {
+    let cases = [
+        (",", Some(0), Some(0)),
+        ("|", Some(0), None),
+        (ENTERPRISE_DELIM, None, None),
+    ];
+    for (separator, thread, group) in cases {
+        let at = parse(&nulls(MAX_PEERS, separator), API);
+        assert_eq!(at.warnings(), [], "{separator}");
+        assert_eq!(
+            at.legs()
+                .count(),
+            MAX_PEERS,
+            "{separator}"
+        );
+        for extra in [1, 2] {
+            let list = parse(&nulls(MAX_PEERS + extra, separator), API);
+            assert_eq!(
+                list.warnings(),
+                [ListWarning::LegsPastLimit {
+                    thread,
+                    group,
+                    unsplit: extra
+                }],
+                "{separator}"
+            );
+            let shown = list.warnings()[0].to_string();
+            assert!(!shown.contains("null"), "{shown}");
+            let legs: Vec<_> = list
+                .legs()
+                .collect();
+            assert_eq!(legs.len(), MAX_PEERS, "{separator}");
+            let rest = (MAX_PEERS - 1..MAX_PEERS + extra)
+                .map(|n| format!("null/{n}"))
+                .collect::<Vec<_>>()
+                .join(separator);
+            assert_eq!(
+                legs[MAX_PEERS - 1]
+                    .leg
+                    .endpoint,
+                rest,
+                "{separator}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_split_past_the_limit_is_located_among_kept_groups() {
+    let input = format!("null/a||{}", nulls(MAX_PEERS + 1, ","));
+    assert_eq!(
+        parse(&input, API).warnings(),
+        [ListWarning::LegsPastLimit {
+            thread: Some(0),
+            group: Some(1),
+            unsplit: 1
+        }]
     );
 }
 
