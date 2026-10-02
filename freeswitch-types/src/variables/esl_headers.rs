@@ -31,7 +31,7 @@ use crate::variables::{EslArray, MAX_ARRAY_ITEMS};
 ///
 /// ```
 /// use freeswitch_types::{EslHeaders, HeaderLookup};
-/// use sip_header::prelude::*;
+/// use sip_header::SipHeaderLookup;
 ///
 /// let mut h = EslHeaders::new();
 /// h.insert("Unique-ID", "abc-123");
@@ -225,7 +225,7 @@ impl EslHeaders {
     ///
     /// ```
     /// use freeswitch_types::{EslHeaders, SipHeader};
-    /// use sip_header::prelude::*;
+    /// use sip_header::SipHeaderLookup;
     ///
     /// let raw = "ARRAY::<urn:emergency:uid:callid:bcf.test>;purpose=emergency-CallId\
     ///            |:<urn:emergency:uid:incidentid:bcf.test>;purpose=emergency-IncidentId";
@@ -275,8 +275,8 @@ impl HeaderLookup for EslHeaders {
 mod tests {
     use super::*;
     use crate::headers::EventHeader;
-    use sip_header::prelude::*;
-    use sip_header_catalog::RowErrorKind;
+    use sip_header::SipHeaderLookup;
+    use sip_header_catalog::{RowErrorKind, SipHeaderRowsExt};
 
     #[test]
     fn every_write_path_normalizes_the_key() {

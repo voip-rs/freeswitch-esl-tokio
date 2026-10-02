@@ -107,7 +107,7 @@ The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share the sa
 ```rust
 use std::collections::HashMap;
 use freeswitch_esl_tokio::{HeaderLookup, RowError, SipHeaderRows};
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 
 struct TrackedChannel {
     data: HashMap<String, String>,
@@ -147,7 +147,7 @@ assert_eq!(ch.call_info()?.unwrap().entries()[0].purpose(), Some("icon"));
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody, SipPassthroughHeader};
 use freeswitch_esl_tokio::HeaderLookup;
 use freeswitch_esl_tokio::{EslHeaders, SipHeader};
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 # use freeswitch_esl_tokio::commands::Variables;
 # fn demo(event: &impl HeaderLookup, vars: &mut Variables, raw_multipart: &str) {
 

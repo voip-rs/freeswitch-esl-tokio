@@ -968,7 +968,7 @@ mod tests {
 
     #[test]
     fn esl_event_authorization_keeps_its_parameter_commas() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let mut event = EslEvent::new();
         event.set_header(
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn esl_event_over_cap_array_fails_every_accessor() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let over_cap = |item: &str| {
             format!(
@@ -1010,7 +1010,7 @@ mod tests {
 
     #[test]
     fn esl_event_call_info_array_encoding() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let mut event = EslEvent::new();
         event.set_header(
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn esl_event_call_info_plain_value_unchanged() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let mut event = EslEvent::new();
         event.set_header(
@@ -1053,7 +1053,7 @@ mod tests {
 
     #[test]
     fn esl_event_history_info_array_encoding() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let mut event = EslEvent::new();
         event.set_header(

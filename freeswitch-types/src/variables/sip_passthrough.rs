@@ -369,7 +369,7 @@ impl SipPassthroughHeader {
     ///
     /// ```
     /// use freeswitch_types::{SipHeader, SipPassthroughHeader};
-    /// use sip_header::prelude::*;
+    /// use sip_header::SipHeaderLookup;
     /// use sip_header::SipMessageHeaders;
     ///
     /// let msg = "INVITE sip:bob@example.com SIP/2.0\r\n\

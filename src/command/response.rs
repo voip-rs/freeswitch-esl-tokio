@@ -757,7 +757,7 @@ mod tests {
 
     #[test]
     fn esl_response_call_info_array_encoding() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let headers: IndexMap<String, String> = [(
             "Call-Info".into(),
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn esl_response_call_info_plain_value_unchanged() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let headers: IndexMap<String, String> = [(
             "Call-Info".into(),
@@ -930,7 +930,7 @@ mod tests {
 
     #[test]
     fn esl_response_alert_info_array_encoding() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let headers: IndexMap<String, String> = [(
             "Alert-Info".into(),

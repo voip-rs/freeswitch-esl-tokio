@@ -15,7 +15,7 @@ SIP header names and the header row trait come from
 crate root. Every header store here is a `SipHeaderRows` store, so the typed SIP
 accessors of [`sip-header`](https://docs.rs/sip-header) (`call_info()`,
 `p_asserted_identity()`, …) reach it through that crate's blanket impl: add
-sip-header to your own dependencies and `use sip_header::prelude::*`.
+sip-header to your own dependencies and `use sip_header::SipHeaderLookup`.
 
 For async ESL transport (connecting to FreeSWITCH, sending commands, receiving
 events), see [`freeswitch-esl-tokio`](https://crates.io/crates/freeswitch-esl-tokio)
@@ -78,7 +78,7 @@ authentication header keeps its parameters together.
 
 ```rust
 use freeswitch_types::EslHeaders;
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 
 let mut h = EslHeaders::new();
 h.insert(
@@ -102,7 +102,7 @@ fetched over ESL, goes through the same decoder into a `SipHeaderField`:
 
 ```rust
 use freeswitch_types::{EslHeaders, SipHeader};
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 
 let raw = "ARRAY::<sip:a@example.com>;purpose=icon|:<sip:b@example.com>";
 let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)?;
@@ -190,7 +190,7 @@ store as a `SipHeaderField`, which the same accessors type:
 
 ```rust
 use freeswitch_types::{SipHeader, SipPassthroughHeader};
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 use sip_header::SipMessageHeaders;
 
 let raw_invite = "INVITE sip:sos@bcf.example.com SIP/2.0\r\n\

@@ -83,7 +83,7 @@ sip-header = "0.4"
 ```
 
 ```rust,ignore
-use sip_header::prelude::*;
+use sip_header::SipHeaderLookup;
 
 let ci = event.call_info()?;          // Result<Option<UriInfo>, sip_header::ParseError>
 let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
@@ -97,7 +97,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `HistoryInfoReason` | `sip_header::SipReason` |
 | `SipGeolocationRef` | `sip_header::SipGeolocationEntry` |
 | `extract_header` at the crate root | `sip_header::extract_header`, or `SipMessageHeaders` as a row store |
-| `SipHeaderLookup` at the root and in the prelude | `sip_header::SipHeaderLookup` via `use sip_header::prelude::*`; the root and prelude carry the catalog's `SipHeaderRows` and `SipHeaderRowsExt` |
+| `SipHeaderLookup` at the root and in the prelude | `sip_header::SipHeaderLookup` in scope (`use sip_header::SipHeaderLookup`); this crate's root and prelude carry the catalog's `SipHeaderRows` and `SipHeaderRowsExt` |
 | `impl SipHeaderLookup for Store { fn sip_header_str(..) }` beside `HeaderLookup` | `impl SipHeaderRows for Store { fn sip_header_rows_str(..) -> Result<Vec<&str>, RowError> }`; a `HashMap<String, String>` field already implements it |
 | `sip_header_str()` returns `Option<&str>` | `Result<Option<&str>, RowError>`, the first decoded row; the stored value is `HeaderLookup::header_str` |
 | `EslHeaders::parse_uri_info(raw)`, `parse_history_info(raw)`, `split_entries(raw)` | `EslHeaders::decode_value(SipHeader::CallInfo, raw)?` gives a `SipHeaderField`; call `.call_info()`, `.history_info()`, … on it. `decode_value_raw(name, raw)` takes a header the catalog does not register |

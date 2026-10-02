@@ -20,7 +20,7 @@
 //! [`EslHeaders`] and the stores built on it) is a [`SipHeaderRows`] store, so
 //! the typed accessors of [`sip-header`](https://docs.rs/sip-header) reach it
 //! through that crate's blanket impl: depend on sip-header and
-//! `use sip_header::prelude::*`. A raw channel-variable value decodes into a
+//! `use sip_header::SipHeaderLookup`. A raw channel-variable value decodes into a
 //! [`SipHeaderField`] through `EslHeaders::decode_value`, or `decode_value_raw`
 //! for a header by name, which the same accessors read. This crate names no
 //! sip-header value type.

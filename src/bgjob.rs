@@ -452,7 +452,7 @@ mod tests {
 
     #[test]
     fn bgjob_result_call_info_array_encoding() {
-        use sip_header::prelude::*;
+        use sip_header::SipHeaderLookup;
 
         let mut event = bg_job_event("uuid-1", "+OK");
         event.set_header(
