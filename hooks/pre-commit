@@ -28,8 +28,8 @@ if ! gitleaks git --staged --config "$gitleaks_config" --no-banner -v --log-leve
     exit 1
 fi
 
-if ! cargo fmt --all -- --check; then
-    echo "❌ Code is not formatted. Run 'cargo fmt --all' to fix."
+if ! scripts/fmt-workspace.sh -- --check; then
+    echo "❌ Code is not formatted. Run 'scripts/fmt-workspace.sh' to fix."
     exit 1
 fi
 

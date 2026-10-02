@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$CRATE_DIR"
 
-cargo fmt --all
+"$SCRIPT_DIR/fmt-workspace.sh"
 "$SCRIPT_DIR/check-feature-matrix.sh"
 "$SCRIPT_DIR/check-msrv.sh"
 cargo clippy --workspace --release --all-features -- -D warnings

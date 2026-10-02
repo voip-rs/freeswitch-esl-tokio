@@ -175,7 +175,7 @@ Run before committing:
 
 ```sh
 cargo clippy --workspace --all-features --fix --allow-dirty --message-format=short
-cargo fmt --all
+scripts/fmt-workspace.sh
 cargo check -p freeswitch-types --no-default-features --message-format=short
 ```
 
