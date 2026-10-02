@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "freeswitch-esl-tokio"
-version = "2.7.0"
+version = "3.0.0-alpha.1"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH Event Socket Library (ESL) client for Rust"
@@ -24,7 +24,7 @@ sdp = ["freeswitch-types/sdp"]
 all-features = true
 
 [dependencies]
-freeswitch-types = { path = "freeswitch-types", version = "1.7.0" }
+freeswitch-types = { path = "freeswitch-types", version = "3.0.0-alpha.1" }
 indexmap = "2"
 tokio = { version = "1.47", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }
 bytes = "1.11"
