@@ -181,8 +181,9 @@ pub enum ListWarning {
         /// Index among [`FlattenedThread::groups`] of the group whose legs were split, `None`
         /// for a `:_:` or `|` split.
         group: Option<usize>,
-        /// Separators the last thread, group or leg keeps.
-        unsplit: usize,
+        /// Threads, groups or legs past the limit the switch never splits off. Empty tokens do
+        /// not count, so this is zero when only empty ones or a trailing separator follow.
+        excess: usize,
     },
 }
 
@@ -798,7 +799,7 @@ impl ListWarning {
                 .and_then(|t| threads.get(t))
                 .zip(cut.group)
                 .map(|(thread, g)| kept_groups(thread, g)),
-            unsplit: cut.unsplit,
+            excess: cut.excess,
         }
     }
 }
@@ -896,7 +897,7 @@ impl fmt::Display for ListWarning {
             Self::LegsPastLimit {
                 thread,
                 group,
-                unsplit,
+                excess,
             } => {
                 match (thread, group) {
                     (Some(thread), Some(group)) => {
@@ -908,7 +909,7 @@ impl fmt::Display for ListWarning {
                 write!(
                     f,
                     " stops at the switch's limit of {MAX_PEERS}; \
-                     its last token keeps {unsplit} more separators"
+                     {excess} more are never split off"
                 )
             }
         }

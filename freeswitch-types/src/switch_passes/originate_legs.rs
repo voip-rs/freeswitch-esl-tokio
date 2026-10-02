@@ -66,8 +66,8 @@ pub(crate) struct PastLimit {
     pub(crate) thread: Option<usize>,
     /// Index among the thread's groups.
     pub(crate) group: Option<usize>,
-    /// Delimiters the last token keeps.
-    pub(crate) unsplit: usize,
+    /// Non-empty tokens the last one keeps past its own, which the switch never splits off.
+    pub(crate) excess: usize,
 }
 
 /// `switch_ivr_originate`'s passes over `text`, what the carrier's pass left of the input bytes
@@ -88,7 +88,7 @@ pub(crate) fn dial_list(
         let head = head_blocks(text, &[('<', '>')], 0, block_parse)?;
         let scanned = &head.text[..head.data_end];
         let split = separate_string_string(&scanned[head.data..], ENTERPRISE_DELIM, MAX_PEERS);
-        reader.record(None, None, split.unsplit);
+        reader.record(None, None, split.unsplit, split.excess);
         let mut threads: Vec<Thread> = split
             .spans
             .into_iter()
@@ -140,14 +140,21 @@ struct Reader {
 }
 
 impl Reader {
-    /// A split at `thread` and `group` whose last token keeps `unsplit` delimiters.
-    fn record(&mut self, thread: Option<usize>, group: Option<usize>, unsplit: usize) {
+    /// A split at `thread` and `group` whose last token keeps `unsplit` delimiters, `excess` of
+    /// them opening a non-empty token.
+    fn record(
+        &mut self,
+        thread: Option<usize>,
+        group: Option<usize>,
+        unsplit: usize,
+        excess: usize,
+    ) {
         if unsplit > 0 {
             self.past_limit
                 .push(PastLimit {
                     thread,
                     group,
-                    unsplit,
+                    excess,
                 });
         }
     }
@@ -172,7 +179,7 @@ impl Reader {
             return Err(PipelineError::SplitSeparatorUnreadable);
         }
         self.quote_spans_legs |= split.held_delimiter;
-        self.record(Some(index), None, split.unsplit);
+        self.record(Some(index), None, split.unsplit, split.excess);
         let groups = split
             .tokens
             .into_iter()
@@ -213,7 +220,7 @@ impl Reader {
             return Err(PipelineError::SplitSeparatorUnreadable);
         }
         self.quote_spans_legs |= split.held_delimiter;
-        self.record(Some(thread), Some(group), split.unsplit);
+        self.record(Some(thread), Some(group), split.unsplit, split.excess);
         split
             .tokens
             .into_iter()

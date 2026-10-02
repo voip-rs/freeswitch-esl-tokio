@@ -965,7 +965,7 @@ fn a_split_past_the_limit_keeps_the_rest_in_its_last_token() {
                 [ListWarning::LegsPastLimit {
                     thread,
                     group,
-                    unsplit: extra
+                    excess: extra
                 }],
                 "{separator}"
             );
@@ -990,6 +990,25 @@ fn a_split_past_the_limit_keeps_the_rest_in_its_last_token() {
     }
 }
 
+/// Only a token the switch would have dialled counts: an empty one between doubled separators, a
+/// quoted empty one and a trailing separator do not.
+#[test]
+fn the_excess_counts_only_non_empty_tokens() {
+    let excess = |tail: &str| {
+        let input = format!("{}{tail}", nulls(MAX_PEERS, ","));
+        match parse(&input, API).warnings() {
+            [ListWarning::LegsPastLimit { excess, .. }] => Some(*excess),
+            [] => None,
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(excess(",null/x,,null/y"), Some(2));
+    assert_eq!(excess(",null/x,'',null/y"), Some(2));
+    assert_eq!(excess(","), Some(0));
+    assert_eq!(excess(",,"), Some(0));
+    assert_eq!(excess(""), None);
+}
+
 #[test]
 fn a_split_past_the_limit_is_located_among_kept_groups() {
     let input = format!("null/a||{}", nulls(MAX_PEERS + 1, ","));
@@ -998,7 +1017,7 @@ fn a_split_past_the_limit_is_located_among_kept_groups() {
         [ListWarning::LegsPastLimit {
             thread: Some(0),
             group: Some(1),
-            unsplit: 1
+            excess: 1
         }]
     );
 }

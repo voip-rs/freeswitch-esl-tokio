@@ -297,6 +297,8 @@ pub(crate) struct Split {
     pub(crate) unreadable_head: bool,
     /// Delimiters the last token keeps because the split stopped at its limit.
     pub(crate) unsplit: usize,
+    /// Non-empty tokens in that remainder past its first, which the switch never splits off.
+    pub(crate) excess: usize,
 }
 
 /// One token of a [`Split`], as indices into its buffer.
@@ -414,7 +416,8 @@ impl CBuffer {
             },
             limit => scan(text, limit),
         };
-        let unsplit = match cut
+        let cleanup_delim = (delim != ' ').then_some(delim);
+        let (unsplit, excess) = match cut
             .spans
             .last()
         {
@@ -424,16 +427,23 @@ impl CBuffer {
                     .len()
                     == limit =>
             {
-                scan(&text[last.start..], usize::MAX).delimiters
+                let rest = &text[last.start..];
+                let rescan = scan(rest, usize::MAX);
+                let excess = rescan
+                    .spans
+                    .iter()
+                    .skip(1)
+                    .filter(|span| !cleanup(&rest[(*span).clone()], cleanup_delim).is_empty())
+                    .count();
+                (rescan.delimiters, excess)
             }
-            _ => 0,
+            _ => (0, 0),
         };
         for span in &cut.spans {
             if self.at(index + span.end) == delim {
                 self.terminate(index + span.end);
             }
         }
-        let cleanup_delim = (delim != ' ').then_some(delim);
         let tokens = cut
             .spans
             .iter()
@@ -449,6 +459,7 @@ impl CBuffer {
             open_quote: cut.open_quote,
             unreadable_head: false,
             unsplit,
+            excess,
         }
     }
 
@@ -592,6 +603,8 @@ pub(crate) struct StringSplit {
     pub(crate) spans: Vec<Range<usize>>,
     /// Delimiters the last token keeps because the split stopped at its limit.
     pub(crate) unsplit: usize,
+    /// Non-empty pieces in that remainder past its first.
+    pub(crate) excess: usize,
 }
 
 /// `switch_separate_string_string`: a plain substring split with no quote or escape
@@ -611,15 +624,24 @@ pub(crate) fn separate_string_string(text: &[Traced], delim: &str, limit: usize)
         start += at + width;
     }
     let mut unsplit = 0;
+    let mut excess = 0;
     if spans.len() + 1 == limit {
         let mut rest = start;
         while let Some(at) = find(&text[rest..], delim) {
             unsplit += 1;
             rest += at + width;
+            let next = find(&text[rest..], delim).map_or(text.len(), |at| rest + at);
+            if next > rest {
+                excess += 1;
+            }
         }
     }
     spans.push(start..text.len());
-    StringSplit { spans, unsplit }
+    StringSplit {
+        spans,
+        unsplit,
+        excess,
+    }
 }
 
 /// `separate_string_char_delim` on a non-space `delim`, each token through [`cleanup`].
