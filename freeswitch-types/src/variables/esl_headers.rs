@@ -208,7 +208,7 @@ fn value_rows<'a>(name: &str, value: Option<&'a str>) -> Result<Vec<&'a str>, Ro
         .take(MAX_ARRAY_ITEMS + 1)
         .collect();
     if items.len() > MAX_ARRAY_ITEMS {
-        return Err(RowError::too_many_entries(
+        return Err(RowError::too_many_rows(
             body.split(EslArray::SEPARATOR)
                 .count(),
             MAX_ARRAY_ITEMS,
@@ -236,7 +236,7 @@ impl EslHeaders {
     ///
     /// # Errors
     ///
-    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_entries`].
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_rows`].
     pub fn decode_value(header: SipHeader, raw: &str) -> Result<SipHeaderField<'_>, RowError> {
         Self::decode_value_raw(header.as_str(), raw)
     }
@@ -246,7 +246,7 @@ impl EslHeaders {
     ///
     /// # Errors
     ///
-    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_entries`].
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_rows`].
     pub fn decode_value_raw<'a>(
         name: &'a str,
         raw: &'a str,
@@ -539,7 +539,7 @@ mod tests {
         let err = h
             .sip_header_rows(SipHeader::CallInfo)
             .expect_err("over-cap ARRAY must fail");
-        assert_eq!(err.kind(), RowErrorKind::TooManyEntries);
+        assert_eq!(err.kind(), RowErrorKind::TooManyRows);
         assert_eq!(err.count(), Some(MAX_ARRAY_ITEMS + 1));
         assert_eq!(err.limit(), Some(MAX_ARRAY_ITEMS));
         assert!(matches!(
@@ -668,7 +668,7 @@ mod tests {
             EslHeaders::decode_value_raw("Call-Info", &raw),
         ] {
             let err = err.expect_err("over-cap ARRAY must fail");
-            assert_eq!(err.kind(), RowErrorKind::TooManyEntries);
+            assert_eq!(err.kind(), RowErrorKind::TooManyRows);
         }
     }
 
