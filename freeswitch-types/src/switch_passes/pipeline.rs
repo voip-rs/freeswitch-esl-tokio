@@ -25,6 +25,10 @@ pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, Pi
             let (text, references) = expand_escapes(&input);
             (text, extent(&input), !references.is_empty())
         }
+        DialStringCarrier::Direct => {
+            let raw = extent(&input);
+            (input, raw, false)
+        }
     };
     dial_list(&text, raw, carrier_expands, target.block_parse())
 }

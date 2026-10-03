@@ -506,8 +506,8 @@ impl Endpoint {
 
     /// Refuse an expression at a carrier that never expands it.
     pub(crate) fn check_expanded(&self, carrier: DialStringCarrier) -> Result<(), OriginateError> {
-        match (self, carrier) {
-            (Self::SofiaContact(_) | Self::GroupCall(_), DialStringCarrier::EslApi) => {
+        match self {
+            Self::SofiaContact(_) | Self::GroupCall(_) if !carrier.expands() => {
                 Err(OriginateError::UnexpandedExpression {
                     endpoint: self.kind(),
                 })

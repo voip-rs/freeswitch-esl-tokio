@@ -22,7 +22,7 @@ use crate::version::FreeswitchVersion;
 /// FreeSWITCH escape-processes a bracket block a different number of times
 /// depending on the command it arrived on, and the correct escaping of a value
 /// containing a single quote differs between them with no form that satisfies
-/// both. Naming the carrier is the only way a renderer can be right.
+/// all. Naming the carrier is the only way a renderer can be right.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
@@ -33,6 +33,10 @@ pub enum DialStringCarrier {
     /// A dialplan application such as `bridge`, including via `sendmsg execute`,
     /// which receives its argument whole.
     Dialplan,
+    /// Handed straight to `switch_ivr_originate`, as a script binding's originate does
+    /// (`freeswitch.Session(dest)` and `session:originate` through `CoreSession`): no argument
+    /// split, no expansion.
+    Direct,
 }
 
 impl DialStringCarrier {
@@ -245,7 +249,7 @@ impl DialStringTarget {
     pub fn with_argv_separator(mut self, sep: char) -> Result<Self, InvalidArgvSeparator> {
         match self.carrier {
             DialStringCarrier::EslApi => {}
-            DialStringCarrier::Dialplan => {
+            DialStringCarrier::Dialplan | DialStringCarrier::Direct => {
                 return Err(InvalidArgvSeparator::WrongCarrier(self.carrier))
             }
         }
@@ -265,7 +269,7 @@ impl DialStringTarget {
     }
 
     /// `text` escaped as one argument of `originate`'s split, on blanks or on the
-    /// [`argv_separator`](Self::argv_separator), or `None` at the dialplan carrier, which splits none.
+    /// [`argv_separator`](Self::argv_separator), or `None` at a carrier that splits none.
     ///
     /// An empty text is written `''`, which the split keeps as an argument. On blanks a text
     /// opening `^^` is written after `''`, since a line opening `^^` names its own separator.
@@ -306,9 +310,8 @@ impl DialStringTarget {
         match (self.carrier, self.argument) {
             (DialStringCarrier::EslApi, ArgumentPass::Blank) => Some(' '),
             (_, ArgumentPass::Char(sep)) => Some(sep),
-            (DialStringCarrier::Dialplan, ArgumentPass::Blank) | (_, ArgumentPass::Consumed) => {
-                None
-            }
+            (DialStringCarrier::Dialplan | DialStringCarrier::Direct, ArgumentPass::Blank)
+            | (_, ArgumentPass::Consumed) => None,
         }
     }
 
@@ -357,11 +360,12 @@ impl DialStringTarget {
         self.block_parse
     }
 
-    /// The argument splits still ahead of this target: one, or none once consumed.
+    /// The carrier's own pass still ahead of this target, the argument split or the dialplan
+    /// expansion: one, or none once consumed and at the direct carrier.
     pub(crate) fn argument_passes(self) -> u32 {
-        match self.argument {
-            ArgumentPass::Blank | ArgumentPass::Char(_) => 1,
-            ArgumentPass::Consumed => 0,
+        match (self.carrier, self.argument) {
+            (DialStringCarrier::Direct, _) | (_, ArgumentPass::Consumed) => 0,
+            (_, ArgumentPass::Blank | ArgumentPass::Char(_)) => 1,
         }
     }
 }
