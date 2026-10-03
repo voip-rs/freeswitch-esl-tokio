@@ -83,6 +83,7 @@ pub(crate) fn targets() -> Vec<DialStringTarget> {
 pub(crate) fn targets_at(block_parse: BlockParse) -> Vec<DialStringTarget> {
     let mut carriers = api_targets();
     carriers.push(DialStringTarget::new(DialStringCarrier::Dialplan));
+    carriers.push(DialStringTarget::new(DialStringCarrier::Direct));
     carriers
         .into_iter()
         .map(|target| target.with_block_parse(block_parse))

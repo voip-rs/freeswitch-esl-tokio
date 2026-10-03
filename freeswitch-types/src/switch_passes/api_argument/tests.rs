@@ -10,11 +10,10 @@ fn tilde() -> DialStringTarget {
 }
 
 #[test]
-fn escape_argument_is_none_only_at_the_dialplan_carrier() {
-    assert_eq!(
-        DialStringTarget::new(DialStringCarrier::Dialplan).escape_argument("a b"),
-        None
-    );
+fn escape_argument_is_none_where_no_argument_split_runs() {
+    for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
+        assert_eq!(DialStringTarget::new(carrier).escape_argument("a b"), None);
+    }
     for (text, want) in [
         ("a b", r"a\sb"),
         (" a  b ", r"\sa\s\sb\s"),

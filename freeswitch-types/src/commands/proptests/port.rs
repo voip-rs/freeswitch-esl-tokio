@@ -126,10 +126,9 @@ proptest! {
 
     #[test]
     fn an_escaped_argument_is_one_argument(text in text()) {
-        prop_assert_eq!(
-            DialStringTarget::new(DialStringCarrier::Dialplan).escape_argument(&text),
-            None
-        );
+        for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
+            prop_assert_eq!(DialStringTarget::new(carrier).escape_argument(&text), None);
+        }
         for target in api_targets() {
             let escaped = target
                 .escape_argument(&text)

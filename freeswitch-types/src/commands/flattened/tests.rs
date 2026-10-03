@@ -1163,6 +1163,40 @@ fn variable_str_reads_a_key_not_in_any_enum() {
     assert_eq!(leg.variable_str("SIP_H_X-SEAT"), Some("42"));
 }
 
+#[test]
+fn the_direct_carrier_neither_splits_arguments_nor_expands() {
+    let input = "{origination_nested_vars=true,cid=a b}[x=${y}]loopback/9199/test";
+    let list = parse(input, DialStringCarrier::Direct);
+    assert_eq!(list.warnings(), []);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(leg.variable_str("cid"), Some("a b"));
+    assert_eq!(leg.variable_str("x"), Some("${y}"));
+    assert_eq!(
+        list.display_raw()
+            .to_string(),
+        input
+    );
+    let rendered = list
+        .display_for(DialStringCarrier::Direct)
+        .to_string();
+    let back = parse(&rendered, DialStringCarrier::Direct);
+    assert_eq!(
+        back.legs()
+            .flat_map(FlattenedLeg::variables)
+            .collect::<Vec<_>>(),
+        leg_variables(leg)
+    );
+
+    assert!(FlattenedDialString::parse_for(input, API).is_err());
+    assert_eq!(
+        parse(input, DIALPLAN).warnings(),
+        [ListWarning::CarrierExpands]
+    );
+}
+
 fn leg_variables(leg: &FlattenedLeg) -> Vec<(&str, &str)> {
     leg.variables()
         .collect()

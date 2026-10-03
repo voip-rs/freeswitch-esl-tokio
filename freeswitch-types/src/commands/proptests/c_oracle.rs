@@ -4,7 +4,8 @@ use super::*;
 use crate::switch_passes::against_the_c_at_its_revision;
 
 /// The pairs and endpoint text the switch's C reads of `dial` at `target`: `originate_function`
-/// on the API line or the dialplan carrier's expansion, then `switch_ivr_originate`'s passes.
+/// on the API line, the dialplan carrier's expansion or nothing, then `switch_ivr_originate`'s
+/// passes.
 pub(crate) fn c_reads_the_leg(
     c: Oracle,
     dial: &str,
@@ -21,6 +22,9 @@ pub(crate) fn c_reads_the_leg(
             .originated
             .and_then(|originated| originated.aleg)
             .ok_or("originate_function dials nothing")?,
+        DialStringCarrier::Direct => dial
+            .as_bytes()
+            .to_vec(),
     };
     let read = c.dial(&aleg);
     let [thread] = &read.threads[..] else {

@@ -76,7 +76,8 @@ fn endpoint_parse_for_dialplan_group_call() {
     assert!(matches!(ep, Endpoint::GroupCall(_)));
 }
 
-/// `originate` over the API expands nothing, so an expression there dials as an unknown endpoint.
+/// Neither `originate` over the API nor a script's originate expands, so an expression there dials
+/// as an unknown endpoint.
 #[test]
 fn an_expression_is_refused_where_nothing_expands_it() {
     let unexpanded = |kind| OriginateError::UnexpandedExpression { endpoint: kind };
@@ -84,7 +85,11 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         ("${sofia_contact(SECRET@example.com)}", "sofia_contact"),
         ("${group_call(SECRET@example.com+A)}", "group_call"),
     ] {
-        for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+        for target in [
+            DialStringTarget::new(DialStringCarrier::EslApi),
+            tilde(),
+            DialStringTarget::new(DialStringCarrier::Direct),
+        ] {
             let refused = Endpoint::parse_for(text, target);
             assert_eq!(refused, Err(unexpanded(kind)), "{text} at {target:?}");
         }
@@ -942,6 +947,7 @@ fn empty_fields_the_module_reads_as_written_round_trip() {
             DialStringTarget::new(DialStringCarrier::EslApi),
             DialStringTarget::new(DialStringCarrier::Dialplan),
             tilde(),
+            DialStringTarget::new(DialStringCarrier::Direct),
         ] {
             let rendered = ep
                 .display_for(target)

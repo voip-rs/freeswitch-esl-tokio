@@ -2,6 +2,12 @@ use super::*;
 use crate::switch_passes::escape::escape_value;
 use crate::version::FreeswitchVersion;
 
+const CARRIERS: [DialStringCarrier; 3] = [
+    DialStringCarrier::EslApi,
+    DialStringCarrier::Dialplan,
+    DialStringCarrier::Direct,
+];
+
 /// Measured on a live switch: an empty value is discarded under every
 /// encoding, silently, so nothing can be emitted for one and the refusal
 /// has to name a remedy the caller could not guess.
@@ -258,6 +264,28 @@ fn a_chosen_separator_changes_only_the_comma() {
     }
 }
 
+/// Handed straight to `switch_ivr_originate`, a block meets only its own two splits, plus the leg
+/// splits in `[]`, and nothing deletes `\'` or drops a `$`.
+#[test]
+fn the_direct_carrier_escapes_for_the_originate_passes_alone() {
+    let cases = [
+        (VariablesType::Default, "it's", r"it\\\'s"),
+        (VariablesType::Default, r"a\nb", r"a\\\\nb"),
+        (VariablesType::Default, "a,b", r"a\,b"),
+        (VariablesType::Default, "pa$$word", "pa$$word"),
+        (VariablesType::Channel, r"a\nb", r"a\\\\\\\\\\\\\\\\nb"),
+        (VariablesType::Channel, "it's", r"it\\\\\\\\\\\\\\\'s"),
+        (VariablesType::Channel, "a|b", r"a\|b"),
+    ];
+    for (scope, value, want) in cases {
+        assert_eq!(
+            escape_value(value, DialStringCarrier::Direct, true, scope),
+            want,
+            "{value:?} in {scope:?}"
+        );
+    }
+}
+
 /// The crate exists to drive `api originate`, so a block rendered with no
 /// carrier named is rendered for that one.
 #[test]
@@ -273,8 +301,8 @@ fn display_defaults_to_the_api_carrier() {
 }
 
 #[test]
-fn round_trips_at_either_carrier() {
-    for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
+fn round_trips_at_every_carrier() {
+    for carrier in CARRIERS {
         for value in ["it's", r"a\,b", r"C:\path", "a,b", "with space"] {
             let mut vars = Variables::new(VariablesType::Default);
             vars.insert("k", value);
@@ -295,8 +323,8 @@ fn round_trips_at_either_carrier() {
 /// the block is escape-processed: the switch runs the same tokenizer over
 /// it, so a value still comes back through the same undoing.
 #[test]
-fn separated_block_round_trips_at_either_carrier() {
-    for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
+fn separated_block_round_trips_at_every_carrier() {
+    for carrier in CARRIERS {
         for value in ["it's", "a,b", r"C:\path", r"a\nb", "with space"] {
             let mut vars = Variables::new(VariablesType::Default);
             vars.insert("k", value);
@@ -1039,13 +1067,13 @@ fn an_argv_separator_is_part_of_the_target() {
 }
 
 #[test]
-fn the_dialplan_carrier_takes_no_argv_separator() {
-    assert_eq!(
-        DialStringTarget::new(DialStringCarrier::Dialplan).with_argv_separator('~'),
-        Err(InvalidArgvSeparator::WrongCarrier(
-            DialStringCarrier::Dialplan
-        ))
-    );
+fn a_carrier_splitting_no_arguments_takes_no_argv_separator() {
+    for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
+        assert_eq!(
+            DialStringTarget::new(carrier).with_argv_separator('~'),
+            Err(InvalidArgvSeparator::WrongCarrier(carrier))
+        );
+    }
 }
 
 /// Space, `\`, `'`, lowercase `n r t s`, controls and non-ASCII break the switch's split
