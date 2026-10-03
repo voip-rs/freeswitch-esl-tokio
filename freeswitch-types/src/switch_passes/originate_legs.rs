@@ -4,7 +4,7 @@
 
 use std::ops::Range;
 
-use super::brackets::{install, parse_block, same_header, Block};
+use super::brackets::{install, parse_block, same_header, set_header, Block};
 use super::expansion::{enterprise_nests, names_a_variable};
 use super::separate::{find, find_end_paren, separate_string_string, skip_spaces, CBuffer, Split};
 use super::{byte_range, untrace, PipelineError, Traced};
@@ -378,14 +378,14 @@ fn escape_block_commas(group: &mut [Traced]) {
     }
 }
 
-/// The value `key` ends with on a leg's channel: `inherited` (enterprise then thread) installs after
-/// the leg's own unless `local_var_clobber` says otherwise, refusing `${` values unless `nested_vars`.
-pub(crate) fn resolve<'a>(
+/// The variables a leg's channel holds once `switch_ivr_originate` installs them, in its order:
+/// `inherited` (enterprise then thread) after the leg's own unless `local_var_clobber` is true, a
+/// later name replacing an earlier at the bottom, a `${` value refused unless `nested_vars`.
+pub(crate) fn channel_variables<'a>(
     inherited: impl IntoIterator<Item = &'a Block>,
     leg: &'a Leg,
-    key: &str,
     nested_vars: bool,
-) -> Option<&'a str> {
+) -> Vec<(&'a str, &'a str)> {
     let global = install(inherited);
     let local = install(&leg.blocks);
     let clobber = global
@@ -397,12 +397,16 @@ pub(crate) fn resolve<'a>(
     } else {
         (local, global)
     };
-    first
-        .iter()
-        .chain(&last)
-        .filter(|(name, value)| same_header(name, key) && (nested_vars || !names_a_variable(value)))
-        .map(|&(_, value)| value)
-        .next_back()
+    let mut channel = Vec::new();
+    for (name, value) in first
+        .into_iter()
+        .chain(last)
+    {
+        if nested_vars || !names_a_variable(value) {
+            set_header(&mut channel, name, value);
+        }
+    }
+    channel
 }
 
 /// `switch_true`.

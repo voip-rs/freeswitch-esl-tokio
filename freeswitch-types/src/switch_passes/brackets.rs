@@ -304,13 +304,17 @@ pub(crate) fn install<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<(&
         .flat_map(|block| &block.pairs)
     {
         match &pair.effect {
-            PairEffect::Set(value) => {
-                headers.retain(|(name, _)| !same_header(name, &pair.key));
-                headers.push((&pair.key, value))
-            }
+            PairEffect::Set(value) => set_header(&mut headers, &pair.key, value),
             PairEffect::Cleared => headers.retain(|(name, _)| !same_header(name, &pair.key)),
             PairEffect::Ignored | PairEffect::Unreadable | PairEffect::Valueless => {}
         }
     }
     headers
+}
+
+/// `switch_event_add_header_string` at `SWITCH_STACK_BOTTOM` on an event carrying
+/// `EF_UNIQ_HEADERS`, as originate events and a channel's variables do.
+pub(crate) fn set_header<'a>(headers: &mut Vec<(&'a str, &'a str)>, name: &'a str, value: &'a str) {
+    headers.retain(|(held, _)| !same_header(held, name));
+    headers.push((name, value));
 }

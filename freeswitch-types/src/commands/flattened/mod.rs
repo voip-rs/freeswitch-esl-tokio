@@ -13,11 +13,11 @@ use crate::channel::HangupCause;
 use crate::commands::endpoint::Endpoint;
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
-use crate::switch_passes::brackets::{Block, Pair, PairEffect};
+use crate::switch_passes::brackets::{install, same_header, Block, Pair, PairEffect};
 use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{
-    resolve, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM, MAX_PEERS,
+    channel_variables, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM, MAX_PEERS,
 };
 use crate::switch_passes::{pipeline, PipelineError};
 use crate::variables::VariableName;
@@ -311,6 +311,13 @@ impl FlattenedDialString {
             .flat_map(FlattenedThread::legs)
     }
 
+    /// The pairs of the `<>` blocks ahead of a `:_:` split, which every thread inherits, in the
+    /// order their event holds them: a name set again moves to the end, an empty value deletes it.
+    /// Empty without a split, where [`FlattenedThread::variables`] holds every list block.
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &str)> {
+        install(&self.blocks).into_iter()
+    }
+
     /// Warnings about the whole list.
     pub fn warnings(&self) -> &[ListWarning] {
         &self.warnings
@@ -573,6 +580,13 @@ impl FlattenedThread {
         })
     }
 
+    /// The pairs of the thread's own `<>` and `{}` blocks, which every leg of the thread inherits,
+    /// in the order their event holds them: a name set again moves to the end, an empty value
+    /// deletes it. Without a `:_:` split the list's blocks are the one thread's.
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &str)> {
+        install(&self.blocks).into_iter()
+    }
+
     /// Groups in the order they are tried.
     pub fn groups(&self) -> impl Iterator<Item = &FlattenedGroup> {
         self.groups
@@ -671,13 +685,25 @@ impl FlattenedLeg {
     /// assert_eq!(leg.variable_str("sip_h_X-Seat"), Some("42"));
     /// ```
     pub fn variable_str(&self, name: &str) -> Option<&str> {
-        resolve(
+        self.variables()
+            .find(|(held, _)| same_header(held, name))
+            .map(|(_, value)| value)
+    }
+
+    /// Every variable the leg's channel receives, in the order it holds them once the list, thread
+    /// and leg blocks are installed as `local_var_clobber` decides, each name once with the value
+    /// [`variable_str`](Self::variable_str) returns.
+    ///
+    /// A name installed again moves to the end, spelled as that install spells it. A value refused
+    /// at install, as [`variable`](Self::variable) describes, is absent.
+    pub fn variables(&self) -> impl Iterator<Item = (&str, &str)> {
+        channel_variables(
             self.inherited
                 .iter(),
             &self.leg,
-            name,
             self.nested_vars,
         )
+        .into_iter()
     }
 
     /// What the leg dials.

@@ -5,10 +5,10 @@ use super::read;
 use crate::commands::variables::{
     BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType,
 };
-use crate::switch_passes::brackets::{parse_block, Pair, PairEffect, Parsed};
+use crate::switch_passes::brackets::{parse_block, same_header, Pair, PairEffect, Parsed};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{
-    dial_list, resolve, DialList, Leg, Thread, ENTERPRISE_DELIM,
+    channel_variables, dial_list, DialList, Leg, Thread, ENTERPRISE_DELIM,
 };
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{trace, untrace, PipelineError};
@@ -49,14 +49,16 @@ fn resolve_on<'a>(
     leg: &'a Leg,
     key: &str,
 ) -> Option<&'a str> {
-    resolve(
+    channel_variables(
         list.blocks
             .iter()
             .chain(&thread.blocks),
         leg,
-        key,
         thread.nested_vars,
     )
+    .into_iter()
+    .find(|(name, _)| same_header(name, key))
+    .map(|(_, value)| value)
 }
 
 fn effect(list: &DialList, leg: usize, key: &str) -> Vec<PairEffect> {
