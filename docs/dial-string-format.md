@@ -550,6 +550,18 @@ is true on the channel, which then leaves that carrier at the API's depth.
 | `bridge` and other dialplan applications, incl. `sendmsg execute` | expansion + 2 |
 | `api originate`, `bgapi originate` | argv split + 2 |
 | `originate` after `^^X` | argv split on `X` + 2 |
+| a script's originate (`DialStringCarrier::Direct`) | 2 |
+
+A script binding hands its dial string to `switch_ivr_originate` itself:
+`freeswitch.Session(dest)` and `session:originate` in mod_lua both reach it
+through `CoreSession` in `switch_cpp.cpp`, with no argument split and no
+expansion ahead of it. The text meets the block's own two splits, and the leg
+splits in `[]`, and nothing else, so a space needs no quotes, a `${…}` reference
+is installed as written (or refused without `origination_nested_vars`), a
+literal backslash in `{}` or `<>` needs four and a single quote three
+backslashes. `DialStringCarrier::Direct` names this carrier; it takes no
+argument separator and refuses a `sofia_contact` or `group_call` expression, as
+the API carrier does.
 
 Consequences worth knowing before hand-writing a block:
 
@@ -970,8 +982,9 @@ sliced out of the escaped text by `retain` is still one argument. An empty text
 is written `''`, since neither split keeps an empty argument at the end of a
 line nor the blank split anywhere. On blanks a text opening `^^` follows a
 leading `''`, or opening the line it would name the split's separator.
-`escape_argument` is `None` at `DialStringCarrier::Dialplan`, which takes no
-separator either, because an application's argument is never split.
+`escape_argument` is `None` at `DialStringCarrier::Dialplan` and
+`DialStringCarrier::Direct`, which take no separator either, because neither
+splits its text into arguments.
 
 `with_argv_separator` refuses separators that break the split or its escapes:
 
@@ -994,7 +1007,7 @@ It refuses others as policy, though the switch splits on them:
 - every other letter and digit, which a reader cannot tell from the words it
   separates.
 
-These two lines are the two carriers of [Parse depth](#parse-depth), and the
+These two lines are the ESL carriers of [Parse depth](#parse-depth), and the
 typed API picks the right escaping for each without being told: `Originate`
 renders for the API carrier, `BridgeDialString` for the dialplan one. `Display`
 on a bare `Variables` or `Endpoint` means the API carrier, because that is what
