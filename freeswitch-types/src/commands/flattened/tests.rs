@@ -1162,3 +1162,165 @@ fn variable_str_reads_a_key_not_in_any_enum() {
     assert_eq!(leg.variable_str("sip_h_X-Seat"), Some("42"));
     assert_eq!(leg.variable_str("SIP_H_X-SEAT"), Some("42"));
 }
+
+fn leg_variables(leg: &FlattenedLeg) -> Vec<(&str, &str)> {
+    leg.variables()
+        .collect()
+}
+
+#[test]
+fn leg_variables_follow_the_install_order_local_var_clobber_picks() {
+    let list = parse("<e=1,k=e>{g=2,K=g}[l=3,k=l]null/a", API);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(
+        leg_variables(leg),
+        [("l", "3"), ("e", "1"), ("g", "2"), ("K", "g")]
+    );
+
+    let list = parse(
+        "<e=1,k=e>{local_var_clobber=true,g=2,K=g}[l=3,k=l]null/a",
+        API,
+    );
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(
+        leg_variables(leg),
+        [
+            ("e", "1"),
+            ("local_var_clobber", "true"),
+            ("g", "2"),
+            ("l", "3"),
+            ("k", "l")
+        ]
+    );
+}
+
+#[test]
+fn a_value_refused_at_install_leaves_the_earlier_one() {
+    let list = parse("{k=${x}}[k=l]null/a", API);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(leg_variables(leg), [("k", "l")]);
+    assert_eq!(leg.variable_str("k"), Some("l"));
+}
+
+#[test]
+fn list_and_thread_variables_are_their_own_blocks() {
+    let list = parse("<e=1,e=2,f=3>{g=2}null/a:_:{h=3,h=}null/b", API);
+    assert_eq!(
+        list.variables()
+            .collect::<Vec<_>>(),
+        [("e", "2"), ("f", "3")]
+    );
+    let threads: Vec<Vec<(&str, &str)>> = list
+        .threads()
+        .map(|thread| {
+            thread
+                .variables()
+                .collect()
+        })
+        .collect();
+    assert_eq!(threads, [[("g", "2")], [("h", "3")]]);
+    let legs: Vec<Vec<(&str, &str)>> = list
+        .legs()
+        .map(leg_variables)
+        .collect();
+    assert_eq!(
+        legs,
+        [
+            vec![("e", "2"), ("f", "3"), ("g", "2")],
+            vec![("e", "2"), ("f", "3"), ("h", "3")]
+        ]
+    );
+}
+
+mod variables_agree_with_lookup {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest::sample::select;
+
+    use super::*;
+    use crate::switch_passes::brackets::same_header;
+
+    const NAMES: &[&str] = &[
+        "k",
+        "K",
+        "v",
+        "local_var_clobber",
+        "origination_nested_vars",
+    ];
+    const VALUES: &[&str] = &["1", "2", "true", "false", "${x}", ""];
+
+    fn block(open: char, close: char) -> impl Strategy<Value = String> {
+        proptest::option::of(vec((select(NAMES), select(VALUES)), 0..4)).prop_map(move |pairs| {
+            pairs.map_or_else(String::new, |pairs| {
+                let pairs: Vec<String> = pairs
+                    .iter()
+                    .map(|(name, value)| format!("{name}={value}"))
+                    .collect();
+                format!("{open}{}{close}", pairs.join(","))
+            })
+        })
+    }
+
+    fn thread() -> impl Strategy<Value = String> {
+        (
+            block('{', '}'),
+            vec((block('[', ']'), select(&[",", "|"][..])), 1..4),
+        )
+            .prop_map(|(global, legs)| {
+                let mut text = global;
+                for (i, (own, separator)) in legs
+                    .iter()
+                    .enumerate()
+                {
+                    if i > 0 {
+                        text.push_str(separator);
+                    }
+                    text.push_str(&format!("{own}null/{i}"));
+                }
+                text
+            })
+    }
+
+    fn list() -> impl Strategy<Value = String> {
+        (block('<', '>'), vec(thread(), 1..3))
+            .prop_map(|(enterprise, threads)| format!("{enterprise}{}", threads.join(":_:")))
+    }
+
+    proptest! {
+        #![proptest_config(freeswitch_c_oracle::config())]
+
+        #[test]
+        fn every_leg_variable_is_its_lookup_once(input in list()) {
+            let Ok(list) = FlattenedDialString::parse_for(&input, API) else {
+                return Ok(());
+            };
+            for leg in list.legs() {
+                let variables = leg_variables(leg);
+                for (i, &(name, value)) in variables.iter().enumerate() {
+                    prop_assert_eq!(leg.variable_str(name), Some(value), "{:?}", input);
+                    prop_assert!(
+                        !variables[..i].iter().any(|(earlier, _)| same_header(earlier, name)),
+                        "{name:?} repeats in {input:?}"
+                    );
+                }
+                for name in NAMES {
+                    if leg.variable_str(name).is_some() {
+                        prop_assert!(
+                            variables.iter().any(|(held, _)| same_header(held, name)),
+                            "{name:?} looked up but not iterated in {input:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
