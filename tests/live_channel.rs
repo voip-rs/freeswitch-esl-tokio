@@ -21,9 +21,9 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect, create_uuid,
-    escaping_block, getvar, kill_channel, percent_escape_tree, switch_version, target_under_test,
-    wait_for_bridge, wait_for_own_event, BridgeOutcome, ChannelReaper, PercentEscape,
-    ESCAPING_CASES, ESCAPING_SEPARATOR,
+    escaping_block, getvar, kill_channel, parked_anchor, percent_escape_tree, switch_version,
+    target_under_test, wait_for_bridge, wait_for_own_event, BridgeOutcome, ChannelReaper,
+    PercentEscape, ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -601,13 +601,7 @@ async fn dial_without_waiting(
             .unwrap_or_else(|e| panic!("{cmd} rejected: {e}"));
         return None;
     }
-    let anchor = client
-        .api("originate null/anchor &park()")
-        .await
-        .expect("anchor transport error")
-        .api_result()
-        .expect("anchor originate failed")
-        .to_string();
+    let anchor = parked_anchor(client, "null/anchor").await;
     let dial = BridgeDialString::new(vec![vec![endpoint.clone()]])
         .display_with(block_parse)
         .to_string();
@@ -852,15 +846,7 @@ async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
     ];
     for (extension, want) in cases {
         let uuid = create_uuid(&client).await;
-        let anchor = client
-            .api(&format!(
-                "originate {{some_var={expanded}}}null/anchor &park()"
-            ))
-            .await
-            .expect("anchor transport error")
-            .api_result()
-            .expect("anchor originate failed")
-            .to_string();
+        let anchor = parked_anchor(&client, &format!("{{some_var={expanded}}}null/anchor")).await;
         let endpoint = Endpoint::Loopback(
             LoopbackEndpoint::new(extension.as_str())
                 .with_context("default")
@@ -954,13 +940,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
             continue;
         }
         let b_uuid = create_uuid(&client).await;
-        let a_uuid = client
-            .api("originate null/anchor &park()")
-            .await
-            .expect("anchor transport error")
-            .api_result()
-            .expect("anchor originate failed")
-            .to_string();
+        let a_uuid = parked_anchor(&client, "null/anchor").await;
 
         // Pre-assigning the B leg's uuid is what makes the far side findable.
         let vars = escaping_block(&[("origination_uuid", &b_uuid)], pairs, separator, scope);

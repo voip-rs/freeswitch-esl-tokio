@@ -179,7 +179,7 @@ switch that fails them parses blocks in a way no revision describes yet.
 
 ## Writing a live test
 
-Four rules, learned from tests that passed, or failed, for the wrong reason:
+Rules learned from tests that passed, or failed, for the wrong reason:
 
 **Correlate to your own channel.** Keep the UUID the originate returns and
 filter every event against it. Matching on event type alone, on a channel-name
@@ -219,6 +219,14 @@ that FreeSWITCH's own default 60s origination timeout (`SWITCH_DEFAULT_TIMEOUT`
 in `switch_types.h`) is what eventually gives up on it — may still read as the
 placeholder at any deadline well short of that, so the diagnostic names a
 cause only once the switch itself has one to give.
+
+**Execute on an anchor only once its application runs.** `originate ... &park()`
+replies after `originate_function` in `mod_commands.c` has only requested
+CS_EXECUTE. A `bridge` sent in that window can be parsed while the transition
+is still pending, where `switch_channel_test_ready` reports the caller not
+ready, and the originate loop settles at once as `ORIGINATOR_CANCEL`
+(`DIALSTATUS=CANCEL`). Under parallel load the window is wide enough to hit.
+`parked_anchor()` returns only once `current_application` reads `park`.
 
 ## Checking state by hand
 

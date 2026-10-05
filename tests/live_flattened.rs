@@ -22,8 +22,8 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     carried_in, channel_exists, connect, create_uuid, escaping_block, getvar, kill_channel,
-    target_under_test, wait_for_bridge, BridgeOutcome, ChannelReaper, ESCAPING_CASES,
-    ESCAPING_SEPARATOR,
+    parked_anchor, target_under_test, wait_for_bridge, BridgeOutcome, ChannelReaper,
+    ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -594,13 +594,7 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
         let list = parse(&dial_string, DIALPLAN);
         let want = dialed_legs(&list).len();
 
-        let anchor = client
-            .api("originate null/anchor &park()")
-            .await
-            .expect("anchor transport error")
-            .api_result()
-            .expect("anchor originate failed")
-            .to_owned();
+        let anchor = parked_anchor(&client, "null/anchor").await;
         let mut reaper = ChannelReaper::new(&client);
         reaper.track(&anchor);
 
@@ -757,13 +751,7 @@ async fn received_over_the_dialplan(
     tagged: &str,
     keys: &[&str],
 ) -> (Result<Vec<Option<String>>, String>, Vec<String>) {
-    let anchor = client
-        .api("originate null/anchor &park()")
-        .await
-        .expect("anchor transport error")
-        .api_result()
-        .expect("anchor originate failed")
-        .to_owned();
+    let anchor = parked_anchor(client, "null/anchor").await;
     let bridged = client
         .execute_with_options(
             "bridge",

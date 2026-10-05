@@ -323,6 +323,27 @@ pub async fn wait_for_var(
     }
 }
 
+/// Originate `endpoint` into `park` and return once `park` runs.
+///
+/// `originate` replies having only requested CS_EXECUTE, and a `bridge` parsed
+/// before that lands sees its caller not ready: `ORIGINATOR_CANCEL`.
+pub async fn parked_anchor(client: &EslClient, endpoint: &str) -> String {
+    let anchor = client
+        .api(&format!("originate {endpoint} &park()"))
+        .await
+        .expect("anchor transport error")
+        .api_result()
+        .expect("anchor originate failed")
+        .to_owned();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let running = wait_for_var(client, &anchor, "current_application", deadline).await;
+    if running.as_deref() != Some("park") {
+        kill_channel(client, &anchor).await;
+        panic!("anchor {anchor} is running {running:?}, not park");
+    }
+    anchor
+}
+
 /// What became of a `bridge` executed on an anchor channel.
 #[derive(Debug)]
 pub enum BridgeOutcome {
