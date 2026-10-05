@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::ops::Range;
 
 use super::{after_prefix, check_expression_field, check_field, undeliverable, EndpointFieldFault};
 use crate::commands::originate::OriginateError;
@@ -121,8 +122,7 @@ impl SofiaEndpoint {
     /// `sip_destination_prefix`, `sip_invite_tel_params` and `sip_invite_req_uri` are not
     /// applied.
     pub fn user(&self, encoding: DestinationEncoding) -> Option<Cow<'_, str>> {
-        let _ = encoding;
-        None
+        dialed_user(&self.destination, encoding, DialPath::Profile)
     }
 }
 
@@ -149,12 +149,112 @@ impl SofiaGateway {
     /// `1000^2000` when `Encoded`, and `1000` with a `2000` To override when `Suppressed`.
     /// Without `@` it is the whole destination, the switch appending the gateway's proxy host.
     /// `;` parameters are dropped unless `Encoded` folds them into the user, and `Suppressed`
-    /// keeps a `sip:` scheme as text. `None` for an empty user. Owned only where the switch rebuilds text around a `/`. The gateway's
-    /// `destination-prefix` and `sip_invite_req_uri` are not applied.
+    /// keeps a `sip:` scheme as text. `None` for an empty user. Owned only where the switch
+    /// rebuilds text around a `/`. The gateway's `destination-prefix`, `sip_invite_tel_params`
+    /// and `sip_invite_req_uri` are not applied.
     pub fn user(&self, encoding: DestinationEncoding) -> Option<Cow<'_, str>> {
-        let _ = encoding;
-        None
+        dialed_user(&self.destination, encoding, DialPath::Gateway)
     }
+}
+
+#[derive(Clone, Copy)]
+enum DialPath {
+    Profile,
+    Gateway,
+}
+
+/// The user `sofia_outgoing_channel` dials from `destination`, read behind a deliverable profile
+/// or gateway.
+fn dialed_user(
+    destination: &str,
+    encoding: DestinationEncoding,
+    path: DialPath,
+) -> Option<Cow<'_, str>> {
+    let (text, encoded) = match encoding {
+        DestinationEncoding::Encoded => protect_dest_uri(destination),
+        DestinationEncoding::Suppressed => (Cow::Borrowed(destination), None),
+    };
+    let find = |byte: u8, from: usize, end: usize| {
+        (from..end).find(|&at| {
+            text.as_bytes()[at] == byte
+                && !encoded
+                    .as_ref()
+                    .is_some_and(|user| user.contains(&at))
+        })
+    };
+    let end = find(b'^', 0, text.len()).unwrap_or(text.len());
+    let user = match path {
+        DialPath::Profile => {
+            let scheme = match &encoded {
+                Some(user) if user.start == 0 => 0,
+                _ => scheme_len(&text[..end]),
+            };
+            match (scheme, find(b'@', 0, end)) {
+                (0, Some(at)) => 0..at,
+                (0, None) => 0..find(b'%', 0, end).unwrap_or(end),
+                (len, at) => len..at?,
+            }
+        }
+        DialPath::Gateway => {
+            let end = find(b';', 0, end).unwrap_or(end);
+            0..find(b'@', 0, end).unwrap_or(end)
+        }
+    };
+    if user.is_empty() {
+        return None;
+    }
+    Some(match text {
+        Cow::Borrowed(text) => Cow::Borrowed(&text[user]),
+        Cow::Owned(text) => Cow::Owned(text[user].to_owned()),
+    })
+}
+
+/// Length of a `sip:` or `sips:` scheme opening `text`, in any case, else 0.
+fn scheme_len(text: &str) -> usize {
+    ["sip:", "sips:"]
+        .into_iter()
+        .find(|scheme| {
+            text.get(..scheme.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
+        })
+        .map_or(0, str::len)
+}
+
+/// `destination` as `protect_dest_uri` leaves it behind a deliverable profile or gateway, with the
+/// span of the user it encodes, where no later cut reads a separator.
+fn protect_dest_uri(destination: &str) -> (Cow<'_, str>, Option<Range<usize>>) {
+    let unchanged = (Cow::Borrowed(destination), None);
+    if !destination.contains('@') {
+        return unchanged;
+    }
+    let segment_start = destination
+        .rfind('/')
+        .map_or(0, |slash| slash + 1);
+    let (prefix, segment) = destination.split_at(segment_start);
+    let ahead = segment
+        .split_once('@')
+        .map_or(segment, |(ahead, _)| ahead);
+    if !ahead
+        .bytes()
+        .any(|byte| URL_UNSAFE.contains(&byte))
+    {
+        return unchanged;
+    }
+    let scheme = scheme_len(segment);
+    let rest = &segment[scheme..];
+    let Some(at) = rest.find('@') else {
+        return (
+            Cow::Borrowed(&destination[..segment_start.saturating_sub(1)]),
+            None,
+        );
+    };
+    let user = prefix.len()..prefix.len() + at;
+    let text = match (scheme, prefix.is_empty()) {
+        (0, _) => Cow::Borrowed(destination),
+        (_, true) => Cow::Borrowed(rest),
+        (_, false) => Cow::Owned(format!("{prefix}{rest}")),
+    };
+    (text, Some(user))
 }
 
 impl SofiaContact {
