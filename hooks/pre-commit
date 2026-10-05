@@ -59,13 +59,12 @@ if ! test_output=$(PROPTEST_CASES="${PROPTEST_CASES:-4096}" cargo test --workspa
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-if ! python3 "$SCRIPT_DIR/check-enums.py" --quiet; then
+if ! python3 hooks/check-enums.py --quiet; then
     echo "❌ Enum coverage out of sync with FreeSWITCH. Run: python3 hooks/check-enums.py"
     exit 1
 fi
 
-if ! python3 "$SCRIPT_DIR/check-source-refs.py" --quiet; then
+if ! python3 hooks/check-source-refs.py --quiet; then
     echo "❌ Source references out of sync. Run: python3 hooks/check-source-refs.py"
     exit 1
 fi
