@@ -66,7 +66,7 @@ Typed SIP header values come from your own sip-header:
 ```toml
 [dependencies]
 freeswitch-types = "1"
-sip-header = "0.4"
+sip-header = "1.0.0-beta.1"
 ```
 
 ### SIP headers on ESL stores (requires `esl` feature)

@@ -31,7 +31,7 @@ sdp = ["dep:sdp-types"]
 all-features = true
 
 [dependencies]
-sip-header-catalog = { version = "1.0.0-rc.1", path = "../../../../sip-header/crates/sip-header-catalog" }
+sip-header-catalog = "1.0.0-rc.1"
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = "2"
 indexmap = { version = "2", optional = true }
@@ -45,4 +45,4 @@ required-features = ["esl", "serde"]
 serde_json = "1.0"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 freeswitch-c-oracle = { path = "../freeswitch-c-oracle" }
-sip-header = { path = "../../../../sip-header" }
+sip-header = "1.0.0-beta.1"

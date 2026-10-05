@@ -45,7 +45,7 @@ nix = { version = "0.31", features = ["fs"] }
 serde = { version = "1.0", features = ["derive"] }
 yaml_serde = "0.10"
 libc = "0.2"
-sip-header = { path = "../../../sip-header" }
+sip-header = "1.0.0-beta.1"
 
 [[example]]
 name = "sdp_codec_string"
