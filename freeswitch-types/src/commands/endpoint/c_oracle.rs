@@ -2,13 +2,15 @@
 //! the switch's own C on every built tree.
 
 use freeswitch_c_oracle::{
-    against_the_c, ContactSelect, GroupCall as GroupCallRead, Oracle, Sofia, SofiaOutgoing,
-    UserOutgoing, DEFAULT_DOMAIN,
+    against_the_c, oracles, ContactSelect, GroupCall as GroupCallRead, Oracle, Sofia,
+    SofiaOutgoing, UserOutgoing, DEFAULT_DOMAIN,
 };
+use std::borrow::Cow;
+
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{Endpoint, GroupCallOrder};
+use super::{DestinationEncoding, Endpoint, GroupCallOrder};
 use crate::commands::proptests::{bare_endpoint, c_reads_the_leg, fields_name_a_variable, targets};
 use crate::commands::variables::{DialStringCarrier, DialStringTarget};
 use crate::switch_passes::against_the_c_at_its_revision;
@@ -119,6 +121,63 @@ fn holds_destination(
     Ok(())
 }
 
+fn encoding(headers: &[(&[u8], &[u8])]) -> DestinationEncoding {
+    if headers.is_empty() {
+        DestinationEncoding::Encoded
+    } else {
+        DestinationEncoding::Suppressed
+    }
+}
+
+/// The user `read` dialed: the user its registration lookup named, else its request URI's,
+/// `None` where it reached neither.
+fn dialed_user(read: &SofiaOutgoing) -> Option<Vec<u8>> {
+    if let [(user, _)] = &read.registration_lookups[..] {
+        return Some(user.clone());
+    }
+    let dest = read
+        .dest
+        .as_ref()?;
+    let rest = dest
+        .strip_prefix(b"sip:")
+        .or_else(|| dest.strip_prefix(b"sips:"))
+        .unwrap_or(dest);
+    let at = rest
+        .iter()
+        .position(|&b| b == b'@');
+    Some(at.map_or_else(Vec::new, |at| rest[..at].to_vec()))
+}
+
+/// `user` is the user `read` dialed, decoded where `protect_dest_uri` may have encoded it, an
+/// empty one read as none. A `%` in an `Encoded` text is skipped: decoding cannot tell it apart.
+fn holds_user(
+    text: &str,
+    encoding: DestinationEncoding,
+    user: Option<Cow<'_, str>>,
+    read: &SofiaOutgoing,
+) -> Result<(), TestCaseError> {
+    let Some(dialed) = dialed_user(read) else {
+        return Ok(());
+    };
+    let dialed = match encoding {
+        DestinationEncoding::Encoded if text.contains('%') => return Ok(()),
+        DestinationEncoding::Encoded => percent_encoding::percent_decode(&dialed).collect(),
+        DestinationEncoding::Suppressed => dialed,
+    };
+    let dialed = Some(dialed).filter(|user| !user.is_empty());
+    let user = user.map(|user| bytes(&user));
+    let lossy =
+        |user: Option<Vec<u8>>| user.map(|user| String::from_utf8_lossy(&user).into_owned());
+    prop_assert_eq!(
+        lossy(user),
+        lossy(dialed),
+        "{:?} {:?}: the user against what the switch dialed",
+        text,
+        encoding
+    );
+    Ok(())
+}
+
 /// The argument the expansion hands `function` for the expression `text`.
 fn expression_argument(c: Oracle, text: &str, function: &str) -> Result<Vec<u8>, TestCaseError> {
     let expansion = c.expand(text.as_bytes());
@@ -200,6 +259,8 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                 );
                 let destination = format!("{}/{}", ep.profile, ep.destination);
                 holds_destination(c, text, &destination, headers, &read)?;
+                let encoding = encoding(headers);
+                holds_user(text, encoding, ep.user(encoding), &read)?;
                 let mut read = read;
                 prop_assert!(
                     compare_registrations(&mut read, &ep.profile, &mut reference, "internal"),
@@ -235,6 +296,8 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                 );
                 let destination = format!("gateway/{key}/{}", ep.destination);
                 holds_destination(c, text, &destination, headers, &read)?;
+                let encoding = encoding(headers);
+                holds_user(text, encoding, ep.user(encoding), &read)?;
                 let reference = c.sofia_outgoing_channel(
                     format!("gateway/gw1/{}", ep.destination).as_bytes(),
                     &Sofia {
@@ -319,6 +382,17 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         | Endpoint::Alsa(_) => {}
     }
     Ok(())
+}
+
+#[test]
+fn url_unsafe_is_the_switch_set_on_every_tree() {
+    for (tree, c) in oracles() {
+        assert_eq!(
+            super::sofia::URL_UNSAFE,
+            c.url_unsafe(),
+            "SWITCH_URL_UNSAFE on {tree}"
+        );
+    }
 }
 
 fn config_refuses(endpoint: &Endpoint) -> bool {

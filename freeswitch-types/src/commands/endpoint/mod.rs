@@ -169,7 +169,7 @@ pub use audio::AudioEndpoint;
 pub use error::ErrorEndpoint;
 pub use group_call::{GroupCall, GroupCallOrder, ParseGroupCallOrderError};
 pub use loopback::LoopbackEndpoint;
-pub use sofia::{SofiaContact, SofiaEndpoint, SofiaGateway};
+pub use sofia::{DestinationEncoding, SofiaContact, SofiaEndpoint, SofiaGateway};
 pub use user::UserEndpoint;
 
 use std::fmt;

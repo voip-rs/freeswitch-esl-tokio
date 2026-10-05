@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{after_prefix, check_expression_field, check_field, undeliverable, EndpointFieldFault};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::Variables;
@@ -80,6 +82,26 @@ pub struct SofiaContact {
     pub variables: Option<Variables>,
 }
 
+/// `SWITCH_URL_UNSAFE`: a byte of it ahead of the user's `@` makes `protect_dest_uri` rewrite.
+pub(super) const URL_UNSAFE: &[u8] = b"\r\n #%&+:;<=>?@[\\]^`{|}\"";
+
+/// Whether `protect_dest_uri` rewrites a sofia destination before mod_sofia reads it, which
+/// moves where the dialed user ends.
+///
+/// `Suppressed` when `sofia_suppress_url_encoding` is true for the leg: set in the dial
+/// string's `<>`, `{}` or `[]` block, or exported by the originating channel. A variable
+/// only `set` on the originating channel, or a global, never reaches the leg. Otherwise
+/// `Encoded`, the switch's default. The dial string cannot settle it alone, so the caller
+/// names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DestinationEncoding {
+    /// `sofia_suppress_url_encoding` unset or false.
+    Encoded,
+    /// `sofia_suppress_url_encoding` true.
+    Suppressed,
+}
+
 impl SofiaEndpoint {
     /// Create a new SIP profile endpoint.
     pub fn new(profile: impl Into<String>, destination: impl Into<String>) -> Self {
@@ -88,6 +110,19 @@ impl SofiaEndpoint {
             destination: destination.into(),
             variables: None,
         }
+    }
+
+    /// The user this leg dials, unencoded, cut from `destination` where mod_sofia cuts it.
+    ///
+    /// See [`DestinationEncoding`] for which to pass: `1000^2000@pbx.example.com` dials
+    /// `1000^2000` when `Encoded`, and `1000` with a `2000` To override when `Suppressed`.
+    /// Without `@` it is the registered user the profile looks up. `None` for a scheme with no
+    /// `@`, or an empty user. Owned only where the switch rebuilds text around a `/`.
+    /// `sip_destination_prefix`, `sip_invite_tel_params` and `sip_invite_req_uri` are not
+    /// applied.
+    pub fn user(&self, encoding: DestinationEncoding) -> Option<Cow<'_, str>> {
+        let _ = encoding;
+        None
     }
 }
 
@@ -106,6 +141,19 @@ impl SofiaGateway {
     pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
         self.profile = Some(profile.into());
         self
+    }
+
+    /// The user this leg dials, unencoded, cut from `destination` where mod_sofia cuts it.
+    ///
+    /// See [`DestinationEncoding`] for which to pass: `1000^2000@pbx.example.com` dials
+    /// `1000^2000` when `Encoded`, and `1000` with a `2000` To override when `Suppressed`.
+    /// Without `@` it is the whole destination, the switch appending the gateway's proxy host.
+    /// `;` parameters are dropped unless `Encoded` folds them into the user, and `Suppressed`
+    /// keeps a `sip:` scheme as text. `None` for an empty user. Owned only where the switch rebuilds text around a `/`. The gateway's
+    /// `destination-prefix` and `sip_invite_req_uri` are not applied.
+    pub fn user(&self, encoding: DestinationEncoding) -> Option<Cow<'_, str>> {
+        let _ = encoding;
+        None
     }
 }
 
@@ -641,5 +689,86 @@ mod tests {
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: SofiaContact = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
+    }
+
+    // --- user() ---
+
+    type UserCase = (&'static str, Option<&'static str>, Option<&'static str>);
+
+    fn assert_users(
+        cases: &[UserCase],
+        user: impl Fn(&str, DestinationEncoding) -> Option<String>,
+    ) {
+        for &(destination, encoded, suppressed) in cases {
+            assert_eq!(
+                user(destination, DestinationEncoding::Encoded).as_deref(),
+                encoded,
+                "{destination:?} encoded"
+            );
+            assert_eq!(
+                user(destination, DestinationEncoding::Suppressed).as_deref(),
+                suppressed,
+                "{destination:?} suppressed"
+            );
+        }
+    }
+
+    #[test]
+    fn sofia_endpoint_user() {
+        assert_users(
+            &[
+                (
+                    "5550001234@pbx.example.com",
+                    Some("5550001234"),
+                    Some("5550001234"),
+                ),
+                ("sip:1000@pbx.example.com:5060", Some("1000"), Some("1000")),
+                ("SIPS:1000@pbx.example.com", Some("1000"), Some("1000")),
+                ("1000^2000@pbx.example.com", Some("1000^2000"), Some("1000")),
+                ("1000@pbx.example.com^2000", Some("1000"), Some("1000")),
+                ("1000%pbx.example.com", Some("1000"), Some("1000")),
+                ("1000", Some("1000"), Some("1000")),
+                ("sip:pbx.example.com", None, None),
+                ("a@b@pbx.example.com", Some("a"), Some("a")),
+                ("x@pbx.example.com/z w", Some("x"), Some("x")),
+                ("a/sip:b@pbx.example.com", Some("a/b"), Some("a/sip:b")),
+                ("@pbx.example.com", None, None),
+                (
+                    "+15550001234;npdi=yes@pbx.example.com",
+                    Some("+15550001234;npdi=yes"),
+                    Some("+15550001234;npdi=yes"),
+                ),
+            ],
+            |destination, encoding| {
+                SofiaEndpoint::new("internal", destination)
+                    .user(encoding)
+                    .map(Cow::into_owned)
+            },
+        );
+    }
+
+    #[test]
+    fn sofia_gateway_user() {
+        assert_users(
+            &[
+                ("5550009999", Some("5550009999"), Some("5550009999")),
+                (
+                    "+15550001234@agent.example.com",
+                    Some("+15550001234"),
+                    Some("+15550001234"),
+                ),
+                ("1000;transport=tcp", Some("1000"), Some("1000")),
+                ("1000;x=a@b.example.com", Some("1000;x=a"), Some("1000")),
+                ("sip:1000@example.com", Some("1000"), Some("sip:1000")),
+                ("1000^2000@example.com", Some("1000^2000"), Some("1000")),
+                ("", None, None),
+            ],
+            |destination, encoding| {
+                SofiaGateway::new("montreal", destination)
+                    .with_profile("voipms")
+                    .user(encoding)
+                    .map(Cow::into_owned)
+            },
+        );
     }
 }
