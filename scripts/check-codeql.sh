@@ -3,9 +3,10 @@
 #
 # Usage: ./check-codeql.sh
 #
-# Checks that default setup is off, that the scan of HEAD succeeded, that every
-# CodeQL language GitHub detects is scanned or listed in UNSCANNED, and that
-# each SARIF filter pattern still removes something. Needs gh and python3.
+# Checks that default setup is off, that the scan of HEAD succeeded (waiting for
+# one still queued or running), that every CodeQL language GitHub detects is
+# scanned or listed in UNSCANNED, and that each SARIF filter pattern still
+# removes something. Needs gh and python3.
 # Run before a release, after pushing HEAD.
 
 set -euo pipefail
@@ -84,7 +85,12 @@ if [ -z "$run" ]; then
 	exit 1
 fi
 run_id="$(jq -r .databaseId <<<"$run")"
-if [ "$(jq -r .conclusion <<<"$run")" != success ]; then
+if [ "$(jq -r .status <<<"$run")" != completed ]; then
+	if ! "$SCRIPT_DIR/watch-ci.sh" HEAD "$(basename "$WORKFLOW")"; then
+		fail "$WORKFLOW run $run_id for HEAD did not succeed"
+		exit 1
+	fi
+elif [ "$(jq -r .conclusion <<<"$run")" != success ]; then
 	fail "$WORKFLOW run $run_id for HEAD is $(jq -r '.status + " " + .conclusion' <<<"$run")"
 	exit 1
 fi
