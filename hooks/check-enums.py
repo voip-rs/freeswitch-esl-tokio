@@ -400,35 +400,34 @@ def check_conference_vars(repo: Path, src: SourceResolver) -> CheckResult:
     )
 
 
-SIP_HEADER_GITHUB = "https://raw.githubusercontent.com/ticpu/sip-header/master/src/header.rs"
+def resolved_dependency_dir(repo: Path, dep: str) -> Path:
+    """Source directory of the `dep` crate freeswitch-types resolves to."""
+    meta = json.loads(
+        subprocess.check_output(
+            [
+                "cargo",
+                "metadata",
+                "--format-version",
+                "1",
+                "--manifest-path",
+                str(repo / "Cargo.toml"),
+            ],
+            text=True,
+        )
+    )
+    packages = {p["id"]: p for p in meta["packages"]}
+    types_id = next(
+        p["id"] for p in meta["packages"] if p["name"] == "freeswitch-types"
+    )
+    node = next(n for n in meta["resolve"]["nodes"] if n["id"] == types_id)
+    dep_id = next(d["pkg"] for d in node["deps"] if d["name"] == dep)
+    return Path(packages[dep_id]["manifest_path"]).parent
 
 
 def check_sip_header_prefixes(repo: Path, src: SourceResolver) -> CheckResult:
-    # Try local cargo registry first, fall back to GitHub
-    sip_text = None
-    result = subprocess.run(
-        [
-            "find",
-            os.path.expanduser("~/.cargo/registry/src"),
-            "-path",
-            "*/sip-header-*/src/header.rs",
-            "-printf",
-            "%T@ %p\n",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    lines = [line for line in result.stdout.strip().split("\n") if line]
-    if lines:
-        sip_header_src = Path(sorted(lines, reverse=True)[0].split(" ", 1)[1])
-        sip_text = sip_header_src.read_text()
-    else:
-        cached = src.cache_dir / "sip_header_header.rs"
-        if not cached.exists():
-            print("  fetching sip-header/src/header.rs from GitHub...", file=sys.stderr)
-            src.cache_dir.mkdir(parents=True, exist_ok=True)
-            urllib.request.urlretrieve(SIP_HEADER_GITHUB, cached)
-        sip_text = cached.read_text()
+    sip_text = (
+        resolved_dependency_dir(repo, "sip_header") / "src" / "header.rs"
+    ).read_text()
     sip_names = set(re.findall(r'=> "([A-Za-z][A-Za-z0-9-]+)"', sip_text))
     expected_wire = {f"sip_i_{n.lower().replace('-', '_')}" for n in sip_names}
 
