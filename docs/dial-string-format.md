@@ -192,6 +192,24 @@ leaves `internal/x@y`. The crate holds such a destination whole and does
 not refuse it, since whether it is cut rests on a channel variable the dial
 string need not carry.
 
+The user the leg dials therefore depends on the same variable, which
+`sofia_outgoing_channel` reads from the originate's variable event: a `<>`, `{}`
+or `[]` block, or a variable the originating channel exports. Where
+`protect_dest_uri` rewrites the text, the user is everything between a stripped
+`sip:` or `sips:` and the first `@`, encoded, so `^`, `;` and `:` in it cut
+nothing. Otherwise, or with encoding suppressed, `sofia_outgoing_channel` cuts
+the To override at the first `^` and then reads each path its own way. A
+profile destination drops a `sip:` or `sips:` scheme, and its user ends at the
+first `@`. With no `@`, it names a registered user, which ends at the first `%`
+of the `user%host` form, and a scheme with no `@` has no user. A gateway
+destination drops its `;` parameters, and its user ends at the first `@`, or is
+the whole text with none, since the switch appends the proxy host. It keeps a
+scheme as text and dials `sip:sip:…`. In every mode the user excludes the
+gateway's `destination-prefix`, `sip_destination_prefix` and
+`sip_invite_tel_params`, and `sip_invite_req_uri` replaces the Request-URI
+whole. A `^` ahead of the first `@` is therefore a To override only with
+encoding suppressed: by default it is encoded into the user.
+
 On every tree `switch_needs_url_encode` reads only `SWITCH_URL_UNSAFE`, so a
 user part holding no byte of that set outside a valid uppercase `%XX` is sent
 as it stands, controls other than CR and LF, DEL and non-ASCII included; one
