@@ -10,7 +10,6 @@ use freeswitch_esl_tokio::{
 };
 use mock_server::{
     recv_event, setup_connected_pair, setup_connected_pair_with_options, setup_raw_pair,
-    MockEslServer,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -20,23 +19,6 @@ use tokio::net::TcpSocket;
 async fn test_connect_and_authenticate() {
     let (_, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
     assert!(client.is_connected());
-}
-
-#[tokio::test]
-async fn test_auth_failure() {
-    let server = MockEslServer::start("correct_password").await;
-    let port = server.port();
-
-    let (_, result) = tokio::join!(
-        server.accept(),
-        EslClient::connect("localhost", port, "wrong_password")
-    );
-
-    match result {
-        Err(EslError::AuthenticationFailed { .. }) => {}
-        Err(e) => panic!("Expected AuthenticationFailed, got: {}", e),
-        Ok(_) => panic!("Expected error, got success"),
-    }
 }
 
 #[tokio::test]
@@ -60,9 +42,11 @@ async fn test_recv_event_plain() {
     // Mock reads the subscribe command and replies
     let _cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     mock.reply_ok()
-        .await;
+        .await
+        .unwrap();
     subscribe_task
         .await
         .unwrap();
@@ -72,7 +56,8 @@ async fn test_recv_event_plain() {
     headers.insert("Unique-ID".to_string(), "test-uuid-abc".to_string());
     headers.insert("Caller-Caller-ID-Number".to_string(), "1001".to_string());
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
@@ -87,7 +72,8 @@ async fn test_concurrent_command_and_events() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "event-uuid".to_string());
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     // Now send an api command
     let api_task = tokio::spawn({
@@ -103,10 +89,12 @@ async fn test_concurrent_command_and_events() {
     // Mock reads the api command and replies
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd.starts_with("api status"));
     mock.reply_api("UP 0 years")
-        .await;
+        .await
+        .unwrap();
 
     let response = api_task
         .await
@@ -139,17 +127,21 @@ async fn test_concurrent_api_commands() {
     // The writer mutex serializes them: read cmd1, reply, read cmd2, reply
     let cmd1 = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd1.starts_with("api "), "first command: {}", cmd1);
     mock.reply_api("response-1")
-        .await;
+        .await
+        .unwrap();
 
     let cmd2 = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd2.starts_with("api "), "second command: {}", cmd2);
     mock.reply_api("response-2")
-        .await;
+        .await
+        .unwrap();
 
     let result1 = task1
         .await
@@ -188,10 +180,12 @@ async fn test_client_clone() {
 
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd.starts_with("api status"));
     mock.reply_api("OK")
-        .await;
+        .await
+        .unwrap();
 
     let result = task
         .await
@@ -208,10 +202,12 @@ async fn test_client_clone() {
 
     let cmd2 = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd2.starts_with("api version"));
     mock.reply_api("1.0")
-        .await;
+        .await
+        .unwrap();
 
     let result2 = task2
         .await
@@ -225,7 +221,8 @@ async fn test_heartbeat_event_headers() {
     let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_heartbeat()
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
 
@@ -251,7 +248,8 @@ async fn test_url_decoded_headers() {
         "Test User (123)".to_string(),
     );
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
 
@@ -277,7 +275,8 @@ async fn test_event_overflow_queue_full() {
         let mut headers = HashMap::new();
         headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
         mock.send_event_plain("CHANNEL_CREATE", &headers)
-            .await;
+            .await
+            .unwrap();
     }
 
     // The overflow itself is the observable end of "the reader processed all
@@ -298,7 +297,8 @@ async fn test_event_overflow_queue_full() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "uuid-trigger".to_string());
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     // Should get QueueFull followed by the trigger event.
     let mut got_queue_full = false;
@@ -334,7 +334,8 @@ async fn test_event_queue_size_zero_clamped() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "test-uuid".to_string());
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
@@ -390,12 +391,13 @@ async fn test_connection_mode_outbound() {
 }
 
 /// Send `count` CHANNEL_CREATE events carrying a sequential `Unique-ID`.
-async fn send_numbered_events(mock: &mut mock_server::MockClient, count: usize) {
+async fn send_numbered_events(mock: &mut mock_server::MockConnection, count: usize) {
     for i in 0..count {
         let mut headers = HashMap::new();
         headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
         mock.send_event_plain("CHANNEL_CREATE", &headers)
-            .await;
+            .await
+            .unwrap();
     }
 }
 

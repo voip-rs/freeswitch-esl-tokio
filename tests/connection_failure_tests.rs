@@ -17,7 +17,8 @@ async fn test_disconnect_notice() {
     let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_disconnect_notice("Disconnected, goodbye.\nSee you later.\n")
-        .await;
+        .await
+        .unwrap();
 
     // events.recv() should return None after disconnect
     let result = tokio::time::timeout(Duration::from_secs(5), events.recv())
@@ -107,7 +108,8 @@ async fn inflight_command_woken_on_disconnect_notice() {
         Duration::from_secs(1),
         |mut mock| async move {
             mock.send_disconnect_notice("Disconnected, goodbye.\n")
-                .await;
+                .await
+                .unwrap();
             Some(mock)
         },
     )
@@ -126,7 +128,8 @@ async fn inflight_command_woken_on_rude_rejection() {
         Duration::from_secs(1),
         |mut mock| async move {
             mock.send_raw("Content-Type: text/rude-rejection\n\n")
-                .await;
+                .await
+                .unwrap();
             Some(mock)
         },
     )
@@ -146,7 +149,8 @@ async fn inflight_command_woken_on_protocol_desync() {
         Duration::from_secs(1),
         |mut mock| async move {
             mock.send_raw("Content-Type: text/garbage\n\n")
-                .await;
+                .await
+                .unwrap();
             Some(mock)
         },
     )
@@ -200,7 +204,8 @@ async fn malformed_event_bodies_surface_as_err_and_connection_survives() {
             content_type,
             body
         ))
-        .await;
+        .await
+        .unwrap();
         let item = tokio::time::timeout(Duration::from_secs(5), events.recv())
             .await
             .expect("timeout")
@@ -215,7 +220,8 @@ async fn malformed_event_bodies_surface_as_err_and_connection_survives() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "post-corpus-uuid".to_string());
     mock.send_event_plain("HEARTBEAT", &headers)
-        .await;
+        .await
+        .unwrap();
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
     assert!(client.is_connected());
@@ -238,7 +244,8 @@ async fn race_command_install_after_reader_exit() {
     });
     let _cmd_a = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
 
     // Command B passes the entry is_connected() check while the connection is
     // still up, then parks on the writer lock behind A.
@@ -299,9 +306,11 @@ async fn test_subscribe_permission_denied_recoverable() {
 
     let _cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     mock.reply_err("permission denied")
-        .await;
+        .await
+        .unwrap();
 
     let err = subscribe_task
         .await
@@ -323,10 +332,12 @@ async fn test_subscribe_permission_denied_recoverable() {
     });
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd.starts_with("api status"));
     mock.reply_api("UP 0 years")
-        .await;
+        .await
+        .unwrap();
     let resp = api_task
         .await
         .unwrap()
@@ -367,7 +378,8 @@ async fn test_liveness_reset_by_traffic() {
         for _ in 0..3 {
             tokio::time::sleep(Duration::from_secs(2)).await;
             mock.send_heartbeat()
-                .await;
+                .await
+                .unwrap();
         }
         // After sending 3 heartbeats, stop -- liveness should expire
         mock
@@ -485,16 +497,20 @@ async fn test_command_timeout_cleanup() {
     // by sending A's late reply first, then B's reply.
     let _cmd1 = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     let _cmd2 = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     // A's late reply -- reader discards it via stale-reply counter.
     mock.reply_api("stale")
-        .await;
+        .await
+        .unwrap();
     // B's actual reply.
     mock.reply_api("1.0")
-        .await;
+        .await
+        .unwrap();
 
     let result = api_task
         .await
@@ -520,7 +536,8 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
     });
     let _cmd_a_str = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
 
     let a_result = tokio::time::timeout(Duration::from_secs(2), cmd_a)
         .await
@@ -545,13 +562,16 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
     // are written, so reading B confirms B's sender is in the slot.
     let _cmd_b_str = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
 
     // Send A's stale reply first, then B's actual reply.
     mock.reply_ok_text("reply-for-A")
-        .await;
+        .await
+        .unwrap();
     mock.reply_ok_text("reply-for-B")
-        .await;
+        .await
+        .unwrap();
 
     let b_result = tokio::time::timeout(Duration::from_secs(2), cmd_b)
         .await
@@ -585,9 +605,11 @@ async fn timeout_normal_reply_still_routes_correctly() {
 
     let _cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     mock.reply_ok_text("normal-reply")
-        .await;
+        .await
+        .unwrap();
 
     let resp = api_task
         .await
@@ -610,7 +632,8 @@ async fn rude_rejection_returns_access_denied() {
     let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_raw("Content-Type: text/rude-rejection\n\n")
-        .await;
+        .await
+        .unwrap();
 
     let result = tokio::time::timeout(Duration::from_secs(5), events.recv())
         .await
@@ -640,7 +663,8 @@ async fn parser_error_reports_protocol_error() {
 
     // An unrecognized Content-Type triggers a ProtocolError from parse_message().
     mock.send_raw("Content-Type: text/garbage\n\n")
-        .await;
+        .await
+        .unwrap();
 
     // Event stream should close (no valid event emitted for a protocol error).
     let closed = tokio::time::timeout(Duration::from_secs(5), events.recv())

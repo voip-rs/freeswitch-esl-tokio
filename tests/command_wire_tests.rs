@@ -8,7 +8,7 @@ mod mock_server;
 use freeswitch_esl_tokio::{
     EslClient, EslError, EslEvent, EslEventType, EventFormat, HeaderLookup, DEFAULT_ESL_PASSWORD,
 };
-use mock_server::{recv_event, setup_connected_pair, setup_raw_pair, MockClient};
+use mock_server::{recv_event, setup_connected_pair, setup_raw_pair, MockConnection};
 use std::collections::HashMap;
 
 #[tokio::test]
@@ -30,11 +30,13 @@ async fn test_sendevent_command() {
 
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd.starts_with("sendevent CUSTOM\n"));
     assert!(cmd.contains("Event-Subclass: test::my_event\n"));
     mock.reply_ok()
-        .await;
+        .await
+        .unwrap();
 
     let response = send_task
         .await
@@ -58,9 +60,11 @@ where
     let (result, sent) = tokio::join!(call(client.clone()), async {
         let sent = mock
             .read_command()
-            .await;
+            .await
+            .unwrap();
         mock.reply_ok()
-            .await;
+            .await
+            .unwrap();
         sent
     });
 
@@ -203,10 +207,12 @@ async fn test_getvar_command() {
 
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert_eq!(cmd, "getvar caller_id_name\n\n");
     mock.reply_raw_text("John Doe")
-        .await;
+        .await
+        .unwrap();
 
     let value = task
         .await
@@ -228,7 +234,7 @@ async fn test_outbound_connect_session() {
     );
 
     let (client, _events) = accept_result.unwrap();
-    let mut mock = MockClient::from_stream(mock_stream.unwrap());
+    let mut mock = MockConnection::from_stream(mock_stream.unwrap());
 
     // Client sends connect, mock replies with serialized channel data
     let connect_task = tokio::spawn({
@@ -242,7 +248,8 @@ async fn test_outbound_connect_session() {
 
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert_eq!(cmd, "connect\n\n");
 
     let mut channel_headers = HashMap::new();
@@ -255,7 +262,8 @@ async fn test_outbound_connect_session() {
     channel_headers.insert("Caller-Caller-ID-Name".to_string(), "Test User".to_string());
     channel_headers.insert("Caller-Caller-ID-Number".to_string(), "1000".to_string());
     mock.send_connect_response(&channel_headers)
-        .await;
+        .await
+        .unwrap();
 
     let response = connect_task
         .await
@@ -292,13 +300,15 @@ async fn bgapi_returns_job_uuid_from_reply() {
 
     let cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     assert!(cmd.starts_with("bgapi status"));
 
     mock.send_raw(
         "Content-Type: command/reply\nReply-Text: +OK Job-UUID: d8efc742-test-uuid\nJob-UUID: d8efc742-test-uuid\n\n",
     )
-    .await;
+    .await
+    .unwrap();
 
     let response = api_task
         .await
@@ -323,11 +333,13 @@ async fn bgapi_background_job_event_delivered() {
 
     let _cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
     mock.send_raw(&format!(
         "Content-Type: command/reply\nReply-Text: +OK Job-UUID: {job_uuid}\nJob-UUID: {job_uuid}\n\n"
     ))
-    .await;
+    .await
+    .unwrap();
 
     let response = api_task
         .await
@@ -338,7 +350,8 @@ async fn bgapi_background_job_event_delivered() {
     let mut headers = HashMap::new();
     headers.insert("Job-UUID".to_string(), job_uuid.to_string());
     mock.send_event_plain_with_body("BACKGROUND_JOB", &headers, "+OK status output\n")
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
@@ -364,11 +377,13 @@ async fn bgapi_multiple_jobs_correlated() {
         });
         let _cmd = mock
             .read_command()
-            .await;
+            .await
+            .unwrap();
         mock.send_raw(&format!(
             "Content-Type: command/reply\nReply-Text: +OK Job-UUID: {uuid}\nJob-UUID: {uuid}\n\n"
         ))
-        .await;
+        .await
+        .unwrap();
         let resp = api_task
             .await
             .unwrap()
@@ -381,7 +396,8 @@ async fn bgapi_multiple_jobs_correlated() {
         let mut headers = HashMap::new();
         headers.insert("Job-UUID".to_string(), uuids[i].to_string());
         mock.send_event_plain_with_body("BACKGROUND_JOB", &headers, bodies[i])
-            .await;
+            .await
+            .unwrap();
     }
 
     let mut matched = std::collections::HashSet::new();
@@ -417,7 +433,8 @@ async fn test_sip_comma_separated_header_wire_round_trip() {
         "<sip:alice@atlanta.example.com>, <tel:+15551234567>".to_string(),
     );
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
@@ -442,7 +459,8 @@ async fn test_sip_array_header_wire_round_trip() {
         "ARRAY::<sip:alice@atlanta.example.com>|:<tel:+15551234567>".to_string(),
     );
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
@@ -470,7 +488,8 @@ async fn test_sip_diversion_repeated_header_wire_round_trip() {
         "ARRAY::<sip:+15551234567@gw.example.com;reason=unconditional>|:<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>".to_string(),
     );
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     let raw = event

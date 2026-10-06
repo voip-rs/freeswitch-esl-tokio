@@ -20,6 +20,7 @@ exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
 [features]
 sdp = ["freeswitch-types/sdp"]
 conference-info = ["freeswitch-types/conference-info"]
+test-util = []
 
 [package.metadata.docs.rs]
 all-features = true
@@ -38,6 +39,7 @@ tracing = "0.1"
 futures-util = "0.3"
 
 [dev-dependencies]
+freeswitch-esl-tokio = { path = ".", features = ["test-util"] }
 # Only outbound_ivr_supervised needs these; keeping them out of the library's
 # own feature list keeps them off every consumer's build.
 tokio = { version = "1.47", features = ["process", "io-std"] }

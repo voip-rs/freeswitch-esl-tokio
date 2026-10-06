@@ -8,7 +8,8 @@ use freeswitch_esl_tokio::{
     EventOverflow, DEFAULT_ESL_PASSWORD,
 };
 use mock_server::{
-    recv_event, setup_connected_pair, setup_connected_pair_with_options, setup_raw_pair, MockClient,
+    recv_event, setup_connected_pair, setup_connected_pair_with_options, setup_raw_pair,
+    MockConnection,
 };
 use std::collections::HashMap;
 
@@ -53,7 +54,8 @@ async fn teardown_with_buffered_event_delivers_then_stops() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "reexec-test-uuid".to_string());
     mock.send_event_plain("HEARTBEAT", &headers)
-        .await;
+        .await
+        .unwrap();
 
     // Nothing reports that the reader has taken the bytes off the socket, and
     // a teardown that beats them there would drain an empty parser.
@@ -114,7 +116,8 @@ async fn teardown_with_pending_command_fails() {
     // the command is what proves teardown will find one in flight.
     let _cmd = mock
         .read_command()
-        .await;
+        .await
+        .unwrap();
 
     let result = client
         .teardown_for_reexec()
@@ -133,7 +136,8 @@ async fn teardown_with_pending_command_fails() {
 
     // Clean up: reply to the pending command so the task completes
     mock.reply_api("OK")
-        .await;
+        .await
+        .unwrap();
     let _ = cmd_handle.await;
 }
 
@@ -147,7 +151,7 @@ async fn adopt_stream_with_empty_residual() {
             .accept()
             .await
             .unwrap();
-        MockClient::from_stream(stream)
+        MockConnection::from_stream(stream)
     });
 
     let stream = tokio::net::TcpStream::connect(("localhost", port))
@@ -166,7 +170,8 @@ async fn adopt_stream_with_empty_residual() {
     let mut headers = HashMap::new();
     headers.insert("Unique-ID".to_string(), "adopted-uuid".to_string());
     mock.send_event_plain("CHANNEL_CREATE", &headers)
-        .await;
+        .await
+        .unwrap();
 
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
@@ -181,7 +186,7 @@ async fn adopt_stream_with_residual_bytes() {
             .accept()
             .await
             .unwrap();
-        MockClient::from_stream(stream)
+        MockConnection::from_stream(stream)
     });
 
     let stream = tokio::net::TcpStream::connect(("localhost", port))
@@ -216,7 +221,7 @@ async fn adopt_stream_with_options() {
             .accept()
             .await
             .unwrap();
-        MockClient::from_stream(stream)
+        MockConnection::from_stream(stream)
     });
 
     let stream = tokio::net::TcpStream::connect(("localhost", port))
@@ -298,7 +303,8 @@ async fn teardown_wins_race_against_stalled_dispatch() {
         let mut headers = HashMap::new();
         headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
         mock.send_event_plain("CHANNEL_CREATE", &headers)
-            .await;
+            .await
+            .unwrap();
     }
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);

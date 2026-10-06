@@ -138,6 +138,8 @@ pub mod app;
 pub mod bgjob;
 pub mod connection;
 pub mod error;
+#[cfg(feature = "test-util")]
+pub mod mock;
 
 pub(crate) mod buffer;
 pub(crate) mod command;
