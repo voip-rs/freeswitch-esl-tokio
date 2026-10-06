@@ -998,3 +998,11 @@ proto and does not have to, because a section it should ignore arrives empty. Re
 the format list for any other transport would manufacture a parse failure out of a
 section written correctly, so the same set gates it here, for every media type alike.
 
+## The test mock frames like the switch, not like the parser
+
+The scripted ESL peer ships behind a feature so downstream tests drive the same peer
+rather than fork one. Its framing is taken from mod_event_socket, never derived from this
+crate's parser: a mock that agrees with the parser proves nothing about the wire. Header
+values alone are escaped as a superset of the switch's, since the tracked trees disagree
+on which bytes they escape and every decoder must accept the wider form.
+
