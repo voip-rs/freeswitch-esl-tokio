@@ -234,11 +234,6 @@ prints from the pinned blob. Only the FreeSWITCH tree is indexed: sofia-sip is
 a separate repository, so its references are symbol-only (`sdp_media_has_rtp`
 in `sdp_parse.c`) and carry no line number to verify.
 
-**design-rationale is rationale, not changelog.** Version bumps, MSRV changes,
-dep updates, and plain feature adds belong in the release tag's ChangeLog.
-Only genuine design decisions (new layering, reversed trade-off, new invariant)
-get a rationale section.
-
 ## Logging and Credential Safety
 
 Logged wire data must be accurate. Never use `.trim()` on wire content for
