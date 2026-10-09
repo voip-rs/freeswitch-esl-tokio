@@ -7,13 +7,23 @@
 
 | C-verified enums | Typed API |
 |---|---|
-| [![EslEventType][evt-badge]][ci] [![HangupCause][hc-badge]][ci] | [![EventHeader][eh-badge]][docs] [![ChannelVariable][cv-badge]][docs] |
-| [![ChannelState][cs-badge]][ci] [![CallState][ccs-badge]][ci] | [![HeaderLookup][hl-badge]][docs] |
-| [![SipHeaderPrefix][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
-| [![CoreMediaVariable][cmv-badge]][ci] | |
+| [![EslEventType][evt-badge]][evt-docs] [![HangupCause][hc-badge]][hc-docs] | [![EventHeader][eh-badge]][eh-docs] [![ChannelVariable][cv-badge]][cv-docs] |
+| [![ChannelState][cs-badge]][cs-docs] [![CallState][ccs-badge]][ccs-docs] | [![HeaderLookup][hl-badge]][hl-docs] |
+| [![SipHeaderPrefix][sph-badge]][sph-docs] | [![SofiaVariable][sv-badge]][sv-docs] |
+| [![CoreMediaVariable][cmv-badge]][cmv-docs] | |
 
 [ci]: https://github.com/voip-rs/freeswitch-esl-tokio/actions/workflows/ci.yml
 [docs]: https://docs.rs/freeswitch-esl-tokio
+[evt-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.EslEventType.html
+[hc-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.HangupCause.html
+[cs-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.ChannelState.html
+[ccs-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.CallState.html
+[sph-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.SipHeaderPrefix.html
+[cmv-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.CoreMediaVariable.html
+[eh-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.EventHeader.html
+[cv-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.ChannelVariable.html
+[hl-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/trait.HeaderLookup.html
+[sv-docs]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/variables/enum.SofiaVariable.html
 [tests-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json
 [evt-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json
 [hc-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/hangup-cause-count.json
