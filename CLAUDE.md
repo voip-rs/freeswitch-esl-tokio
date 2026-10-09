@@ -29,7 +29,7 @@ started with until its stable release, because `rc.3` sorts before `rc2`.
 ## Evaluating Feature and Bug Requests
 
 Read [docs/evaluating-requests.md](docs/evaluating-requests.md) in full before
-answering a `FEATURE-REQUEST-*.md` or `BUG-*.md`. It carries the admission test
+answering a feature or bug request, however it arrives. It carries the admission test
 for whether a wire name belongs in this crate at all, how to verify a request's
 evidence against `$FREESWITCH_SOURCE` rather than inherit it, and where the
 answer gets recorded.
