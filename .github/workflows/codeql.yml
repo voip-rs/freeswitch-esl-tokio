@@ -24,13 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           config-file: .github/codeql/codeql-config.yml
 
-      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: /language:${{ matrix.language }}
           output: sarif-unfiltered
@@ -38,7 +38,7 @@ jobs:
 
       # scripts/check-codeql.sh reads this artifact to find patterns that no
       # longer remove anything.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codeql-unfiltered-${{ matrix.language }}
           path: sarif-unfiltered/
@@ -63,7 +63,7 @@ jobs:
           LANGUAGE: ${{ matrix.language }}
         run: scripts/ci-codeql-summary.sh "$LANGUAGE" "sarif-unfiltered/$LANGUAGE.sarif" sarif-filtered.sarif >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: sarif-filtered.sarif
           category: /language:${{ matrix.language }}
