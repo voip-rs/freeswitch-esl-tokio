@@ -200,7 +200,55 @@ sip_header::define_header_enum! {
         /// Application `switch_ivr_originate` runs on a new channel before its
         /// session thread starts; value shape is [`ExecuteOn`](crate::commands::ExecuteOn).
         ExecuteOnOriginate => "execute_on_originate",
+
+        // --- Masquerade ---
+        /// Comma-separated variable names the caller-extension masquerade does not
+        /// copy onto the channel taking over this channel's remaining applications:
+        /// a mod_loopback execute-time bowout, or an attended transfer completed
+        /// while the consult leg was still ringing. Read off the channel being
+        /// replaced. Names match case-insensitively; spaces around each name are
+        /// stripped, tabs are not.
+        AttendedTransferNoCopy => "attended_transfer_no_copy",
+
+        // --- Digit collection ---
+        /// Outcome of the last digit read on this channel (`read`,
+        /// `play_and_get_digits` and every other caller of the core read); value
+        /// shape is [`ReadResult`]. Cleared when a read starts and left unset when
+        /// the read or its prompt aborted. Neither a value nor its absence says
+        /// the caller hung up.
+        ReadResult => "read_result",
+        /// Terminator digit that ended a read. Not cleared when a read starts, so
+        /// it may belong to an earlier read: `play_and_get_digits` with
+        /// `min_digits` 0 takes a stale one as a terminator press and succeeds.
+        ReadTerminatorUsed => "read_terminator_used",
     }
+}
+
+wire_enum! {
+    /// Value of the `read_result` variable, set by the core digit read.
+    ///
+    /// Never a hangup signal: a hangup during the prompt or the collection
+    /// usually reads [`Failure`](Self::Failure), can race to either other
+    /// value, and an aborted prompt leaves the variable unset. Decide hangup
+    /// from the channel's state; read [`Timeout`](Self::Timeout) as no input
+    /// only while the channel is still up.
+    ///
+    /// `play_and_get_digits` leaves the last attempt's value, and its own
+    /// promotion of a timeout with enough digits to success does not reach it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum ReadResult {
+        /// Maximum digits or a terminator reached. A hangup between frames can
+        /// also report it once `min_digits` is met.
+        Success => "success",
+        /// Collector timed out with at least `min_digits` collected, none
+        /// included when `min_digits` is 0.
+        Timeout => "timeout",
+        /// Too few digits, a required terminator missing, an `x` terminator
+        /// restart, or usually a hangup during the prompt or the collection.
+        Failure => "failure",
+    }
+    error ParseReadResultError("read result");
+    tests: read_result_generated_tests;
 }
 
 #[cfg(test)]

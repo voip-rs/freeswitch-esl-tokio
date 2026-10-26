@@ -102,8 +102,8 @@ pub use variables::EslHeaders;
 pub use variables::{
     CarriedHeader, ChannelVariable, CoreMediaVariable, EslArray, EslArrayError, InvalidHeaderName,
     MultipartBody, MultipartBodyError, MultipartItem, ParseChannelVariableError,
-    ParseCoreMediaVariableError, ParseSipPassthroughError, RtpStatUnit, SipHeaderPrefix,
-    SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
+    ParseCoreMediaVariableError, ParseReadResultError, ParseSipPassthroughError, ReadResult,
+    RtpStatUnit, SipHeaderPrefix, SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
 };
 pub use version::{FreeswitchVersion, ParseFreeswitchVersionError};
 

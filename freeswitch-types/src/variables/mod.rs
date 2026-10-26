@@ -14,7 +14,9 @@ mod sip_passthrough;
 pub(crate) use sip_passthrough::names_outgoing_header;
 mod sofia;
 
-pub use self::core::{ChannelVariable, ParseChannelVariableError};
+pub use self::core::{
+    ChannelVariable, ParseChannelVariableError, ParseReadResultError, ReadResult,
+};
 pub use conference::{ConferenceVariable, ParseConferenceVariableError};
 pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError, RtpStatUnit};
 pub use esl_array::{EslArray, EslArrayError, MAX_ARRAY_ITEMS};

@@ -19,7 +19,8 @@ use crate::sofia::{
     SofiaEventSubclass,
 };
 use crate::variables::{
-    LoopbackLeg, LoopbackResignation, LoopbackVariable, ParseLoopbackLegError, VariableName,
+    ChannelVariable, LoopbackLeg, LoopbackResignation, LoopbackVariable, ParseLoopbackLegError,
+    ParseReadResultError, ReadResult, VariableName,
 };
 use sip_header::SipHeaderLookup;
 use std::str::FromStr;
@@ -174,6 +175,14 @@ pub trait HeaderLookup: SipHeaderLookup {
     /// question is [`LoopbackChannelName`](crate::variables::LoopbackChannelName)'s.
     fn loopback_leg(&self) -> Result<Option<LoopbackLeg>, ParseLoopbackLegError> {
         parse_opt(self.variable(LoopbackVariable::LoopbackLeg))
+    }
+
+    /// `read_result` variable, outcome of the last digit read.
+    ///
+    /// `Ok(None)` means no read completed its status mapping, not that the
+    /// caller hung up; see [`ReadResult`] for what each value does not say.
+    fn read_result(&self) -> Result<Option<ReadResult>, ParseReadResultError> {
+        parse_opt(self.variable(ChannelVariable::ReadResult))
     }
 
     /// `Caller-Caller-ID-Number` header.
@@ -573,9 +582,7 @@ parse_header_error_impls! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::variables::{
-        ChannelVariable, LoopbackChannelName, LoopbackHangupCause, LoopbackLeg,
-    };
+    use crate::variables::{LoopbackChannelName, LoopbackHangupCause, LoopbackLeg};
     use std::collections::HashMap;
     use std::error::Error;
 
@@ -1185,6 +1192,29 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn read_result_reads_its_own_variable() {
+        let s = store_with(&[
+            ("variable_read_result", "timeout"),
+            ("variable_read_terminator_used", "#"),
+        ]);
+        assert_eq!(s.read_result(), Ok(Some(ReadResult::Timeout)));
+    }
+
+    #[test]
+    fn read_result_absent_is_none() {
+        let s = store_with(&[("variable_read_terminator_used", "#")]);
+        assert_eq!(s.read_result(), Ok(None));
+    }
+
+    #[test]
+    fn read_result_unknown_value_is_error() {
+        let s = store_with(&[("variable_read_result", "hangup")]);
+        assert!(s
+            .read_result()
+            .is_err());
     }
 
     #[test]
