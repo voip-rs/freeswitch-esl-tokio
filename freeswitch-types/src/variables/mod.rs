@@ -30,7 +30,10 @@ pub use sip_multipart::{MultipartBody, MultipartBodyError, MultipartItem};
 pub use sip_passthrough::{
     InvalidHeaderName, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,
 };
-pub use sofia::{CarriedHeader, ParseSofiaVariableError, SofiaVariable};
+pub use sofia::{
+    CarriedHeader, ParseSipHangupDispositionError, ParseSofiaVariableError, SipHangupDisposition,
+    SofiaVariable,
+};
 
 /// Trait for typed channel variable name enums.
 ///

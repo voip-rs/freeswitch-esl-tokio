@@ -221,6 +221,13 @@ sip_header::define_header_enum! {
         /// it may belong to an earlier read: `play_and_get_digits` with
         /// `min_digits` 0 takes a stale one as a terminator press and succeeds.
         ReadTerminatorUsed => "read_terminator_used",
+
+        // --- Originate ringback ---
+        /// Play `transfer_ringback` (caller answered) or `ringback` to the caller as
+        /// soon as an originate starts, without waiting for ring or early media from
+        /// a leg. Read by the originate from the caller channel or the dial string's
+        /// variables; does nothing without a caller channel or a ringback to play.
+        InstantRingback => "instant_ringback",
     }
 }
 

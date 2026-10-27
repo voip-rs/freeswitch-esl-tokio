@@ -20,7 +20,8 @@ use crate::sofia::{
 };
 use crate::variables::{
     ChannelVariable, LoopbackLeg, LoopbackResignation, LoopbackVariable, ParseLoopbackLegError,
-    ParseReadResultError, ReadResult, VariableName,
+    ParseReadResultError, ParseSipHangupDispositionError, ReadResult, SipHangupDisposition,
+    SofiaVariable, VariableName,
 };
 use sip_header::SipHeaderLookup;
 use std::str::FromStr;
@@ -183,6 +184,17 @@ pub trait HeaderLookup: SipHeaderLookup {
     /// caller hung up; see [`ReadResult`] for what each value does not say.
     fn read_result(&self) -> Result<Option<ReadResult>, ParseReadResultError> {
         parse_opt(self.variable(ChannelVariable::ReadResult))
+    }
+
+    /// `sip_hangup_disposition` variable, which SIP message ended this leg.
+    ///
+    /// Read at `CHANNEL_HANGUP_COMPLETE` or later; on `CHANNEL_HANGUP` only a
+    /// received CANCEL is set yet. `Ok(None)` means no SIP path recorded how the
+    /// dialog ended, not that this side ended it.
+    fn sip_hangup_disposition(
+        &self,
+    ) -> Result<Option<SipHangupDisposition>, ParseSipHangupDispositionError> {
+        parse_opt(self.variable(SofiaVariable::SipHangupDisposition))
     }
 
     /// `Caller-Caller-ID-Number` header.
@@ -1214,6 +1226,32 @@ mod tests {
         let s = store_with(&[("variable_read_result", "hangup")]);
         assert!(s
             .read_result()
+            .is_err());
+    }
+
+    #[test]
+    fn sip_hangup_disposition_reads_its_own_variable() {
+        let s = store_with(&[
+            ("variable_sip_hangup_disposition", "recv_cancel"),
+            ("variable_sip_term_status", "487"),
+        ]);
+        assert_eq!(
+            s.sip_hangup_disposition(),
+            Ok(Some(SipHangupDisposition::RecvCancel))
+        );
+    }
+
+    #[test]
+    fn sip_hangup_disposition_absent_is_none() {
+        let s = store_with(&[("variable_sip_term_status", "487")]);
+        assert_eq!(s.sip_hangup_disposition(), Ok(None));
+    }
+
+    #[test]
+    fn sip_hangup_disposition_unknown_value_is_error() {
+        let s = store_with(&[("variable_sip_hangup_disposition", "recv_refer")]);
+        assert!(s
+            .sip_hangup_disposition()
             .is_err());
     }
 

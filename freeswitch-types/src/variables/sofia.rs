@@ -82,6 +82,8 @@ sip_header::define_header_enum! {
         // --- SIP Failure / Hangup ---
         SipInviteFailureStatus => "sip_invite_failure_status",
         SipInviteFailurePhrase => "sip_invite_failure_phrase",
+        /// How this leg's SIP dialog ended; value shape is
+        /// [`SipHangupDisposition`](enum@SipHangupDisposition).
         SipHangupDisposition => "sip_hangup_disposition",
         SipTermStatus => "sip_term_status",
         SipTermCause => "sip_term_cause",
@@ -389,9 +391,71 @@ impl SofiaVariable {
     }
 }
 
+wire_enum! {
+    /// Value of the `sip_hangup_disposition` variable: which SIP message ended
+    /// this leg's dialog, and in which direction it went.
+    ///
+    /// It describes this leg's SIP peer, not the other party of a bridged call:
+    /// when the far leg hangs up and the switch propagates it, this leg reads
+    /// [`SendBye`](Self::SendBye). Unset on a non-SIP channel, on a profile
+    /// shutdown, and when the SIP stack ended the dialog itself (an attended
+    /// transfer's teardown, a session-timer expiry); in that last case an
+    /// earlier value can also survive. Absence never means this side ended it.
+    ///
+    /// Set after `CHANNEL_HANGUP` fires, except [`RecvCancel`](Self::RecvCancel):
+    /// read it at `CHANNEL_HANGUP_COMPLETE` or later.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum SipHangupDisposition {
+        /// The peer sent BYE.
+        RecvBye => "recv_bye",
+        /// The peer cancelled our unanswered inbound INVITE. Racing a local
+        /// hangup of the same leg, either this or [`SendRefuse`](Self::SendRefuse)
+        /// can be the value left, whichever was written last.
+        RecvCancel => "recv_cancel",
+        /// Our INVITE got a final non-2xx, a 3xx included. The SIP stack's own
+        /// timeout (408) and transport failure (503) land here as well, so this
+        /// does not mean the peer answered; a refused re-INVITE also sets it.
+        RecvRefuse => "recv_refuse",
+        /// This side sent BYE on an answered dialog.
+        SendBye => "send_bye",
+        /// This side cancelled its unanswered outbound INVITE.
+        SendCancel => "send_cancel",
+        /// This side answered an inbound INVITE with a final non-2xx, a redirect
+        /// included. See [`RecvCancel`](Self::RecvCancel) for the race with a
+        /// CANCEL.
+        SendRefuse => "send_refuse",
+    }
+    error ParseSipHangupDispositionError("SIP hangup disposition");
+    tests: sip_hangup_disposition_generated_tests;
+}
+
+impl SipHangupDisposition {
+    /// The dialog ended on a message this side received rather than sent: a BYE
+    /// or CANCEL from the peer, or a final non-2xx to our INVITE, the SIP stack's
+    /// own timeout and transport failure included.
+    pub fn is_received(self) -> bool {
+        match self {
+            Self::RecvBye | Self::RecvCancel | Self::RecvRefuse => true,
+            Self::SendBye | Self::SendCancel | Self::SendRefuse => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hangup_disposition_is_received_follows_wire_direction() {
+        for d in SipHangupDisposition::ALL {
+            let wire = d.as_str();
+            assert!(
+                wire.starts_with("recv_") || wire.starts_with("send_"),
+                "{wire} names no direction"
+            );
+            assert_eq!(d.is_received(), wire.starts_with("recv_"), "{wire}");
+        }
+    }
 
     #[test]
     fn display_round_trip() {
