@@ -22,7 +22,7 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     carried_in, channel_exists, connect, create_uuid, escaping_block, getvar, kill_channel,
-    parked_anchor, target_under_test, wait_for_bridge, BridgeOutcome, ChannelReaper,
+    lab_lo_port, parked_anchor, target_under_test, wait_for_bridge, BridgeOutcome, ChannelReaper,
     ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::BTreeMap;
@@ -119,22 +119,6 @@ fn replace_at_word_end(text: &str, from: &str, to: &str) -> String {
 /// The SIP port the fixtures' registered contacts were captured on.
 const CAPTURED_SIP_PORT: &str = "5080";
 
-/// The SIP port of the profile the `fp-reg` gateways register to, from its status URL.
-async fn registrar_port(client: &EslClient) -> String {
-    let resp = client
-        .api("sofia xmlstatus profile lab-lo")
-        .await
-        .expect("sofia xmlstatus transport error");
-    let body = resp
-        .api_result()
-        .expect("sofia xmlstatus rejected");
-    body.split_once("<url>")
-        .and_then(|(_, rest)| rest.split_once("</url>"))
-        .and_then(|(url, _)| url.rsplit_once(':'))
-        .map(|(_, port)| port.to_owned())
-        .unwrap_or_else(|| panic!("no lab-lo profile URL in {body:?}"))
-}
-
 /// The fixture README's substitution, in its order.
 fn sanitise(live: &str, registrar_port: &str) -> String {
     let text = live
@@ -222,7 +206,7 @@ async fn live_group_call_output_matches_the_fixtures() {
     names.sort();
     assert!(!names.is_empty(), "no fixture found in {:?}", fixture_dir());
 
-    let registrar_port = registrar_port(&client).await;
+    let registrar_port = lab_lo_port(&client).await;
     let mut drifted = Vec::new();
     let mut unrendered = Vec::new();
     let mut parsed = 0;

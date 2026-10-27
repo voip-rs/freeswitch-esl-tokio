@@ -12,7 +12,7 @@ use freeswitch_esl_tokio::commands::{
     DialStringCarrier, ExecuteOn, LoopbackEndpoint, SofiaEndpoint, UserEndpoint, UuidGetVar,
     UuidKill, UuidSetVar,
 };
-use freeswitch_esl_tokio::variables::SofiaVariable;
+use freeswitch_esl_tokio::variables::{SipHangupDisposition, SofiaVariable};
 use freeswitch_esl_tokio::ExecuteOptions;
 use freeswitch_esl_tokio::{
     parse_channel_dump, Application, BridgeDialString, ChannelTimetable, ChannelVariable,
@@ -21,9 +21,9 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect, create_uuid,
-    escaping_block, getvar, kill_channel, parked_anchor, percent_escape_tree, switch_version,
-    target_under_test, wait_for_bridge, wait_for_own_event, BridgeOutcome, ChannelReaper,
-    PercentEscape, ESCAPING_CASES, ESCAPING_SEPARATOR,
+    escaping_block, getvar, kill_channel, lab_lo_port, parked_anchor, percent_escape_tree,
+    switch_version, target_under_test, wait_for_bridge, wait_for_own_event, BridgeOutcome,
+    ChannelReaper, PercentEscape, ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -570,6 +570,85 @@ async fn live_uuid_kill_with_cause() {
         freeswitch_esl_tokio::HangupCause::UserBusy,
         "hangup cause should be USER_BUSY"
     );
+}
+
+/// Killing our answered sofia leg sends BYE: it records `send_bye`, and the inbound leg the call
+/// landed on records `recv_bye`. Both are read at CHANNEL_HANGUP_COMPLETE, where the accessor
+/// says the value is settled.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_sip_hangup_disposition_on_both_sides_of_a_bye() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::BackgroundJob,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
+        .await
+        .unwrap();
+
+    let port = lab_lo_port(&client).await;
+    let uuid = create_uuid(&client).await;
+    let destination = format!("sip:9199@127.0.0.1:{port}");
+    let endpoint = Endpoint::Sofia(
+        SofiaEndpoint::new("lab-lo", destination.as_str()).with_variables(uuid_block(&uuid, &[])),
+    );
+    let cmd = Originate::application(endpoint, Application::simple("park"));
+
+    let mut reaper = ChannelReaper::new(&client);
+    reaper.track(&uuid);
+    bgapi_originate_ok(&client, &mut events, &cmd).await;
+    kill_channel(&client, &uuid).await;
+
+    let mut ours = None;
+    let mut completed = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let inbound = loop {
+        let evt = match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => evt,
+            Ok(Some(Err(e))) => panic!("event error: {e}"),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break None,
+        };
+        if evt.event_type() != Some(EslEventType::ChannelHangupComplete) {
+            continue;
+        }
+        if evt.unique_id() == Some(uuid.as_str()) {
+            ours = Some(evt);
+        } else {
+            completed.push(evt);
+        }
+        let Some(call_id) = ours
+            .as_ref()
+            .and_then(|evt| evt.variable(SofiaVariable::SipCallId))
+        else {
+            continue;
+        };
+        if let Some(i) = completed
+            .iter()
+            .position(|evt| evt.variable(SofiaVariable::SipCallId) == Some(call_id))
+        {
+            break Some(completed.swap_remove(i));
+        }
+    };
+    reaper
+        .reap()
+        .await;
+
+    let ours = ours.unwrap_or_else(|| panic!("no CHANNEL_HANGUP_COMPLETE for {uuid}"));
+    let inbound =
+        inbound.unwrap_or_else(|| panic!("no CHANNEL_HANGUP_COMPLETE for {uuid}'s inbound leg"));
+    let ours = ours
+        .sip_hangup_disposition()
+        .expect("our leg's disposition should parse");
+    let inbound = inbound
+        .sip_hangup_disposition()
+        .expect("inbound leg's disposition should parse");
+    assert_eq!(ours, Some(SipHangupDisposition::SendBye));
+    assert_eq!(inbound, Some(SipHangupDisposition::RecvBye));
 }
 
 // --- Endpoint text, per carrier ---

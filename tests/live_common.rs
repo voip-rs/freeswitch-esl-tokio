@@ -290,6 +290,22 @@ pub fn percent_escape_tree(version: FreeswitchVersion) -> PercentEscape {
     }
 }
 
+/// The SIP port of the `lab-lo` profile, from its status URL.
+pub async fn lab_lo_port(client: &EslClient) -> String {
+    let resp = client
+        .api("sofia xmlstatus profile lab-lo")
+        .await
+        .expect("sofia xmlstatus transport error");
+    let body = resp
+        .api_result()
+        .expect("sofia xmlstatus rejected");
+    body.split_once("<url>")
+        .and_then(|(_, rest)| rest.split_once("</url>"))
+        .and_then(|(url, _)| url.rsplit_once(':'))
+        .map(|(_, port)| port.to_owned())
+        .unwrap_or_else(|| panic!("no lab-lo profile URL in {body:?}"))
+}
+
 /// Kill a channel by UUID, ignoring errors (channel may already be gone).
 pub async fn kill_channel(client: &EslClient, uuid: &str) {
     let cmd = UuidKill::new(uuid);
