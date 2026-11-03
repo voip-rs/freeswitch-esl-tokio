@@ -14,7 +14,7 @@ alongside it — including the message when nothing is listening — in
 |---|---|---|
 | `inbound_client` | Connect, `api` and its two failure layers, `bgapi` correlated with `BgJobTracker` | a switch |
 | `event_listener` | `EventSubscription`, per-call state off the event stream, `-d` wire dump | a switch |
-| `event_filter` | Server-side `filter`, userauth, a bounded run, four output formats | a switch |
+| `event_filter` | Server-side `filter` (repeatable, any match passes), userauth, a bounded run, four output formats | a switch |
 | `reconnecting_client` | Error classification as policy: backoff, `EX_CONFIG`, liveness gated on a heartbeat subscription that may be denied | a switch |
 | `channel_tracker` | `HeaderLookup` on your own type; a channel is sighted before it is readable, and `uuid_dump` is how it becomes readable | a switch |
 | `codec_monitor` | CODEC event headers, which are not channel variables; transcoding across a bridge | a switch with calls |

@@ -250,11 +250,14 @@ cargo run --example event_listener -- -P <port>
 cargo run --example event_filter -- -P <port> -e CHANNEL_EXECUTE_COMPLETE -f Unique-ID -v <uuid> -c 1
 ```
 
-`event_filter` filters client-side on any header, takes `/regex/` values, and
-prints raw wire form with `-r` or one JSON object per event with `-j`. That
-last pair is what to reach for when the question is "what exactly did this
-event carry" — `-r` is the bytes, so nothing the library does can flatter or
-hide them.
+`event_filter` filters on the switch, through the ESL `filter` command, on any
+header, and takes `/regex/` values. `-f`/`-v` pairs repeat, and FreeSWITCH
+passes an event when any one of them matches. A CUSTOM subclass is reached
+with `-e ALL -f Event-Subclass -v <subclass>`: `-e CUSTOM` names no subclass
+and so receives none of them. It prints raw wire form with `-r` or one JSON
+object per event with `-j`. That last pair is what to reach for when the
+question is "what exactly did this event carry" — `-r` is the bytes, so
+nothing the library does can flatter or hide them.
 
 To wait for a call to finish, use `-U` rather than `-c`, and never poll
 `show channels count` in a loop. A two-second `null/` call emits twenty-odd

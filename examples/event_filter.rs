@@ -12,6 +12,9 @@
 //!   # Multiple events
 //!   cargo run --example event_filter -- -e CHANNEL_CREATE -e CHANNEL_ANSWER -f Call-Direction -v inbound
 //!
+//!   # Either of two filters: an event passes when any one of them matches
+//!   cargo run --example event_filter -- -e ALL -f Event-Subclass -v sofia::register -f Event-Name -v CHANNEL_HANGUP
+//!
 //!   # Exit after the first 5 matching events
 //!   cargo run --example event_filter -- -e CHANNEL_CREATE -c 5
 //!
@@ -42,8 +45,12 @@ Connection Options:
 Filter Options:
   -e, --event <EVENT>      Event type to subscribe to (can be repeated)
                            Examples: CHANNEL_CREATE, CHANNEL_ANSWER, ALL
-  -f, --filter <HEADER>    Header name to filter on
-  -v, --value <VALUE>      Value to match (use /regex/ for regex matching)
+  -f, --filter <HEADER>    Header name to filter on (can be repeated)
+  -v, --value <VALUE>      Value to match (use /regex/ for regex matching);
+                           pairs with the -f before it. FreeSWITCH applies the
+                           filters on the switch and passes an event when any
+                           one of them matches, so a CUSTOM subclass needs
+                           -e ALL -f Event-Subclass -v <subclass>.
   -c, --max-count <N>      Exit after N matching events (default: run forever)
   -U, --until <EVENT>      Exit once this arrives, however many came before it.
       --until <HDR>=<VAL>  A bare word matches Event-Name; the Header=Value
@@ -67,6 +74,9 @@ Examples:
 
   # Multiple events with JSON output
   event_filter -e CHANNEL_CREATE -e CHANNEL_ANSWER -f Caller-Context -v public -j
+
+  # A CUSTOM subclass alongside a core event
+  event_filter -e ALL -f Event-Subclass -v sofia::register -f Event-Name -v CHANNEL_HANGUP
 
   # Print the next 3 matching events then exit
   event_filter -e CHANNEL_CREATE -f Call-Direction -v inbound -c 3
@@ -97,8 +107,8 @@ struct Args {
     user: Option<String>,
     password: String,
     events: Vec<String>,
-    filter_header: Option<String>,
-    filter_value: Option<String>,
+    /// Header and value pairs; the switch passes an event matching any of them.
+    filters: Vec<(String, String)>,
     max_count: Option<usize>,
     /// Header and value whose arrival ends the run.
     until: Option<(String, String)>,
@@ -118,8 +128,7 @@ impl Args {
             user: None,
             password: env.password,
             events: vec!["CHANNEL_CREATE".to_string()],
-            filter_header: None,
-            filter_value: None,
+            filters: Vec::new(),
             max_count: None,
             until: None,
             idle_timeout: None,
@@ -136,6 +145,9 @@ fn parse_args() -> Result<Args, String> {
     result
         .events
         .clear();
+
+    // A header waiting for the -v that completes its pair.
+    let mut pending_header: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -192,19 +204,26 @@ fn parse_args() -> Result<Args, String> {
             }
             "-f" | "--filter" => {
                 i += 1;
-                result.filter_header = Some(
+                if let Some(header) = pending_header.replace(
                     args.get(i)
                         .ok_or("Missing filter header")?
                         .clone(),
-                );
+                ) {
+                    return Err(format!("--filter {header} has no --value"));
+                }
             }
             "-v" | "--value" => {
                 i += 1;
-                result.filter_value = Some(
-                    args.get(i)
-                        .ok_or("Missing filter value")?
-                        .clone(),
-                );
+                let value = args
+                    .get(i)
+                    .ok_or("Missing filter value")?
+                    .clone();
+                let header = pending_header
+                    .take()
+                    .ok_or_else(|| format!("--value {value} has no --filter before it"))?;
+                result
+                    .filters
+                    .push((header, value));
             }
             "-c" | "--max-count" => {
                 i += 1;
@@ -268,14 +287,8 @@ fn parse_args() -> Result<Args, String> {
             .push("CHANNEL_CREATE".to_string());
     }
 
-    if result
-        .filter_header
-        .is_some()
-        != result
-            .filter_value
-            .is_some()
-    {
-        return Err("Both --filter and --value must be specified together".to_string());
+    if let Some(header) = pending_header {
+        return Err(format!("--filter {header} has no --value"));
     }
 
     Ok(result)
@@ -411,14 +424,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build an EventSubscription combining events and filters into one unit
     let mut sub = EventSubscription::new(format).events(event_types);
-    if let (Some(header), Some(value)) = (&args.filter_header, &args.filter_value) {
+    for (header, value) in &args.filters {
         sub = sub.filter_raw(header, value)?;
-        eprintln!(
-            "Subscribing to events: {:?} with filter {}={}",
-            args.events, header, value
-        );
-    } else {
-        eprintln!("Subscribing to events: {:?}", args.events);
+    }
+    eprintln!("Subscribing to events: {:?}", args.events);
+    for (header, value) in &args.filters {
+        eprintln!("  filter {header}={value}");
     }
     client
         .apply_subscription(&sub)
