@@ -1,9 +1,10 @@
 //! Typed mod_sofia / SIP channel variable names.
 
-use sip_header::SipHeader;
+use sip_header_catalog::SipHeader;
 
-sip_header::define_header_enum! {
+sip_header_catalog::define_header_enum! {
     tests_mod: sofia_variable_generated_tests,
+    serde(cfg(feature = "serde")),
     error_type: ParseSofiaVariableError => "unknown sofia variable",
     /// mod_sofia / SIP channel variable names (the part after the `variable_` prefix).
     ///

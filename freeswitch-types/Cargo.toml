@@ -1,6 +1,6 @@
 [package]
 name = "freeswitch-types"
-version = "1.10.0"
+version = "3.0.0-alpha.1"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH ESL protocol types: channel state, events, headers, commands, and variables"
@@ -23,18 +23,17 @@ exclude = [
 
 [features]
 default = ["serde", "esl"]
-serde = ["dep:serde", "sip-header/serde", "indexmap?/serde"]
-esl = ["dep:indexmap"]
-conference-info = ["sip-header/conference-info"]
+serde = ["dep:serde", "sip-header-catalog/serde", "indexmap?/serde"]
+esl = ["dep:indexmap", "dep:percent-encoding"]
 sdp = ["dep:sdp-types"]
 
 [package.metadata.docs.rs]
 all-features = true
 
 [dependencies]
-sip-header = { version = "0.3.13", features = ["draft"] }
+sip-header-catalog = "1"
 serde = { version = "1.0", features = ["derive"], optional = true }
-percent-encoding = "2"
+percent-encoding = { version = "2", optional = true }
 indexmap = { version = "2", optional = true }
 sdp-types = { version = "0.2", optional = true }
 
@@ -43,6 +42,8 @@ name = "render_golden"
 required-features = ["esl", "serde"]
 
 [dev-dependencies]
+percent-encoding = "2"
 serde_json = "1.0"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 freeswitch-c-oracle = { path = "../freeswitch-c-oracle" }
+sip-header = "1"

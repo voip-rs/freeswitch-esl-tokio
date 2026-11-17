@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "freeswitch-esl-tokio"
-version = "2.8.0"
+version = "3.0.0-alpha.1"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH Event Socket Library (ESL) client for Rust"
@@ -19,14 +19,13 @@ exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
 
 [features]
 sdp = ["freeswitch-types/sdp"]
-conference-info = ["freeswitch-types/conference-info"]
 test-util = []
 
 [package.metadata.docs.rs]
 all-features = true
 
 [dependencies]
-freeswitch-types = { path = "freeswitch-types", version = "1.8.0" }
+freeswitch-types = { path = "freeswitch-types", version = "3.0.0-alpha.1" }
 indexmap = "2"
 tokio = { version = "1.47", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }
 bytes = "1.11"
@@ -48,6 +47,7 @@ nix = { version = "0.31", features = ["fs"] }
 serde = { version = "1.0", features = ["derive"] }
 yaml_serde = "0.10"
 libc = "0.2"
+sip-header = "1"
 
 [[example]]
 name = "sdp_codec_string"

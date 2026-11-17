@@ -9,30 +9,29 @@
 //!   `ARRAY::value1|:value2|:value3` (see [`EslArray`]).
 //! - **Bracket wrapping** — some log-sourced headers arrive as `[value]`.
 //!
-//! Routing those values through the default [`SipHeaderLookup`] methods
-//! produces parse errors because the string doesn't match RFC syntax.
-//! [`EslHeaders`] wraps an [`IndexMap<String, String>`] and overrides the
-//! relevant `SipHeaderLookup` methods to strip both quirks before parsing.
-//! The design-rationale doc §"EslHeaders: making the transport boundary
-//! visible" explains the layering.
+//! [`EslHeaders`] wraps an [`IndexMap<String, String>`] and is a
+//! [`SipHeaderRows`] store whose rows have both quirks peeled, so sip-header's
+//! typed accessors read FreeSWITCH values as RFC header rows. The
+//! design-rationale doc §"EslHeaders: making the transport boundary visible"
+//! explains the layering.
 
 use indexmap::IndexMap;
-use sip_header::{HistoryInfo, HistoryInfoError, SipHeaderLookup, UriInfo, UriInfoError};
+use sip_header_catalog::{RowError, SipHeader, SipHeaderField, SipHeaderRows};
 
 use crate::headers::{case_alias_key, normalize_header_key};
 use crate::lookup::{variable_key, HeaderLookup};
-use crate::variables::{EslArray, EslArrayError, MAX_ARRAY_ITEMS};
+use crate::variables::{EslArray, MAX_ARRAY_ITEMS};
 
 /// A flat header store that decodes FreeSWITCH ARRAY and bracket encoding
-/// when answering typed SIP header queries.
+/// when answering SIP header row queries.
 ///
 /// Construct with [`EslHeaders::new`] or [`EslHeaders::from_map`]. Use it
-/// anywhere a [`HeaderLookup`] or [`SipHeaderLookup`] implementor is
-/// expected:
+/// anywhere a [`HeaderLookup`] or [`SipHeaderRows`] implementor is expected;
+/// sip-header's accessors read it through their blanket impl:
 ///
 /// ```
 /// use freeswitch_types::{EslHeaders, HeaderLookup};
-/// use freeswitch_types::sip_header::SipHeaderLookup;
+/// use sip_header::SipHeaderLookup;
 ///
 /// let mut h = EslHeaders::new();
 /// h.insert("Unique-ID", "abc-123");
@@ -43,12 +42,11 @@ use crate::variables::{EslArray, EslArrayError, MAX_ARRAY_ITEMS};
 /// assert_eq!(ci.entries().len(), 2);
 /// ```
 ///
-/// `HeaderLookup` delegates straight to the map; `SipHeaderLookup` methods
-/// that parse RFC-structured values (`call_info`, `history_info`, and any
-/// future multi-value parsers) first peel the FreeSWITCH encoding and then
-/// hand pre-split entries to `sip-header`. Non-parsing lookups
-/// (`sip_header_str`, `sip_header`) return the raw stored value untouched —
-/// the caller sees exactly what FreeSWITCH put on the wire.
+/// `HeaderLookup` delegates straight to the map and returns the value as
+/// FreeSWITCH sent it. The rows of a header the catalog says may repeat are
+/// its `ARRAY::` items with `[...]` wrapping removed; any other header is one
+/// row, whole. Commas are left to the accessor, which knows whether a header
+/// is a list. An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is a [`RowError`].
 ///
 /// Every write normalizes its key with
 /// [`normalize_header_key`](crate::normalize_header_key), so a payload
@@ -191,9 +189,16 @@ fn strip_brackets(s: &str) -> &str {
     s
 }
 
-/// One row per header occurrence: bracket unwrapping, then `ARRAY::` splitting.
-/// A value without the prefix is one occurrence and stays whole.
-fn split_rows(value: &str) -> Result<Vec<&str>, EslArrayError> {
+/// Rows of one stored value under `name`: a header the catalog says may repeat
+/// is bracket-unwrapped, then split at `ARRAY::` items; any other header,
+/// unregistered names included, is one row, whole.
+fn value_rows<'a>(name: &str, value: Option<&'a str>) -> Result<Vec<&'a str>, RowError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    if !SipHeader::parse_name(name).is_ok_and(|h| h.may_repeat()) {
+        return Ok(vec![value]);
+    }
     let value = strip_brackets(value);
     let Some(body) = value.strip_prefix(EslArray::PREFIX) else {
         return Ok(vec![value]);
@@ -203,167 +208,57 @@ fn split_rows(value: &str) -> Result<Vec<&str>, EslArrayError> {
         .take(MAX_ARRAY_ITEMS + 1)
         .collect();
     if items.len() > MAX_ARRAY_ITEMS {
-        return Err(EslArrayError::TooManyItems {
-            count: body
-                .split(EslArray::SEPARATOR)
+        return Err(RowError::too_many_rows(
+            body.split(EslArray::SEPARATOR)
                 .count(),
-            max: MAX_ARRAY_ITEMS,
-        });
+            MAX_ARRAY_ITEMS,
+        ));
     }
     Ok(items)
 }
 
-/// List entries of a raw value: every row comma-split, since `from_entries`
-/// takes entries a transport already delimited.
-fn split_entries_ref(value: &str) -> Result<Vec<&str>, EslArrayError> {
-    Ok(split_rows(value)?
-        .into_iter()
-        .filter(|row| {
-            !row.trim()
-                .is_empty()
-        })
-        .flat_map(sip_header::split_comma_entries)
-        .collect())
-}
-
-/// A structurally invalid ESL encoding hands the value back whole, so the RFC
-/// parser reports it rather than this layer dropping entries.
-fn rows_or_whole(value: &str) -> Vec<&str> {
-    split_rows(value).unwrap_or_else(|_| vec![value])
-}
-
 impl EslHeaders {
-    /// Parse a FreeSWITCH-transported SIP URI-list value into typed [`UriInfo`]
-    /// entries, handling both `ARRAY::` encoding and bracket wrapping.
+    /// A raw value of `header`, such as the `sip_call_info` channel variable
+    /// fetched over ESL, decoded into the rows a stored header gives.
     ///
-    /// Use this when you hold a *raw* value — e.g. the `sip_call_info` /
-    /// `sip_alert_info` channel variable fetched over ESL — rather than a
-    /// populated [`EslHeaders`]. It accepts any of the forms FreeSWITCH emits:
+    /// Type the field with sip-header's accessors, as any store here:
     ///
-    /// - **Single RFC entry**: `<sip:a@example.test>;purpose=emergency-CallId`
-    /// - **ARRAY encoding**: `ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>`
-    /// - **Bracket-wrapped**: `[<sip:a@example.test>;purpose=icon]`
+    /// ```
+    /// use freeswitch_types::{EslHeaders, SipHeader};
+    /// use sip_header::SipHeaderLookup;
     ///
-    /// This is the same decoding the [`call_info`](SipHeaderLookup::call_info)
-    /// and [`alert_info`](SipHeaderLookup::alert_info) methods apply; iterate
-    /// the result via `.entries()`.
+    /// let raw = "ARRAY::<urn:emergency:uid:callid:bcf.test>;purpose=emergency-CallId\
+    ///            |:<urn:emergency:uid:incidentid:bcf.test>;purpose=emergency-IncidentId";
+    /// let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)?;
+    /// assert_eq!(field.call_info()?.unwrap().len(), 2);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///
-    /// Returns [`UriInfoError`] if the value is malformed or if the `ARRAY::`
-    /// structure is invalid. Structural `EslArrayError` cases (e.g.
-    /// `TooManyItems`) are surfaced as [`UriInfoError::Malformed`] carrying
-    /// the cause.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use freeswitch_types::EslHeaders;
-    ///
-    /// let value = "ARRAY::<urn:emergency:uid:callid:bcf.test>;purpose=emergency-CallId\
-    ///              |:<urn:emergency:uid:incidentid:bcf.test>;purpose=emergency-IncidentId";
-    /// let info = EslHeaders::parse_uri_info(value).unwrap();
-    /// assert_eq!(info.entries().len(), 2);
-    /// ```
-    pub fn parse_uri_info(value: &str) -> Result<UriInfo, UriInfoError> {
-        let entries =
-            Self::split_entries(value).map_err(|e| UriInfoError::Malformed(e.to_string()))?;
-        UriInfo::from_entries(
-            entries
-                .iter()
-                .map(String::as_str),
-        )
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_rows`].
+    pub fn decode_value(header: SipHeader, raw: &str) -> Result<SipHeaderField<'_>, RowError> {
+        Self::decode_value_raw(header.as_str(), raw)
     }
 
-    /// Split one comma-list SIP header value held as an ESL variable into its
-    /// entries, applying the same decoding as [`parse_uri_info`](Self::parse_uri_info)
-    /// and [`parse_history_info`](Self::parse_history_info): bracket unwrapping,
-    /// `ARRAY::` splitting, then the RFC comma split of each item.
-    ///
-    /// Only for headers that are lists (`Call-Info`, `Alert-Info`,
-    /// `History-Info`, `Diversion`, …). A header whose value legitimately
-    /// contains commas without being a list — `Date`, `Subject`, `User-Agent` —
-    /// must not go through it.
+    /// [`decode_value`](Self::decode_value) for a header by name, one the
+    /// catalog does not register included; such a value is one row, whole.
     ///
     /// # Errors
     ///
-    /// A missing `ARRAY::` prefix is the RFC form, not an error. Every other
-    /// [`EslArrayError`] is a structural fault in the ESL encoding and is
-    /// returned as-is. An empty or whitespace-only value yields no entries,
-    /// which the typed parsers turn into their own `Empty` error.
-    ///
-    /// ```
-    /// use freeswitch_types::EslHeaders;
-    ///
-    /// let entries =
-    ///     EslHeaders::split_entries("ARRAY::<sip:a@example.test>|:<sip:b@example.test>").unwrap();
-    /// assert_eq!(entries, ["<sip:a@example.test>", "<sip:b@example.test>"]);
-    /// ```
-    pub fn split_entries(value: &str) -> Result<Vec<String>, EslArrayError> {
-        Ok(split_entries_ref(value)?
-            .into_iter()
-            .map(str::to_string)
-            .collect())
-    }
-
-    /// Rows of a header `sip-header` marks multi-valued, one per occurrence, for
-    /// [`sip_header_all_str`](SipHeaderLookup::sip_header_all_str). Commas are
-    /// left to the accessor, which knows whether the header is a list.
-    #[doc(hidden)]
-    pub fn split_multi_value<'a>(value: Option<&'a str>, name: &str) -> Vec<&'a str> {
-        let Some(value) = value else {
-            return Vec::new();
-        };
-        let multi = name
-            .parse::<sip_header::SipHeader>()
-            .is_ok_and(|h| h.is_multi_valued());
-        if multi {
-            rows_or_whole(value)
-        } else {
-            vec![value]
-        }
-    }
-
-    /// Parse a FreeSWITCH-transported `History-Info` value into a typed
-    /// [`HistoryInfo`], handling both `ARRAY::` encoding and bracket wrapping.
-    ///
-    /// The raw-value counterpart to [`history_info`](SipHeaderLookup::history_info).
-    ///
-    /// # Errors
-    ///
-    /// Structural `EslArrayError` cases (e.g. `TooManyItems`) are surfaced as
-    /// [`HistoryInfoError::Malformed`] carrying the cause.
-    pub fn parse_history_info(value: &str) -> Result<HistoryInfo, HistoryInfoError> {
-        let entries =
-            Self::split_entries(value).map_err(|e| HistoryInfoError::Malformed(e.to_string()))?;
-        HistoryInfo::from_entries(
-            entries
-                .iter()
-                .map(String::as_str),
-        )
+    /// An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is [`RowError::too_many_rows`].
+    pub fn decode_value_raw<'a>(
+        name: &'a str,
+        raw: &'a str,
+    ) -> Result<SipHeaderField<'a>, RowError> {
+        Ok(SipHeaderField::new(name, value_rows(name, Some(raw))?))
     }
 }
 
-/// Internal: emits the one [`SipHeaderLookup`] override that peels
-/// FreeSWITCH's ARRAY and bracket encoding, `sip_header_all_str`, which every
-/// list-valued default routes through. Invoke inside an
-/// `impl SipHeaderLookup for T` block. Not part of the stable API.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! esl_sip_header_overrides {
-    () => {
-        fn sip_header_all_str<'a>(&'a self, name: &str) -> Vec<&'a str> {
-            $crate::variables::EslHeaders::split_multi_value(self.sip_header_str(name), name)
-        }
-    };
-}
-
-impl SipHeaderLookup for EslHeaders {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        self.get(name)
+impl SipHeaderRows for EslHeaders {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+        value_rows(name, self.get(name))
     }
-
-    crate::esl_sip_header_overrides!();
 }
 
 impl HeaderLookup for EslHeaders {
@@ -380,6 +275,8 @@ impl HeaderLookup for EslHeaders {
 mod tests {
     use super::*;
     use crate::headers::EventHeader;
+    use sip_header::SipHeaderLookup;
+    use sip_header_catalog::{RowErrorKind, SipHeaderRowsExt};
 
     #[test]
     fn every_write_path_normalizes_the_key() {
@@ -421,7 +318,7 @@ mod tests {
         assert_eq!(h.header_str("UNIQUE-ID"), Some("abc-123"));
         assert_eq!(
             h.sip_header_str("call-info"),
-            Some("<sip:a@example.test>;purpose=icon")
+            Ok(Some("<sip:a@example.test>;purpose=icon"))
         );
     }
 
@@ -532,6 +429,7 @@ mod tests {
         assert_eq!(
             h.p_asserted_identity()
                 .expect("ARRAY value must decode")
+                .expect("header is present")
                 .len(),
             2
         );
@@ -546,6 +444,7 @@ mod tests {
         assert_eq!(
             h.contact()
                 .expect("ARRAY value must decode")
+                .expect("header is present")
                 .len(),
             2
         );
@@ -555,7 +454,14 @@ mod tests {
     fn a_single_valued_header_keeps_its_commas() {
         let mut h = EslHeaders::new();
         h.insert("Subject", "one, two");
-        assert_eq!(h.sip_header_all_str("Subject"), vec!["one, two"]);
+        assert_eq!(h.sip_header_rows_str("Subject"), Ok(vec!["one, two"]));
+    }
+
+    #[test]
+    fn an_unregistered_header_is_one_row_even_in_array_form() {
+        let mut h = EslHeaders::new();
+        h.insert("X-Custom", "[ARRAY::a|:b]");
+        assert_eq!(h.sip_header_rows_str("X-Custom"), Ok(vec!["[ARRAY::a|:b]"]));
     }
 
     /// RFC 3261 section 7.3.1 forbids comma-joining the auth headers, so the
@@ -575,10 +481,22 @@ mod tests {
             h.www_authenticate(),
             h.proxy_authenticate(),
         ] {
-            let values = values.expect("one Digest value parses");
+            let values = values
+                .expect("one Digest value parses")
+                .expect("header is present");
             assert_eq!(values.len(), 1);
-            assert_eq!(values[0].username(), Some("alice"));
-            assert_eq!(values[0].realm(), Some("example.com"));
+            assert_eq!(
+                values
+                    .get(0)
+                    .and_then(|v| v.username()),
+                Some("alice")
+            );
+            assert_eq!(
+                values
+                    .get(0)
+                    .and_then(|v| v.realm()),
+                Some("example.com")
+            );
         }
     }
 
@@ -591,9 +509,59 @@ mod tests {
         );
         let values = h
             .authorization()
-            .expect("both Digest values parse");
+            .expect("both Digest values parse")
+            .expect("header is present");
         assert_eq!(values.len(), 2);
-        assert_eq!(values[1].realm(), Some("r2"));
+        assert_eq!(
+            values
+                .get(1)
+                .and_then(|v| v.realm()),
+            Some("r2")
+        );
+    }
+
+    fn over_cap_array(item: &str) -> String {
+        format!(
+            "ARRAY::{}",
+            vec![item; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
+        )
+    }
+
+    #[test]
+    fn an_over_cap_array_fails_every_accessor() {
+        let mut h = EslHeaders::new();
+        h.insert("Call-Info", over_cap_array("<sip:a@example.com>"));
+        h.insert(
+            "History-Info",
+            over_cap_array("<sip:a@example.com>;index=1"),
+        );
+        h.insert("P-Asserted-Identity", over_cap_array("<sip:a@example.com>"));
+        assert!(h
+            .call_info()
+            .is_err());
+        assert!(h
+            .history_info()
+            .is_err());
+        assert!(h
+            .p_asserted_identity()
+            .is_err());
+    }
+
+    #[test]
+    fn an_over_cap_array_is_a_row_error_naming_the_cap() {
+        let mut h = EslHeaders::new();
+        h.insert("Call-Info", over_cap_array("<sip:a@example.com>"));
+        let err = h
+            .sip_header_rows(SipHeader::CallInfo)
+            .expect_err("over-cap ARRAY must fail");
+        assert_eq!(err.kind(), RowErrorKind::TooManyRows);
+        assert_eq!(err.count(), Some(MAX_ARRAY_ITEMS + 1));
+        assert_eq!(err.limit(), Some(MAX_ARRAY_ITEMS));
+        assert!(matches!(
+            h.call_info(),
+            Err(sip_header::ParseError::Row(e)) if e == err
+        ));
+        assert_eq!(h.sip_header(SipHeader::CallInfo), Err(err));
     }
 
     #[test]
@@ -624,10 +592,40 @@ mod tests {
         assert_eq!(h.variable_str("missing"), None);
     }
 
-    /// The stored-header entry point and the raw-value one must agree, so
-    /// every form runs through both.
     #[test]
-    fn both_entry_points_decode_every_transport_form() {
+    fn call_info_absent_is_ok_none() {
+        let h = EslHeaders::new();
+        assert!(h
+            .call_info()
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn a_raw_call_info_array_types_through_its_field() {
+        let raw = "ARRAY::<urn:emergency:uid:callid:abc>;purpose=emergency-CallId\
+                   |:<urn:emergency:uid:incidentid:def>;purpose=emergency-IncidentId";
+        let field = EslHeaders::decode_value(SipHeader::CallInfo, raw)
+            .expect("two items are under the cap");
+        assert_eq!(field.name(), "Call-Info");
+        assert_eq!(
+            field
+                .rows()
+                .len(),
+            2
+        );
+        let ci = field
+            .call_info()
+            .expect("both entries parse")
+            .expect("header is present");
+        assert_eq!(ci.len(), 2);
+        assert_eq!(ci.entries()[1].purpose(), Some("emergency-IncidentId"));
+    }
+
+    /// The stored-header path and the raw-value one must agree, so every
+    /// transport form runs through both.
+    #[test]
+    fn a_raw_value_decodes_like_a_stored_header() {
         let forms = [
             (
                 "rfc",
@@ -658,8 +656,12 @@ mod tests {
                 .call_info()
                 .unwrap_or_else(|e| panic!("{label}: {e}"))
                 .unwrap_or_else(|| panic!("{label}: header is present"));
-            let from_value = EslHeaders::parse_uri_info(value)
+            let field = EslHeaders::decode_value(SipHeader::CallInfo, value)
                 .unwrap_or_else(|e| panic!("{label} as a raw value: {e}"));
+            let from_value = field
+                .call_info()
+                .unwrap_or_else(|e| panic!("{label} as a raw value: {e}"))
+                .unwrap_or_else(|| panic!("{label}: field holds the header"));
             assert_eq!(from_header, from_value, "{label}");
             assert_eq!(
                 from_header
@@ -674,12 +676,44 @@ mod tests {
     }
 
     #[test]
-    fn call_info_absent_is_ok_none() {
-        let h = EslHeaders::new();
-        assert!(h
-            .call_info()
-            .unwrap()
-            .is_none());
+    fn a_raw_over_cap_array_is_a_row_error() {
+        let raw = over_cap_array("<sip:a@example.com>");
+        for err in [
+            EslHeaders::decode_value(SipHeader::CallInfo, &raw),
+            EslHeaders::decode_value_raw("Call-Info", &raw),
+        ] {
+            let err = err.expect_err("over-cap ARRAY must fail");
+            assert_eq!(err.kind(), RowErrorKind::TooManyRows);
+        }
+    }
+
+    #[test]
+    fn a_raw_value_of_an_unregistered_header_is_one_row() {
+        let field =
+            EslHeaders::decode_value_raw("X-Custom", "ARRAY::a|:b").expect("no framing to fail");
+        assert_eq!(field.name(), "X-Custom");
+        assert_eq!(
+            field
+                .rows()
+                .collect::<Vec<_>>(),
+            ["ARRAY::a|:b"]
+        );
+    }
+
+    /// A registered name spelled by hand, in any casing, decodes as the typed header does,
+    /// keeping the name as sent.
+    #[test]
+    fn a_registered_name_decodes_raw_as_typed() {
+        let raw = "ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>";
+        let typed = EslHeaders::decode_value(SipHeader::CallInfo, raw).unwrap();
+        assert_eq!(typed.name(), SipHeader::CallInfo.as_str());
+        for name in ["Call-Info", "call-info", "CALL-INFO"] {
+            let field = EslHeaders::decode_value_raw(name, raw).unwrap();
+            assert_eq!(field.name(), name);
+            assert!(field
+                .rows()
+                .eq(typed.rows()));
+        }
     }
 
     #[test]
@@ -710,42 +744,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_uri_info_empty_value() {
-        assert!(EslHeaders::parse_uri_info("").is_err());
-    }
-
-    #[test]
-    fn parse_uri_info_malformed_no_panic() {
-        // sip-header's UriInfo is lenient: an addr-spec needs no angle brackets.
-        let info = EslHeaders::parse_uri_info("sip:bare@example.test").expect("lenient parse");
-        assert_eq!(
-            info.entries()
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn parse_uri_info_structural_failure_is_malformed() {
-        let value = format!(
-            "ARRAY::{}",
-            vec!["<sip:a@example.com>"; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
-        );
-        let err = EslHeaders::parse_uri_info(&value).expect_err("over-limit array must fail");
-        assert!(matches!(err, UriInfoError::Malformed(_)), "got {err:?}");
-    }
-
-    #[test]
-    fn parse_history_info_structural_failure_is_malformed() {
-        let value = format!(
-            "ARRAY::{}",
-            vec!["<sip:a@example.com>;index=1"; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
-        );
-        let err = EslHeaders::parse_history_info(&value).expect_err("over-limit array must fail");
-        assert!(matches!(err, HistoryInfoError::Malformed(_)), "got {err:?}");
-    }
-
-    #[test]
     fn collects_from_key_value_pairs() {
         let h: EslHeaders = [
             ("Unique-ID", "uuid-1"),
@@ -762,66 +760,5 @@ mod tests {
         h.insert("Unique-ID", "uuid-1");
         h.extend([("Channel-Name", "sofia/a/b")]);
         assert_eq!(h.len(), 2);
-    }
-
-    #[test]
-    fn split_entries_array_form() {
-        let entries =
-            EslHeaders::split_entries("ARRAY::<sip:a@example.test>|:<sip:b@example.test>")
-                .expect("ARRAY form");
-        assert_eq!(entries, ["<sip:a@example.test>", "<sip:b@example.test>"]);
-    }
-
-    #[test]
-    fn split_entries_rfc_comma_form() {
-        let entries = EslHeaders::split_entries(
-            "<sip:a@example.test>;text=\"one, two\",<sip:b@example.test>",
-        )
-        .expect("RFC form");
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], "<sip:a@example.test>;text=\"one, two\"");
-    }
-
-    #[test]
-    fn split_entries_bracket_wrapped() {
-        let entries =
-            EslHeaders::split_entries("[<sip:a@example.test>;purpose=icon]").expect("bracket form");
-        assert_eq!(entries, ["<sip:a@example.test>;purpose=icon"]);
-    }
-
-    #[test]
-    fn split_entries_blank_value_yields_no_entries() {
-        let entries = EslHeaders::split_entries("  ").expect("blank value");
-        assert!(entries.is_empty());
-    }
-
-    #[test]
-    fn parse_history_info_blank_value_is_empty_error() {
-        let err = EslHeaders::parse_history_info("  ").expect_err("blank value must fail");
-        assert!(matches!(err, HistoryInfoError::Empty), "got {err:?}");
-    }
-
-    #[test]
-    fn split_entries_too_many_items_is_err() {
-        let value = format!(
-            "ARRAY::{}",
-            vec!["<sip:a@example.test>"; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
-        );
-        let err = EslHeaders::split_entries(&value).expect_err("over-limit array must fail");
-        assert!(
-            matches!(err, EslArrayError::TooManyItems { .. }),
-            "got {err:?}"
-        );
-    }
-
-    #[test]
-    fn parse_history_info_array_form() {
-        let value = "ARRAY::<sip:a@example.com>;index=1|:<sip:b@example.com>;index=1.1";
-        let info = EslHeaders::parse_history_info(value).expect("parse ARRAY form");
-        assert_eq!(
-            info.entries()
-                .len(),
-            2
-        );
     }
 }

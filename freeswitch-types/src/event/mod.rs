@@ -16,6 +16,7 @@ use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
 use indexmap::IndexMap;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+use sip_header_catalog::{RowError, SipHeaderRows};
 
 wire_enum! {
     /// Event priority levels matching FreeSWITCH `esl_priority_t`
@@ -321,12 +322,11 @@ impl HeaderLookup for EslEvent {
     }
 }
 
-impl sip_header::SipHeaderLookup for EslEvent {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        EslEvent::header_str(self, name)
+impl SipHeaderRows for EslEvent {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
+        self.headers
+            .sip_header_rows_str(name)
     }
-
-    crate::esl_sip_header_overrides!();
 }
 
 impl PartialEq for EslEvent {
@@ -964,7 +964,7 @@ mod tests {
             .is_err());
     }
 
-    // --- SipHeaderLookup over FreeSWITCH's ARRAY encoding ---
+    // --- sip-header accessors over FreeSWITCH's ARRAY encoding ---
 
     #[test]
     fn esl_event_authorization_keeps_its_parameter_commas() {
@@ -977,9 +977,40 @@ mod tests {
         );
         let values = event
             .authorization()
-            .expect("one Digest value parses");
+            .expect("one Digest value parses")
+            .expect("header is present");
         assert_eq!(values.len(), 1);
-        assert_eq!(values[0].username(), Some("alice"));
+        assert_eq!(
+            values
+                .get(0)
+                .and_then(|v| v.username()),
+            Some("alice")
+        );
+    }
+
+    #[test]
+    fn esl_event_over_cap_array_fails_every_accessor() {
+        use sip_header::SipHeaderLookup;
+
+        let over_cap = |item: &str| {
+            format!(
+                "ARRAY::{}",
+                vec![item; crate::variables::MAX_ARRAY_ITEMS + 1].join("|:")
+            )
+        };
+        let mut event = EslEvent::new();
+        event.set_header("Call-Info", over_cap("<sip:a@example.com>"));
+        event.set_header("History-Info", over_cap("<sip:a@example.com>;index=1"));
+        event.set_header("P-Asserted-Identity", over_cap("<sip:a@example.com>"));
+        assert!(event
+            .call_info()
+            .is_err());
+        assert!(event
+            .history_info()
+            .is_err());
+        assert!(event
+            .p_asserted_identity()
+            .is_err());
     }
 
     #[test]

@@ -125,7 +125,8 @@ async fn main() -> Result<(), EslError> {
 | [Events](docs/guide/events.md) | Typed accessors, timetables, custom `HeaderLookup`, variable parsers, channel event ordering |
 | [SDP](docs/guide/sdp.md) | Codec strings and SDP offers (`sdp` feature) |
 | [Examples](examples/README.md) | What each runnable example teaches and what it needs |
-| [Migrating from 1.x](docs/migrating-from-1.x.md) | Breaking changes and upgrade steps |
+| [Migrating from 2.x](docs/migrating-from-2.x.md) | Breaking changes and upgrade steps to 3.0 |
+| [Migrating from 1.x](docs/migrating-from-1.x.md) | Breaking changes and upgrade steps to 2.x |
 
 Reference: [dial strings](docs/dial-string-format.md), [codec strings](docs/codec-string-format.md), [outbound quirks](docs/outbound-esl-quirks.md), [loopback bowout](docs/loopback-bowout.md), [re-exec](docs/reexec.md), [design rationale](docs/design-rationale.md).
 

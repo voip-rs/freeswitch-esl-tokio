@@ -74,7 +74,7 @@ run_concurrently \
 cargo build --workspace --release --all-features
 cargo build --examples --all-features
 cargo check --workspace --all-features --target x86_64-pc-windows-msvc
-# --all-features or the check is blind to sdp and conference-info, which are
+# --all-features or the check is blind to sdp, which is
 # off by default: a removed method there passes an unqualified run untouched.
 cargo semver-checks check-release --all-features -p freeswitch-types
 cargo semver-checks check-release --all-features -p freeswitch-esl-tokio
