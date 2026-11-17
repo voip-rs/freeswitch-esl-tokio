@@ -55,9 +55,8 @@ exhaustive compiler checks.
 (`ExecuteOptions`, `EslConnectOptions`, `Application`, `BridgeDialString`)
 use private fields + accessor methods. Pure data/DTO structs with
 `#[non_exhaustive]` and constructors (`SofiaGateway`, `SofiaEndpoint`,
-`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`, `UriInfoEntry`,
-`ConferenceInfo` and its children) keep public fields — no validation
-constraints on individual fields.
+`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`) keep public fields — no
+validation constraints on individual fields.
 
 **Exception:** single-field error newtypes (`pub struct ParseFooError(pub String)`)
 are exempt. These will never grow additional fields, and adding `#[non_exhaustive]`
@@ -72,25 +71,17 @@ construct the value. Types that only ever come out of a parser or a wire decode
 need none; add one when a caller actually asks. Optional fields use builder
 methods (`with_foo()`).
 
-## SIP Modules Are Protocol-Agnostic
-
-Modules under the `sip_*` namespace (`sip_header`, `sip_header_addr`,
-`UriInfo`) are pure SIP standard types with no FreeSWITCH coupling.
-Doc comments, module-level docs, and error messages in these modules must
-not reference FreeSWITCH, mod_sofia, ESL, NOTIFY_IN, or any FS-specific
-concepts. FreeSWITCH integration context belongs in `lookup.rs` (the
-`HeaderLookup` trait methods) or `variables/` (e.g. `SipPassthroughHeader`
-for `sip_h_*`/`sip_i_*` mappings).
-
 ## API Boundary Rules
 
 - **Never expose dependency types in public signatures.** Return `impl Iterator`
   (not `indexmap::map::Iter`), wrap dependency errors (not `#[from] serde_json::Error`).
   A dependency major-version bump becomes a semver break if its types leak.
-  **Exceptions:** `sip-uri` is an accepted public dependency of `freeswitch-types`
-  (same author, narrow scope, stable). The `pub use sip_uri;` re-export and
-  `SipHeaderAddr` returning `sip_uri::Uri` are intentional. `indexmap` is treated
-  as a basic collection type (like `HashMap`) and may appear in public signatures.
+  **Exceptions:** `sip-header-catalog` is the accepted public dependency of
+  `freeswitch-types` (same author, stable): `SipHeader`, `define_header_enum!`,
+  the row trait and its holders. sip-header and sip-uri themselves never appear
+  in a public signature or re-export; consumers type rows with their own copy.
+  `indexmap` is treated as a basic collection type (like `HashMap`) and may
+  appear in public signatures.
 - **`pub(crate)` modules can still leak types.** If a public function returns a
   type from a `pub(crate)` module, that type is visible but unnameable by callers.
   Either re-export the type or don't return it.
@@ -181,7 +172,7 @@ cargo check -p freeswitch-types --no-default-features --message-format=short
 
 The first two fix rather than check. The third is the one build the hook never
 does: it is `--all-features` throughout, so an item that should sit behind
-`#[cfg(feature = "sdp")]` or `"conference-info"` and does not passes every hook
+`#[cfg(feature = "sdp")]` or `"esl"` and does not passes every hook
 stage and breaks only for a consumer on the default feature set.
 
 **When adding new `EslEventType` variants**, check whether they belong in any

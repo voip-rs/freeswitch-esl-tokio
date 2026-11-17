@@ -424,11 +424,17 @@ def resolved_dependency_dir(repo: Path, dep: str) -> Path:
     return Path(packages[dep_id]["manifest_path"]).parent
 
 
+def catalog_sip_header_names(repo: Path) -> set[str]:
+    """Wire names of SipHeader in the sip-header-catalog freeswitch-types resolves to."""
+    lib_rs = resolved_dependency_dir(repo, "sip_header_catalog") / "src" / "lib.rs"
+    text = lib_rs.read_text()
+    start = text.index("pub enum SipHeader {")
+    body = text[start : text.index("\n    }\n", start)]
+    return set(re.findall(r'=> "([A-Za-z][A-Za-z0-9-]+)"', body))
+
+
 def check_sip_header_prefixes(repo: Path, src: SourceResolver) -> CheckResult:
-    sip_text = (
-        resolved_dependency_dir(repo, "sip_header") / "src" / "header.rs"
-    ).read_text()
-    sip_names = set(re.findall(r'=> "([A-Za-z][A-Za-z0-9-]+)"', sip_text))
+    sip_names = catalog_sip_header_names(repo)
     expected_wire = {f"sip_i_{n.lower().replace('-', '_')}" for n in sip_names}
 
     c_text = src.read("src/mod/endpoints/mod_sofia/sofia.c")

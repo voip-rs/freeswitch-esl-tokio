@@ -31,7 +31,8 @@ mod common;
 use freeswitch_esl_tokio::variables::SofiaVariable;
 use freeswitch_esl_tokio::{
     parse_channel_dump, BgJobResult, BgJobTracker, CallState, ChannelState, EslClient, EslError,
-    EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup, VARIABLE_PREFIX,
+    EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup, RowError, SipHeaderRows,
+    VARIABLE_PREFIX,
 };
 use tracing::{debug, error, info, warn};
 
@@ -119,11 +120,12 @@ struct TrackedChannel {
     data: HashMap<String, String>,
 }
 
-impl freeswitch_esl_tokio::prelude::SipHeaderLookup for TrackedChannel {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
+// HeaderLookup requires the SIP row trait, which is what sip-header's typed
+// accessors (`call_info()`, ...) read. The map already implements it.
+impl SipHeaderRows for TrackedChannel {
+    fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
         self.data
-            .get(name)
-            .map(|s| s.as_str())
+            .sip_header_rows_str(name)
     }
 }
 
