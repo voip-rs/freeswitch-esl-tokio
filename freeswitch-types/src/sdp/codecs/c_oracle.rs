@@ -18,7 +18,7 @@ use crate::sdp::static_payload::canonical_iananame;
 use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
 
 /// Lines whose handling waits on a fix still to land; each fix flips its own.
-const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = true;
+const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
@@ -43,14 +43,17 @@ fn payload_type() -> BoxedStrategy<String> {
     }
 }
 
+/// Payload types `parse_ul` cannot read below 128.
+const UNREADABLE_PAYLOAD_TYPES: &[&str] = &["128", "*", "abc", "-1", ""];
+
 /// The payload type an `a=rtpmap` or `a=fmtp` names.
 fn attribute_payload_type() -> BoxedStrategy<String> {
+    let known = select(PAYLOAD_TYPES).prop_map(str::to_owned);
     if EXCLUDE_UNREADABLE_PAYLOAD_TYPE {
-        select(PAYLOAD_TYPES)
-            .prop_map(str::to_owned)
-            .boxed()
+        known.boxed()
     } else {
-        payload_type().boxed()
+        let unreadable = select(UNREADABLE_PAYLOAD_TYPES).prop_map(str::to_owned);
+        prop_oneof![8 => known, 1 => unreadable].boxed()
     }
 }
 

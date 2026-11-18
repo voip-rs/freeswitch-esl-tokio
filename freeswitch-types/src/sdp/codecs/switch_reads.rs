@@ -408,3 +408,25 @@ fn a_media_type_matches_in_any_case() {
         1
     );
 }
+
+// parse_rtpmap and parse_fmtp drop an attribute whose payload type parse_ul cannot read below 128.
+#[test]
+fn a_payload_attribute_with_an_unreadable_type_is_dropped_alone() {
+    let sdp = format!(
+        "{HEADER}m=audio 5004 RTP/AVP 0 96\r\na=rtpmap:x PCMU/8000\r\na=rtpmap:96 opus/48000/2\r\na=fmtp:128 foo\r\na=fmtp:96 useinbandfec=1\r\n"
+    );
+    let codecs = SdpCodecs::parse(&sdp).unwrap();
+    assert_eq!(names(&codecs), ["PCMU", "opus"]);
+    assert_eq!(codecs.fmtp_for("opus", 48000), Some("useinbandfec=1"));
+    assert_eq!(
+        codecs.warnings(),
+        [
+            SdpWarning::PayloadAttributeIgnored {
+                offset: offset_of(&sdp, "a=rtpmap:x")
+            },
+            SdpWarning::PayloadAttributeIgnored {
+                offset: offset_of(&sdp, "a=fmtp:128")
+            },
+        ]
+    );
+}
