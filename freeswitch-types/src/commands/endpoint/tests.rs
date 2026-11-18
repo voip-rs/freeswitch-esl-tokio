@@ -1093,11 +1093,7 @@ fn expression_fields_split_where_the_functions_split() {
         (group.group(), group.domain(), group.order()),
         ("g", "d@e", Some(GroupCallOrder::First))
     );
-    let contact = SofiaContact::parse_bare("${sofia_contact(p/u/x@example.com)}").unwrap();
-    assert_eq!(
-        (contact.profile(), contact.user(), contact.domain()),
-        (Some("p"), "u/x", "example.com")
-    );
+    let contact = SofiaContact::on_profile("p", "u/x", "example.com").unwrap();
     assert_eq!(
         SofiaContact::parse_bare(&contact.to_string()).unwrap(),
         contact
@@ -1283,4 +1279,46 @@ fn builders_refuse_what_parse_refuses() {
             "{endpoint} {field}"
         );
     }
+}
+
+/// A field legal only beside its qualifier builds through the constructor taking both, and
+/// renders the text whose parse holds the same value.
+#[test]
+fn qualified_constructors_build_what_parse_builds() {
+    use DialStringCarrier::{Dialplan, EslApi};
+    let cases: [(Endpoint, &str, DialStringCarrier); 3] = [
+        (
+            SofiaGateway::on_profile("external", "a::b", "1000")
+                .unwrap()
+                .into(),
+            "sofia/gateway/external::a::b/1000",
+            EslApi,
+        ),
+        (
+            SofiaContact::on_profile("internal", "u/x", "example.com")
+                .unwrap()
+                .into(),
+            "${sofia_contact(internal/u/x@example.com)}",
+            Dialplan,
+        ),
+        (
+            UserEndpoint::in_domain("", "example.com")
+                .unwrap()
+                .into(),
+            "user/@example.com",
+            EslApi,
+        ),
+    ];
+    for (built, text, carrier) in cases {
+        assert_eq!(
+            built
+                .display_for(carrier)
+                .to_string(),
+            text
+        );
+        assert_eq!(Endpoint::parse_for(text, carrier), Ok(built), "{text}");
+    }
+    assert!(SofiaGateway::on_profile("p^", "gw", "1").is_err());
+    assert!(SofiaContact::on_profile("", "u", "d").is_err());
+    assert!(UserEndpoint::in_domain("a@b", "d").is_err());
 }
