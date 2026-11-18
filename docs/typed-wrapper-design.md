@@ -162,7 +162,7 @@ impl ChannelHandle<'_> {
     }
 
     pub async fn set_var(&self, name: impl VariableName, value: &str) -> Result<EslResponse, EslError> {
-        let cmd = UuidSetVar::new(self.uuid.clone(), name.as_str(), value);
+        let cmd = UuidSetVar::new(self.uuid.clone(), name.as_str(), value)?;
         self.client.api(&cmd.to_string()).await
     }
 

@@ -5,6 +5,7 @@ use std::fmt;
 use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
+use crate::commands::UndeliverableVariable;
 
 /// Constructors for common dptools application commands.
 ///
@@ -45,8 +46,8 @@ impl AppCommand {
     }
 
     /// Set a channel variable (`set` application).
-    pub fn set_var(name: &str, value: &str) -> EslCommand {
-        execute("set", Some(format!("{}={}", name, value)))
+    pub fn set_var(name: &str, value: &str) -> Result<EslCommand, UndeliverableVariable> {
+        Ok(execute("set", Some(format!("{}={}", name, value))))
     }
 
     /// Park the channel (suspends dialplan execution until another command picks it up).

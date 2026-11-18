@@ -55,3 +55,6 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Variables::set_scope(scope)` returns `()` | returns `Result<(), OriginateError>`, refusing a scope a held pair or the chosen separator cannot be written in |
 | `Variables::iter_mut()`, `values_mut()` | removed; `insert` the new value under the same name, which keeps its position |
 | a variable pair refused as `OriginateError::ParseError(String)` | `OriginateError::UndeliverableVariable { index, variable }`; `variable` is an `UndeliverableVariable` naming the `VariablePart` and the `VariableFault`, the same from parse, config load and the builder |
+| `UuidSetVar::new(uuid, key, value)` returns `UuidSetVar` | returns `Result<UuidSetVar, UndeliverableVariable>` |
+| `UuidSetVar { uuid, key, value }` and `UuidTransfer { uuid, destination, dialplan }` public fields | private; read them with `uuid()`, `key()`, `value()`, `destination()` and `dialplan()` |
+| `AppCommand::set_var(name, value)` returns `EslCommand` | returns `Result<EslCommand, UndeliverableVariable>` |

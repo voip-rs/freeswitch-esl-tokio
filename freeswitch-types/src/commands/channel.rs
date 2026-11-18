@@ -4,6 +4,7 @@ use std::fmt;
 
 use crate::channel::HangupCause;
 use crate::commands::originate::DialplanType;
+use crate::commands::variables::UndeliverableVariable;
 
 /// Answer a channel: `uuid_answer <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,24 +191,39 @@ impl fmt::Display for UuidGetVar {
 
 /// Set a channel variable: `uuid_setvar <uuid> <key> <value>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct UuidSetVar {
-    /// Channel UUID.
-    pub uuid: String,
-    /// Variable name to set.
-    pub key: String,
-    /// Variable value.
-    pub value: String,
+    uuid: String,
+    key: String,
+    value: String,
 }
 
 impl UuidSetVar {
     /// Create a new uuid_setvar command.
-    pub fn new(uuid: impl Into<String>, key: impl Into<String>, value: impl Into<String>) -> Self {
-        Self {
+    pub fn new(
+        uuid: impl Into<String>,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<Self, UndeliverableVariable> {
+        Ok(Self {
             uuid: uuid.into(),
             key: key.into(),
             value: value.into(),
-        }
+        })
+    }
+
+    /// Channel UUID.
+    pub fn uuid(&self) -> &str {
+        &self.uuid
+    }
+
+    /// Variable name to set.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// Variable value.
+    pub fn value(&self) -> &str {
+        &self.value
     }
 }
 
@@ -219,14 +235,10 @@ impl fmt::Display for UuidSetVar {
 
 /// Transfer a channel to a new destination: `uuid_transfer <uuid> <dest> [dialplan]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct UuidTransfer {
-    /// Channel UUID.
-    pub uuid: String,
-    /// Destination extension or dial string.
-    pub destination: String,
-    /// Dialplan to use. If `None`, uses the channel's current dialplan.
-    pub dialplan: Option<DialplanType>,
+    uuid: String,
+    destination: String,
+    dialplan: Option<DialplanType>,
 }
 
 impl UuidTransfer {
@@ -243,6 +255,22 @@ impl UuidTransfer {
     pub fn with_dialplan(mut self, dialplan: DialplanType) -> Self {
         self.dialplan = Some(dialplan);
         self
+    }
+
+    /// Channel UUID.
+    pub fn uuid(&self) -> &str {
+        &self.uuid
+    }
+
+    /// Destination extension or dial string.
+    pub fn destination(&self) -> &str {
+        &self.destination
+    }
+
+    /// Dialplan to use; `None` keeps the channel's current one.
+    pub fn dialplan(&self) -> Option<&DialplanType> {
+        self.dialplan
+            .as_ref()
     }
 }
 
@@ -347,7 +375,7 @@ mod tests {
 
     #[test]
     fn uuid_setvar() {
-        let cmd = UuidSetVar::new(UUID, "hangup_after_bridge", "true");
+        let cmd = UuidSetVar::new(UUID, "hangup_after_bridge", "true").unwrap();
         assert_eq!(
             cmd.to_string(),
             format!("uuid_setvar {} hangup_after_bridge true", UUID)

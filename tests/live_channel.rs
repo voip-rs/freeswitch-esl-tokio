@@ -502,7 +502,7 @@ async fn live_uuid_setvar_getvar_round_trip() {
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
 
     // Set a variable on the channel
-    let set_cmd = UuidSetVar::new(&uuid, "esl_test_var", "hello_world");
+    let set_cmd = UuidSetVar::new(&uuid, "esl_test_var", "hello_world").unwrap();
     let resp = client
         .api(&set_cmd.to_string())
         .await

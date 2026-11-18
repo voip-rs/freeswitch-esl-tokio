@@ -20,7 +20,7 @@ use freeswitch_esl_tokio::sdp::{
     SdpWarning,
 };
 use freeswitch_esl_tokio::{
-    ChannelVariable, EslClient, EslError, EslEventType, EslResult, EventFormat, EventSubscription,
+    ChannelVariable, EslClient, EslError, EslEventType, EventFormat, EventSubscription,
     HeaderLookup, UuidSetVar, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use tracing::{error, info, warn};
@@ -357,8 +357,8 @@ async fn set_channel_var(
     uuid: &str,
     name: ChannelVariable,
     value: &str,
-) -> EslResult<()> {
-    let cmd = UuidSetVar::new(uuid, name.to_string(), quote_for_uuid_setvar(value));
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cmd = UuidSetVar::new(uuid, name.to_string(), quote_for_uuid_setvar(value))?;
     client
         .api(&cmd.to_string())
         .await?

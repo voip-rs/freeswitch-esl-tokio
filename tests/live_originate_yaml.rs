@@ -588,7 +588,11 @@ async fn live_originate_loopback_bowout_on_execute() {
 
     if bonded {
         client
-            .api(&UuidSetVar::new(&a_leg, "loopback_bowout_on_execute", "true").to_string())
+            .api(
+                &UuidSetVar::new(&a_leg, "loopback_bowout_on_execute", "true")
+                    .unwrap()
+                    .to_string(),
+            )
             .await
             .expect("uuid_setvar transport error")
             .api_result()
