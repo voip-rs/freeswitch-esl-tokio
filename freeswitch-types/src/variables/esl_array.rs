@@ -349,6 +349,44 @@ mod tests {
         );
     }
 
+    /// The switch splits on every `|:` with no escape, so an item holding one
+    /// would come back as two.
+    #[test]
+    fn new_refuses_an_item_holding_the_separator() {
+        let err = EslArray::new(vec!["a".into(), "b|:c".into()]).unwrap_err();
+        assert_eq!(err, EslArrayError::SeparatorInItem { index: 1 });
+        let shown = err.to_string();
+        assert!(shown.contains('1'), "{shown}");
+        assert!(!shown.contains("b|:c"), "{shown}");
+    }
+
+    #[test]
+    fn push_and_unshift_refuse_an_item_holding_the_separator() {
+        let mut arr = EslArray::new(vec!["a".into(), "b".into()]).unwrap();
+        assert_eq!(
+            arr.push("x|:y".into()),
+            Err(EslArrayError::SeparatorInItem { index: 2 })
+        );
+        assert_eq!(
+            arr.unshift("x|:y".into()),
+            Err(EslArrayError::SeparatorInItem { index: 0 })
+        );
+        assert_eq!(arr.items(), &["a", "b"]);
+    }
+
+    /// A `|` ending one item and a `:` opening the next do not form a separator.
+    #[test]
+    fn separator_halves_at_item_edges_round_trip() {
+        let arr = EslArray::new(vec!["a|".into(), ":b".into(), "|".into(), ":".into()]).unwrap();
+        assert_eq!(EslArray::parse(&arr.to_string()), Ok(arr));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize_refuses_a_separator_in_an_item() {
+        assert!(serde_json::from_str::<EslArray>(r#"["a|:b"]"#).is_err());
+    }
+
     #[test]
     fn parse_sip_uris_with_colons() {
         let input = "ARRAY::sip:alice@atlanta.example.com|:sip:bob@biloxi.example.com";
