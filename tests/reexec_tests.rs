@@ -89,7 +89,7 @@ async fn teardown_twice_fails() {
         .await;
     assert!(second.is_err());
     match second.unwrap_err() {
-        EslError::ReexecFailed { reason } => {
+        EslError::ReexecFailed { reason, .. } => {
             assert!(
                 reason.contains("already called"),
                 "unexpected reason: {}",
@@ -124,7 +124,7 @@ async fn teardown_with_pending_command_fails() {
         .await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        EslError::ReexecFailed { reason } => {
+        EslError::ReexecFailed { reason, .. } => {
             assert!(
                 reason.contains("in-flight"),
                 "unexpected reason: {}",

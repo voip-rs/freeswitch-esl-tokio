@@ -498,6 +498,7 @@ async fn drain_for_reexec(
                 reexec,
                 EslError::ReexecFailed {
                     reason: "connection closed during drain".into(),
+                    source: None,
                 },
             );
             ControlFlow::Break(None)
@@ -508,6 +509,7 @@ async fn drain_for_reexec(
                 reexec,
                 EslError::ReexecFailed {
                     reason: "drain timeout waiting for message body".into(),
+                    source: None,
                 },
             );
             ControlFlow::Break(None)
@@ -603,6 +605,7 @@ async fn reader_loop_inner(
                                 &mut reexec,
                                 EslError::ReexecFailed {
                                     reason: "reader stopped before the drain completed".into(),
+                                    source: None,
                                 },
                             );
                         }

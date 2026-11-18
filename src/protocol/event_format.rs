@@ -142,7 +142,8 @@ impl EslParser {
             .ok_or_else(|| EslError::protocol_error("JSON event missing body"))?;
 
         // Parse JSON body
-        let json_value: serde_json::Value = serde_json::from_str(&body)?;
+        let json_value: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| EslError::JsonError(Box::new(e)))?;
 
         let serde_json::Value::Object(map) = json_value else {
             return Err(EslError::protocol_error("JSON event body is not an object"));

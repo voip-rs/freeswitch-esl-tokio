@@ -135,3 +135,6 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AppCommand::transfer(extension, None, None)` | `AppCommand::transfer(extension)` |
 | `AppCommand::transfer(extension, Some(dialplan), None)` | `AppCommand::transfer_to_dialplan(extension, dialplan)` |
 | `AppCommand::transfer(extension, dialplan, Some(context))`, which wrote `XML` for a `None` dialplan | `AppCommand::transfer_to_context(extension, dialplan, context)`; the dialplan is named, since leaving it out lets the switch use the channel's own (or `force_transfer_dialplan`), which `XML` overrode |
+| `EslError::JsonError(String)`, `XmlError(String)` | carry the decoder's error as a boxed `#[source]` (`Box<dyn Error + Send + Sync>`); `e.source()` reaches it, `Display` still names it |
+| `EslError::ReexecFailed { reason }` | `ReexecFailed { reason, source }`, `source` an `Option` of the boxed error behind a timeout or a lost reader; match with `{ reason, .. }` |
+| `impl From<std::io::Error>`, `From<std::str::Utf8Error>` and `From<serde_json::Error>` for `EslError` | removed, so `?` on a foreign error no longer turns it into an `EslError`; build `EslError::Io(e)` or `EslError::Utf8Error(e)` by name, or keep your own error type |

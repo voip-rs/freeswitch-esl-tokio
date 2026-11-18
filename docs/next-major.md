@@ -20,12 +20,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `EslError::ReexecFailed`, `JsonError`, `XmlError` carry no source
-
-Each stringifies the underlying error into a `String` field. Boxed `#[source]`
-fields keep the dependency types out of the signature and restore the chain;
-changing the field types is the break.
-
 ### `impl futures_util::Stream for EslEventStream` puts futures-util in the public API
 
 A futures-util major becomes a semver break for this crate. Move behind a

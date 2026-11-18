@@ -82,6 +82,7 @@ impl EslClient {
             {
                 return Err(EslError::ReexecFailed {
                     reason: "command still in-flight".into(),
+                    source: None,
                 });
             }
         }
@@ -97,6 +98,7 @@ impl EslClient {
                 .take()
                 .ok_or_else(|| EslError::ReexecFailed {
                     reason: "teardown already called".into(),
+                    source: None,
                 })?
         };
 
@@ -114,6 +116,7 @@ impl EslClient {
         {
             return Err(EslError::ReexecFailed {
                 reason: "reader task is gone, stop signal not delivered".into(),
+                source: None,
             });
         }
 
@@ -124,10 +127,12 @@ impl EslClient {
         let residual = timeout(outer_timeout, reexec.result_rx)
             .await
             .map_err(|e| EslError::ReexecFailed {
-                reason: format!("timed out waiting for reader to stop: {e}"),
+                reason: "timed out waiting for reader to stop".into(),
+                source: Some(Box::new(e)),
             })?
             .map_err(|e| EslError::ReexecFailed {
-                reason: format!("reader task exited without sending result: {e}"),
+                reason: "reader task exited without sending result".into(),
+                source: Some(Box::new(e)),
             })??;
 
         // Get fd from writer

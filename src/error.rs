@@ -31,7 +31,7 @@ const PERMISSION_DENIED_PAYLOAD: &str = "permission denied";
 pub enum EslError {
     /// IO error from underlying TCP operations
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[source] std::io::Error),
 
     /// Connection is not established or lost
     #[error("Not connected to FreeSWITCH")]
@@ -88,17 +88,17 @@ pub enum EslError {
         format: String,
     },
 
-    /// JSON parsing error
+    /// A JSON event body the decoder refused.
     #[error("JSON parsing error: {0}")]
-    JsonError(String),
+    JsonError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
-    /// XML parsing error
+    /// An XML event body the decoder refused.
     #[error("XML parsing error: {0}")]
-    XmlError(String),
+    XmlError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// UTF-8 conversion error
     #[error("UTF-8 conversion error: {0}")]
-    Utf8Error(#[from] std::str::Utf8Error),
+    Utf8Error(#[source] std::str::Utf8Error),
 
     /// UTF-8 decoding failed for a specific header value during parsing.
     ///
@@ -185,6 +185,9 @@ pub enum EslError {
     ReexecFailed {
         /// What went wrong during teardown.
         reason: String,
+        /// The failure behind it, when one was reported.
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
     /// A typed header accessor rejected a value that was present on the wire.
@@ -226,12 +229,6 @@ esl_error_from_header_parse! {
     ParsePriorityError,
     ParseTimetableError,
     ParseSipStatusCodeError,
-}
-
-impl From<serde_json::Error> for EslError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::JsonError(e.to_string())
-    }
 }
 
 /// The failure text of an [`EslError::CommandFailed`], split by the prefix
@@ -711,7 +708,7 @@ mod tests {
     #[test]
     fn classification_of_transport_and_setup_errors() {
         use std::io::ErrorKind;
-        let io = |kind| EslError::from(std::io::Error::new(kind, "test"));
+        let io = |kind| EslError::Io(std::io::Error::new(kind, "test"));
         let cases: &[(EslError, bool, bool)] = &[
             (io(ErrorKind::ConnectionRefused), true, false),
             (io(ErrorKind::ConnectionReset), true, false),
@@ -733,10 +730,51 @@ mod tests {
                 false,
                 false,
             ),
+            (json_error(), false, false),
+            (EslError::XmlError("bad xml".into()), false, false),
+            (utf8_error(), false, false),
+            #[cfg(unix)]
+            (
+                EslError::ReexecFailed {
+                    reason: "teardown already called".into(),
+                    source: None,
+                },
+                false,
+                false,
+            ),
         ];
         for (err, connection, recoverable) in cases {
             assert_eq!(err.is_connection_error(), *connection, "{err:?}");
             assert_eq!(err.is_recoverable(), *recoverable, "{err:?}");
         }
+    }
+
+    fn json_error() -> EslError {
+        let decode = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        EslError::JsonError(Box::new(decode))
+    }
+
+    #[allow(invalid_from_utf8)]
+    fn utf8_error() -> EslError {
+        let bytes = [0xffu8];
+        EslError::Utf8Error(std::str::from_utf8(&bytes).unwrap_err())
+    }
+
+    #[test]
+    fn decoder_errors_keep_their_source() {
+        use std::error::Error;
+        for err in [json_error(), utf8_error()] {
+            assert!(
+                err.source()
+                    .is_some(),
+                "{err:?}"
+            );
+        }
+        let json = json_error();
+        assert!(json
+            .source()
+            .unwrap()
+            .downcast_ref::<serde_json::Error>()
+            .is_some());
     }
 }

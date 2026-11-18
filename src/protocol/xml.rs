@@ -5,10 +5,10 @@ use crate::error::{EslError, EslResult};
 use crate::event::EslEvent;
 
 impl EslParser {
-    /// Map a `quick_xml::Error` to `EslError::XmlError` without leaking
-    /// the dependency type into our public `From` impls.
-    fn xml_err<E: std::fmt::Display>(e: E) -> EslError {
-        EslError::XmlError(format!("XML parse error: {e}"))
+    /// Box a quick_xml error as the source of `EslError::XmlError`, keeping the
+    /// dependency type out of the signature.
+    fn xml_err<E: std::error::Error + Send + Sync + 'static>(e: E) -> EslError {
+        EslError::XmlError(Box::new(e))
     }
 
     /// Parse XML event using quick_xml.

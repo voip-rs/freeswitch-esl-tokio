@@ -135,10 +135,10 @@ FreeSWITCH connects to your application via the `socket` dialplan app. After acc
 ```rust,no_run
 use freeswitch_esl_tokio::{EslClient, AppCommand, EventFormat, HeaderLookup};
 use tokio::net::TcpListener;
-# use freeswitch_esl_tokio::EslError;
+use freeswitch_esl_tokio::EslError;
 # #[tokio::main]
 # async fn main() -> Result<(), EslError> {
-let listener = TcpListener::bind("[::]:8040").await?;
+let listener = TcpListener::bind("[::]:8040").await.map_err(EslError::Io)?;
 let (client, mut events) = EslClient::accept_outbound(&listener).await?;
 
 // Must be the first command after accept, returns channel info as an EslResponse
