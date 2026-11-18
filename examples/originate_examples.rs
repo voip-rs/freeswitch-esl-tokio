@@ -101,7 +101,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = BridgeDialString::new(vec![vec![
         // "*" searches all profiles; use a profile name to limit the lookup
         Endpoint::SofiaContact(SofiaContact::new("bob", "pbx.example.com").with_profile("*")),
-    ]]);
+    ]])?;
     // ${sofia_contact(*/bob@pbx.example.com)}
     println!("{}", cmd.display_with(block_parse));
 
@@ -115,7 +115,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = BridgeDialString::new(vec![vec![Endpoint::GroupCall(
         // A=all members simultaneously, F=first registered, E=enterprise
         GroupCall::new("support", "pbx.example.com").with_order(GroupCallOrder::All),
-    )]]);
+    )]])?;
     // ${group_call(support@pbx.example.com+A)}
     println!("{}", cmd.display_with(block_parse));
 

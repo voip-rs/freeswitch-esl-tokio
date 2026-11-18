@@ -685,6 +685,7 @@ async fn dial_without_waiting(
     }
     let anchor = parked_anchor(client, "null/anchor").await;
     let dial = BridgeDialString::new(vec![vec![endpoint.clone()]])
+        .expect("one leg spans no bracket")
         .display_with(block_parse)
         .to_string();
     client
@@ -937,6 +938,7 @@ async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
                 .with_variables(uuid_block(&uuid, &[])),
         );
         let dial = BridgeDialString::new(vec![vec![endpoint]])
+            .expect("one leg spans no bracket")
             .display_with(block_parse_under_test())
             .to_string();
 

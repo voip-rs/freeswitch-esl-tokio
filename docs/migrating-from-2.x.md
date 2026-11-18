@@ -64,3 +64,5 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AudioEndpoint::parse_with_prefix(s, prefix)` | `Endpoint::parse_for(s, carrier)`, which names the module from the text |
 | `"…".parse::<SofiaContact>()`, `"…".parse::<GroupCall>()`, which always failed at the API carrier | `Endpoint::parse_for(s, DialStringCarrier::Dialplan)` |
 | `DialString::set_variables(vars)` returns `()` | returns `Result<(), OriginateError>`; an `ErrorEndpoint` refuses a block with `OriginateError::VariablesNotSupported` where it dropped it |
+| `BridgeDialString::new(groups)` returns `BridgeDialString` | returns `Result<BridgeDialString, OriginateError>`, refusing what parse and config load refuse: more legs or groups than the switch splits off, and a group whose bracket spans legs (`BracketSpansLegs`) |
+| `BridgeDialString::groups_mut()` | removed; build a new one with `new` |

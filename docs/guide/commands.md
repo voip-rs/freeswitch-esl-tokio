@@ -123,7 +123,7 @@ let bridge = BridgeDialString::new(vec![
         Endpoint::SofiaGateway(SofiaGateway::new("secondary", "18005551234")),
     ],
     vec![Endpoint::SofiaGateway(SofiaGateway::new("backup", "18005551234"))],
-]);
+])?;
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
 // Use with the bridge dptools application

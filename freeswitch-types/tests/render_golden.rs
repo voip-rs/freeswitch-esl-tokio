@@ -542,7 +542,9 @@ fn bridge_corpus(records: &mut Vec<String>) {
     let ep1: Endpoint = SofiaGateway::new("gw-a", "it's,weird").into();
     let ep2: Endpoint = SofiaGateway::new("gw-b", "a|b\\c").into();
     let ep3: Endpoint = ErrorEndpoint::new(HangupCause::NoRouteDestination).into();
-    let bridge = BridgeDialString::new(vec![vec![ep1, ep2], vec![ep3]]).with_variables(vars);
+    let bridge = BridgeDialString::new(vec![vec![ep1, ep2], vec![ep3]])
+        .unwrap()
+        .with_variables(vars);
     let block_parse = BlockParse::default();
     let rendered = bridge
         .display_with(block_parse)

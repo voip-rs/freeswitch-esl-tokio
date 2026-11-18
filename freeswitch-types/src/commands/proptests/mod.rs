@@ -479,7 +479,7 @@ fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
         }
         groups.push(endpoints);
     }
-    let bridge = BridgeDialString::new(groups);
+    let bridge = BridgeDialString::new(groups).ok()?;
     Some(match &spec.global {
         Some(vars) => bridge.with_variables(block(VariablesType::Default, vars)?),
         None => bridge,
