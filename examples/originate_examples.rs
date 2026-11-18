@@ -238,7 +238,7 @@ fn print_endpoint_examples(block_parse: BlockParse) {
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")),
         "1000",
     )
-    // Safe unwraps: "enum" is a valid name, and a named dialplan fits an extension
+    // Safe unwraps: only "undef" is refused as a name, and a named dialplan fits an extension
     .dialplan(DialplanType::named("enum").unwrap())
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 1000 enum

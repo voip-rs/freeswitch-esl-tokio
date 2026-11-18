@@ -301,8 +301,8 @@ Key design choices:
 
 - **`DialplanType`** — serde uses `"xml"`/`"inline"` (lowercase, config-friendly).
   `Display` uses `"XML"`/`"inline"` (wire format). Independent representations.
-  Any other name serializes as itself, kept as the switch receives it; an
-  `Originate` config refuses `undef`.
+  Any other name serializes as itself, kept as the switch receives it;
+  `undef` in any case is refused, as the switch reads it as absent.
 - **`Variables`** — flat YAML map deserializes as `VariablesType::Default` (the
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.

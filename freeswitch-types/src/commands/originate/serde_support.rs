@@ -29,15 +29,6 @@ impl TryFrom<OriginateRaw> for Originate {
         raw.endpoint
             .check_expanded(DialStringCarrier::EslApi)?;
         check_dialplan_fits(&raw.target, dialplan.as_ref())?;
-        if dialplan
-            .as_ref()
-            .is_some_and(|dp| {
-                dp.name()
-                    .eq_ignore_ascii_case(UNDEF)
-            })
-        {
-            return Err(OriginateError::UndefPositional("dialplan"));
-        }
         if let OriginateTarget::InlineApplications(ref apps) = raw.target {
             if apps.is_empty() {
                 return Err(OriginateError::EmptyInlineApplications);

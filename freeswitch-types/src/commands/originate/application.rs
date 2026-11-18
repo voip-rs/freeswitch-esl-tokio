@@ -8,6 +8,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::switch_passes::originate_function::UNDEF;
+
 /// The dialplan module a transfer looks up: `inline`, `XML`, or any other name.
 ///
 /// `originate_function` hands whatever word sits in the dialplan slot to the transfer, and a
@@ -31,11 +33,18 @@ impl DialplanType {
 
     /// The dialplan module registered under `name`. `inline` and `xml` in any case resolve to
     /// [`INLINE`](Self::INLINE) and [`XML`](Self::XML).
+    ///
+    /// Refuses `undef` in any case, which `originate_function` reads as an absent argument.
     pub fn named(name: impl Into<String>) -> Result<Self, ParseDialplanTypeError> {
-        Ok(Self::from_name(name.into()))
+        let name = name.into();
+        if name.eq_ignore_ascii_case(UNDEF) {
+            return Err(ParseDialplanTypeError(name));
+        }
+        Ok(Self::from_name(name))
     }
 
-    /// `name` resolved to a known dialplan where it reads as one.
+    /// `name` resolved to a known dialplan where it reads as one. The caller has already
+    /// read `undef` as absent.
     pub(crate) fn from_name(name: String) -> Self {
         if name.eq_ignore_ascii_case("inline") {
             Self::INLINE
@@ -86,7 +95,17 @@ impl fmt::Display for DialplanType {
     }
 }
 
-parse_error! { ParseDialplanTypeError("dialplan type"); }
+/// A dialplan name the switch reads as an absent argument: `undef` in any case.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseDialplanTypeError(pub String);
+
+impl fmt::Display for ParseDialplanTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("dialplan named undef, which the switch reads as absent")
+    }
+}
+
+impl std::error::Error for ParseDialplanTypeError {}
 
 impl FromStr for DialplanType {
     type Err = ParseDialplanTypeError;
