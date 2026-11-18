@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::sdp::error::{SdpCodecError, SdpWarning};
 use crate::sdp::num::atoi_prefix;
+use crate::sdp::session;
 use crate::sdp::SdpDirection;
 
 /// Cursor over an `a=rtpmap`/`a=fmtp` attribute value.
@@ -166,7 +167,7 @@ pub(super) struct AttrTables {
 }
 
 /// Collect a section's rtpmap and fmtp attributes into payload-type lookup tables.
-pub(super) fn attribute_tables(media: &sdp_types::Media) -> Result<AttrTables, SdpCodecError> {
+pub(super) fn attribute_tables(media: &session::Media) -> Result<AttrTables, SdpCodecError> {
     let mut tables = AttrTables {
         rtpmap: HashMap::new(),
         fmtp: HashMap::new(),
@@ -207,7 +208,7 @@ pub(super) fn attribute_tables(media: &sdp_types::Media) -> Result<AttrTables, S
 
 /// Return ptime from the first matching attribute, recording a warning if unparseable.
 pub(super) fn ptime_from_attrs(
-    attrs: &[sdp_types::Attribute],
+    attrs: &[session::Attribute],
     name: &str,
     warnings: &mut Vec<SdpWarning>,
 ) -> Option<u32> {
@@ -253,7 +254,7 @@ const DIRECTION_ATTRIBUTES: [&str; 4] = ["sendrecv", "sendonly", "recvonly", "in
 /// attribute names are case-sensitive — and is warned about instead of leaving the
 /// caller to read the enclosing level's direction as the peer's.
 pub(super) fn direction_from_attrs(
-    attrs: &[sdp_types::Attribute],
+    attrs: &[session::Attribute],
     warnings: &mut Vec<SdpWarning>,
 ) -> Option<SdpDirection> {
     for attr in attrs

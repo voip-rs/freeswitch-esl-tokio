@@ -22,18 +22,36 @@ const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = true;
 const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
+const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = true;
+const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = true;
 
 const PAYLOAD_TYPES: &[&str] = &[
     "0", "3", "8", "9", "13", "18", "34", "96", "97", "101", "127",
 ];
-const ODD_FORMATS: &[&str] = &["1", "2", "19", "128", "*", "abc", "96x"];
+/// Static payload types sofia's well-known table names and RFC 3551 leaves unassigned.
+const SOFIA_ONLY_STATIC: &[&str] = &["1", "2", "19"];
+const ODD_FORMATS: &[&str] = &["128", "*", "abc", "96x"];
 
-fn payload_type() -> impl Strategy<Value = String> {
-    prop_oneof![
-        8 => select(PAYLOAD_TYPES),
-        1 => select(ODD_FORMATS),
-    ]
-    .prop_map(str::to_owned)
+fn payload_type() -> BoxedStrategy<String> {
+    let known = select(PAYLOAD_TYPES).prop_map(str::to_owned);
+    let odd = select(ODD_FORMATS).prop_map(str::to_owned);
+    if EXCLUDE_SOFIA_ONLY_STATIC_NAMES {
+        prop_oneof![8 => known, 1 => odd].boxed()
+    } else {
+        let sofia_only = select(SOFIA_ONLY_STATIC).prop_map(str::to_owned);
+        prop_oneof![8 => known, 1 => odd, 1 => sofia_only].boxed()
+    }
+}
+
+/// The payload type an `a=rtpmap` or `a=fmtp` names.
+fn attribute_payload_type() -> BoxedStrategy<String> {
+    if EXCLUDE_UNREADABLE_PAYLOAD_TYPE {
+        select(PAYLOAD_TYPES)
+            .prop_map(str::to_owned)
+            .boxed()
+    } else {
+        payload_type().boxed()
+    }
 }
 
 fn rtpmap() -> impl Strategy<Value = String> {
@@ -50,13 +68,13 @@ fn rtpmap() -> impl Strategy<Value = String> {
     );
     let rate = select(&["8000", "16000", "48000", "90000"][..]);
     let channels = select(&["", "/1", "/2"][..]);
-    (payload_type(), name, rate, channels)
+    (attribute_payload_type(), name, rate, channels)
         .prop_map(|(pt, name, rate, ch)| format!("a=rtpmap:{pt} {name}/{rate}{ch}"))
 }
 
 fn fmtp() -> impl Strategy<Value = String> {
     let params = select(&["0-16", "useinbandfec=1", "octet-align=1; mode-set=0,2", ""][..]);
-    (payload_type(), params).prop_map(|(pt, params)| format!("a=fmtp:{pt} {params}"))
+    (attribute_payload_type(), params).prop_map(|(pt, params)| format!("a=fmtp:{pt} {params}"))
 }
 
 fn direction() -> impl Strategy<Value = String> {
@@ -128,7 +146,15 @@ fn m_line() -> impl Strategy<Value = String> {
             "RTP/AVP/TCP",
         ][..],
     );
-    (media, port, proto, vec(payload_type(), 0..4)).prop_map(|(media, port, proto, formats)| {
+    (media, port, proto, vec(payload_type(), 0..4)).prop_map(|(media, port, proto, mut formats)| {
+        if EXCLUDE_REPEATED_PAYLOAD_TYPE {
+            let mut seen = Vec::new();
+            formats.retain(|pt| {
+                let first = !seen.contains(pt);
+                seen.push(pt.clone());
+                first
+            });
+        }
         format!("m={media} {port} {proto} {}", formats.join(" "))
             .trim_end()
             .to_owned()

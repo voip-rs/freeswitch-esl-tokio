@@ -52,7 +52,7 @@ sip-header, which this crate does not re-export.
   all public types. Disable with `default-features = false` if you only need
   wire-format rendering and parsing without pulling in serde.
 - **`sdp`** — enables the `sdp` module (`CodecString`, `SdpCodecs`,
-  `CodecImplementation`), pulling in `sdp-types`.
+  `CodecImplementation`), with no further dependency.
 
 ## Usage
 

@@ -1,5 +1,18 @@
 //! Collection of codecs parsed from a complete SDP session description.
 //!
+//! An SDP is read the way FreeSWITCH reads it: sofia-sip's `sdp_parse` decides which bytes form a
+//! line, which section a line belongs to and which lines are skipped. Where that parser would
+//! refuse the offer, or stop reading it early, the parse here goes on as far as extraction can,
+//! and says so: [`SdpWarning::SwitchRejects`] names the first refusal and
+//! [`SdpWarning::SwitchStopsReading`] the byte where the switch's reading ends, each with a byte
+//! offset into the input. The switch read exactly the input before a stop, so parsing that prefix
+//! gives the switch's view of the offer.
+//!
+//! Only the lines extraction reads (`m=`, `a=`) are interpreted. The values of the others (`o=`,
+//! `c=`, `b=`, `t=`, `r=`, `z=`, `k=`) are not validated, so an offer the switch refuses for a
+//! malformed value on one of them alone carries no warning. Sections the codec string excludes
+//! are still parsed, so they can warn where the switch has no occasion to.
+//!
 //! Line numbers in this module index FreeSWITCH `v1.11.1`
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
@@ -13,13 +26,14 @@ mod switch_reads;
 mod testutil;
 
 use attrs::{direction_from_attrs, ptime_from_attrs};
-use media_section::{is_image, parse_media_section, proto_has_rtp, SessionDefaults};
+use media_section::{is_image, parse_media_section, SessionDefaults};
 
 use crate::sdp::{
     codec::{NonCodecPayload, SdpCodec, SdpDirection, SdpMediaType},
     codec_string::{CodecString, CodecStringEntry},
     error::{CodecStringError, SdpCodecError, SdpWarning, UnmappedPayload},
     options::CodecStringOptions,
+    session,
 };
 
 /// A single entry in a parsed SDP offer.
@@ -127,31 +141,39 @@ pub struct SdpCodecs {
 
 impl SdpCodecs {
     /// Parse an SDP session description from a UTF-8 string.
+    ///
+    /// Fails only where extraction cannot proceed: the first line is not exactly `v=0`, an `m=`
+    /// port is above 65535, or (from [`parse_bytes`](Self::parse_bytes)) an `m=` or `a=` line is
+    /// not UTF-8. Everything the switch would refuse comes back as a warning instead.
     pub fn parse(sdp: &str) -> Result<Self, SdpCodecError> {
         Self::parse_bytes(sdp.as_bytes())
     }
 
-    /// Parse an SDP session description from bytes.
+    /// Parse an SDP session description from bytes; see [`parse`](Self::parse).
     pub fn parse_bytes(bytes: &[u8]) -> Result<Self, SdpCodecError> {
-        let session = sdp_types::Session::parse(bytes)
+        let session = session::parse(bytes)
             .map_err(|e| SdpCodecError::parse_failure("failed to parse SDP", e))?;
-        Self::from_session(&session)
+        Ok(Self::from_session(session))
     }
 
-    fn from_session(session: &sdp_types::Session) -> Result<Self, SdpCodecError> {
+    fn from_session(session: session::Session) -> Self {
+        let session::Session {
+            attributes,
+            medias,
+            warnings,
+        } = session;
         let mut result = Self {
             sections: Vec::new(),
-            warnings: Vec::new(),
+            warnings,
         };
 
         // Session-level defaults; media-level attributes override these per section.
-        let session_ptime = ptime_from_attrs(&session.attributes, "ptime", &mut result.warnings);
-        let session_maxptime =
-            ptime_from_attrs(&session.attributes, "maxptime", &mut result.warnings);
-        let session_direction = direction_from_attrs(&session.attributes, &mut result.warnings)
+        let session_ptime = ptime_from_attrs(&attributes, "ptime", &mut result.warnings);
+        let session_maxptime = ptime_from_attrs(&attributes, "maxptime", &mut result.warnings);
+        let session_direction = direction_from_attrs(&attributes, &mut result.warnings)
             .unwrap_or(SdpDirection::SendRecv);
 
-        for media in &session.medias {
+        for media in &medias {
             // SdpMediaType::from_str is infallible (Err = std::convert::Infallible).
             let media_type: SdpMediaType = match media
                 .media
@@ -182,7 +204,7 @@ impl SdpCodecs {
                 section
                     .entries
                     .push(SdpCodecEntry::T38);
-            } else if proto_has_rtp(&media.proto) {
+            } else if session::proto_has_rtp(&media.proto) {
                 // Staged locally: one structurally broken section must not discard
                 // what every other section already parsed.
                 let defaults = SessionDefaults {
@@ -215,7 +237,7 @@ impl SdpCodecs {
                 .push(section);
         }
 
-        Ok(result)
+        result
     }
 
     /// Every `m=` section the offer carried, in offer order.

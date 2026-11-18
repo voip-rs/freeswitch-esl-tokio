@@ -10,10 +10,9 @@ use std::fmt;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SdpCodecError {
-    /// The `sdp-types` crate could not parse the SDP blob.
+    /// The input is not an SDP extraction can read.
     ///
-    /// The underlying parse error is accessible via [`std::error::Error::source`].
-    /// The `sdp-types` type is not exposed in any public signature.
+    /// [`std::error::Error::source`] names the fault and its byte offset.
     ParseFailure {
         /// Human-readable description of what failed.
         message: String,
@@ -34,9 +33,6 @@ pub enum SdpCodecError {
 
 impl SdpCodecError {
     /// Construct a [`SdpCodecError::ParseFailure`] from a message and a source error.
-    ///
-    /// The source error is boxed so the `sdp-types` concrete type does not appear
-    /// in any public signature.
     pub(crate) fn parse_failure(
         message: impl Into<String>,
         source: impl std::error::Error + Send + Sync + 'static,

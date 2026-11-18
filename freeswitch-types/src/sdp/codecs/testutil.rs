@@ -4,7 +4,7 @@ use crate::sdp::{SdpCodec, SdpCodecEntry};
 
 /// The session lines every fixture SDP needs before its first `m=`.
 pub(super) fn sdp_header() -> String {
-    "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\ns=-\r\nt=0 0\r\n".to_string()
+    "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\ns=-\r\nc=IN IP4 192.0.2.1\r\nt=0 0\r\n".to_string()
 }
 
 /// The RTP codecs among a section's entries, dropping T.38.

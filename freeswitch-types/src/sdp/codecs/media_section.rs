@@ -4,6 +4,7 @@
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
 use crate::sdp::error::{SdpCodecError, SdpWarning};
+use crate::sdp::session;
 use crate::sdp::{
     NonCodecKind, NonCodecPayload, SdpCodec, SdpCodecEntry, SdpDirection, SdpMediaType,
     UnmappedPayload,
@@ -35,28 +36,6 @@ pub(super) fn is_image(media_type: &SdpMediaType) -> bool {
     matches!(media_type, SdpMediaType::Other(s) if s.eq_ignore_ascii_case("image"))
 }
 
-/// Whether sofia would read this section's format list as RTP payload types.
-///
-/// `sdp_media_transport` matches the proto against an exact set, so a name merely
-/// containing `RTP` is not one; `sdp_media_has_rtp` then decides whether the
-/// format list, `a=rtpmap` and `a=fmtp` are read into the section's rtpmap list at
-/// all. The bare `RTP` is sofia's non-strict spelling of `RTP/AVP`.
-pub(super) fn proto_has_rtp(proto: &str) -> bool {
-    const RTP_PROTOS: [&str; 8] = [
-        "RTP",
-        "RTP/AVP",
-        "RTP/AVPF",
-        "RTP/SAVP",
-        "RTP/SAVPF",
-        "UDP/RTP/AVPF",
-        "UDP/TLS/RTP/SAVP",
-        "UDP/TLS/RTP/SAVPF",
-    ];
-    RTP_PROTOS
-        .iter()
-        .any(|p| p.eq_ignore_ascii_case(proto))
-}
-
 /// Classify an encoding name the switch negotiates outside the codec string.
 ///
 /// Matched on the canonical name the same way FreeSWITCH matches it, by
@@ -75,11 +54,11 @@ fn non_codec_kind(canonical_name: &str) -> Option<NonCodecKind> {
 /// Walk one RTP `m=` section's format list into codec entries.
 ///
 /// Returns `Err` only for structural breakage within this section (an
-/// unparseable `a=rtpmap`, `a=fmtp`, or `m=` format-list payload type) — the
+/// unparseable `a=rtpmap` or `a=fmtp`) — the
 /// caller records this as [`SdpWarning::MalformedMediaSection`] and keeps the
 /// section empty rather than aborting the whole parse.
 pub(super) fn parse_media_section(
-    media: &sdp_types::Media,
+    media: &session::Media,
     media_type: SdpMediaType,
     defaults: &SessionDefaults,
 ) -> Result<MediaSection, SdpCodecError> {
@@ -93,14 +72,7 @@ pub(super) fn parse_media_section(
 
     let tables = attribute_tables(media)?;
 
-    for pt_str in media
-        .fmt
-        .split_whitespace()
-    {
-        let pt = pt_str
-            .parse::<u8>()
-            .map_err(|_| SdpCodecError::NonNumericPayloadType(pt_str.to_string()))?;
-
+    for &pt in &media.payloads {
         // Name, clock rate, and channel count from rtpmap or RFC 3551 static table.
         let (name, clock_rate, rtpmap_channels, has_rtpmap) = if let Some((n, r, c)) = tables
             .rtpmap
@@ -599,11 +571,9 @@ mod tests {
     }
 
     #[test]
-    fn malformed_media_section_is_skipped_not_fatal() {
-        // A non-numeric payload type in the m= format list is structurally broken
-        // (same class as a malformed a=rtpmap/a=fmtp): parse_entry can't recover a
-        // pt to key rtpmap/fmtp lookups on. One bad section must not discard every
-        // other section's codecs.
+    fn an_rtp_format_parse_payload_refuses_is_reported_and_the_rest_still_read() {
+        // parse_payload refuses the whole offer at a format that is not a number below
+        // 128; extraction keeps every section and reports the refusal.
         let sdp = format!(
             concat!(
                 "{}",
@@ -617,15 +587,17 @@ mod tests {
         assert!(codec_named(&rtp, "PCMU").is_some());
         assert!(codec_named(&rtp, "PCMA").is_some());
         assert_eq!(
-            codecs
-                .warnings()
-                .len(),
-            1,
-            "the malformed section must record exactly one warning"
+            codecs.warnings(),
+            [SdpWarning::SwitchRejects {
+                reason: crate::sdp::SwitchRejection::InvalidRtpFormat,
+                offset: sdp.find("m=audio 9"),
+            }]
         );
-        assert!(matches!(
-            codecs.warnings()[0],
-            SdpWarning::MalformedMediaSection { .. }
-        ));
+        assert_eq!(
+            codecs
+                .sections()
+                .len(),
+            2
+        );
     }
 }

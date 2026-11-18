@@ -21,6 +21,7 @@ pub mod error;
 pub(crate) mod num;
 /// Options controlling which qualifiers are emitted when converting an SDP codec entry.
 pub mod options;
+pub(crate) mod session;
 pub(crate) mod static_payload;
 
 pub use available::CodecImplementation;

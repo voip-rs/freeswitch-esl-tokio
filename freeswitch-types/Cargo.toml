@@ -25,7 +25,7 @@ exclude = [
 default = ["serde", "esl"]
 serde = ["dep:serde", "sip-header-catalog/serde", "indexmap?/serde"]
 esl = ["dep:indexmap", "dep:percent-encoding"]
-sdp = ["dep:sdp-types"]
+sdp = []
 
 [package.metadata.docs.rs]
 all-features = true
@@ -35,7 +35,6 @@ sip-header-catalog = "1"
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = { version = "2", optional = true }
 indexmap = { version = "2", optional = true }
-sdp-types = { version = "0.2", optional = true }
 
 [[test]]
 name = "render_golden"
