@@ -234,7 +234,7 @@ impl EslEvent {
         &mut self,
         name: &str,
         value: &str,
-        op: fn(&mut EslArray, String),
+        op: fn(&mut EslArray, String) -> Result<(), EslArrayError>,
     ) -> Result<(), EslArrayError> {
         match self
             .header_str(name)
@@ -244,19 +244,12 @@ impl EslEvent {
                 self.set_header(name, value);
             }
             Some(existing) => {
-                let arr = match EslArray::parse(&existing) {
+                let mut arr = match EslArray::parse(&existing) {
                     Ok(arr) => arr,
-                    Err(EslArrayError::MissingPrefix) => EslArray::new(vec![existing]),
+                    Err(EslArrayError::MissingPrefix) => EslArray::new(vec![existing])?,
                     Err(e) => return Err(e),
                 };
-                if arr.len() >= crate::variables::MAX_ARRAY_ITEMS {
-                    return Err(EslArrayError::TooManyItems {
-                        count: arr.len(),
-                        max: crate::variables::MAX_ARRAY_ITEMS,
-                    });
-                }
-                let mut arr = arr;
-                op(&mut arr, value.into());
+                op(&mut arr, value.into())?;
                 self.set_header(name, arr.to_string());
             }
         }

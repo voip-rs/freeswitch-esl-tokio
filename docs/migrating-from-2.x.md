@@ -100,3 +100,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `"JSON".parse::<EventFormat>()` and any other casing of `plain`, `json`, `xml` | refused; the token is parsed in its wire case only. Serde is unchanged: it reads the variant name (`"Json"`), as in 2.x |
 | `EventSubscription::event_types_raw_mut()`, `custom_subclasses_mut()`, `filters_mut()` | removed, since a push through them skipped the wire checks; add through `event_raw`, `events_raw`, `custom_subclass`, `custom_subclasses`, `filter` or `filter_raw`, which refuse what would break the `event` or `filter` line |
 | `InvalidHeaderName` | `InvalidHeaderNameError` |
+| `EslArray::new(items)` returns `EslArray`; `push(v)`, `unshift(v)` return `()` | return `Result<_, EslArrayError>`, refusing with `TooManyItems` past `MAX_ARRAY_ITEMS`, as `parse` does; deserializing an `EslArray` refuses the same |

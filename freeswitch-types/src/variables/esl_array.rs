@@ -3,13 +3,13 @@ use std::fmt;
 const ARRAY_HEADER: &str = "ARRAY::";
 const ARRAY_SEPARATOR: &str = "|:";
 
-/// Maximum items accepted by [`EslArray::parse`].
+/// Maximum items an [`EslArray`] holds, however it is built.
 ///
 /// Matches the index bound in FreeSWITCH `switch_event.c`
 /// (`switch_event_base_add_header`, `if (index > -1 && index <= 4000)`).
 pub const MAX_ARRAY_ITEMS: usize = 4000;
 
-/// Errors from [`EslArray::parse`].
+/// Errors from building an [`EslArray`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum EslArrayError {
@@ -37,10 +37,27 @@ impl fmt::Display for EslArrayError {
 
 impl std::error::Error for EslArrayError {}
 
+fn check_item_count(count: usize) -> Result<(), EslArrayError> {
+    if count > MAX_ARRAY_ITEMS {
+        return Err(EslArrayError::TooManyItems {
+            count,
+            max: MAX_ARRAY_ITEMS,
+        });
+    }
+    Ok(())
+}
+
 /// Parses FreeSWITCH `ARRAY::item1|:item2|:item3` format
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct EslArray(Vec<String>);
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for EslArray {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::new(Vec::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
 
 impl EslArray {
     /// Wire marker every `ARRAY::` value starts with.
@@ -62,31 +79,34 @@ impl EslArray {
             .split(ARRAY_SEPARATOR)
             .map(String::from)
             .collect();
-        let count = items.len();
-        if count > MAX_ARRAY_ITEMS {
-            return Err(EslArrayError::TooManyItems {
-                count,
-                max: MAX_ARRAY_ITEMS,
-            });
-        }
-        Ok(Self(items))
+        Self::new(items)
     }
 
     /// Create a new array from a vec of items.
-    pub fn new(items: Vec<String>) -> Self {
-        Self(items)
+    ///
+    /// Returns [`EslArrayError::TooManyItems`] past [`MAX_ARRAY_ITEMS`], as
+    /// [`parse`](Self::parse) does.
+    pub fn new(items: Vec<String>) -> Result<Self, EslArrayError> {
+        check_item_count(items.len())?;
+        Ok(Self(items))
     }
 
-    /// Append an item to the end.
-    pub fn push(&mut self, value: String) {
+    /// Append an item to the end; refused, leaving the array as it was, past
+    /// [`MAX_ARRAY_ITEMS`].
+    pub fn push(&mut self, value: String) -> Result<(), EslArrayError> {
+        check_item_count(self.len() + 1)?;
         self.0
             .push(value);
+        Ok(())
     }
 
-    /// Prepend an item to the front.
-    pub fn unshift(&mut self, value: String) {
+    /// Prepend an item to the front; refused, leaving the array as it was,
+    /// past [`MAX_ARRAY_ITEMS`].
+    pub fn unshift(&mut self, value: String) -> Result<(), EslArrayError> {
+        check_item_count(self.len() + 1)?;
         self.0
             .insert(0, value);
+        Ok(())
     }
 
     /// The parsed array items.
