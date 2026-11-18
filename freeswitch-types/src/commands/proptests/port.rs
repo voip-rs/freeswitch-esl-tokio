@@ -50,7 +50,9 @@ proptest! {
             if left_to_the_switch(&vars) {
                 return Ok(());
             }
-            endpoint.set_variables(Some(vars));
+            if endpoint.set_variables(Some(vars)).is_err() {
+                return Ok(());
+            }
         }
         let want = endpoint
             .variables()
@@ -84,7 +86,8 @@ proptest! {
             if delivered && !refused && !unexpanded {
                 let parsed = parsed.map(|mut parsed| {
                     let vars = parsed.variables().map(|vars| (vars.scope(), pairs(vars)));
-                    parsed.set_variables(None);
+                    parsed.set_variables(None)
+                        .expect("clearing a block never refuses");
                     (parsed, vars)
                 });
                 let built = endpoint.variables().map(|vars| (vars.scope(), pairs(vars)));

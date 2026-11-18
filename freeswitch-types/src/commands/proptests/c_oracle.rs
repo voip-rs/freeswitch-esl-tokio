@@ -123,7 +123,12 @@ fn endpoints_arrive_through_the_c_passes() {
                 if left_to_the_switch(&vars) {
                     return Ok(());
                 }
-                endpoint.set_variables(Some(vars));
+                if endpoint
+                    .set_variables(Some(vars))
+                    .is_err()
+                {
+                    return Ok(());
+                }
             }
             let refused = serde_json::to_value(&endpoint)
                 .and_then(serde_json::from_value::<Endpoint>)

@@ -251,7 +251,7 @@ impl BridgeDialString {
                 )?;
                 let mut endpoint = Endpoint::parse_bare(&leg.endpoint)?;
                 if vars.is_some() {
-                    endpoint.set_variables(vars);
+                    endpoint.set_variables(vars)?;
                     if endpoint
                         .variables()
                         .is_none()

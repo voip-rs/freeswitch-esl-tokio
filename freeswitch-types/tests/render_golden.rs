@@ -344,7 +344,8 @@ fn endpoint_corpus(records: &mut Vec<String>) {
     let attach_vars = |mut ep: Endpoint| -> Endpoint {
         let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
             .expect("plain pairs build");
-        ep.set_variables(Some(vars));
+        ep.set_variables(Some(vars))
+            .expect("an endpoint that carries a block");
         ep
     };
     let base_cases: Vec<(&str, Endpoint)> = vec![

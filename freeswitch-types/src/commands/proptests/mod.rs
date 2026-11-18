@@ -471,7 +471,9 @@ fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
             }
             let mut endpoint = bare.clone();
             if let Some(vars) = vars {
-                endpoint.set_variables(Some(block(VariablesType::Channel, vars)?));
+                endpoint
+                    .set_variables(Some(block(VariablesType::Channel, vars)?))
+                    .ok()?;
             }
             endpoints.push(endpoint);
         }
@@ -506,7 +508,8 @@ fn bridge_view(bridge: &BridgeDialString) -> (ScopedPairs, Vec<Vec<(Endpoint, Sc
                 .iter()
                 .map(|endpoint| {
                     let mut bare = canonical(endpoint);
-                    bare.set_variables(None);
+                    bare.set_variables(None)
+                        .expect("clearing a block never refuses");
                     (bare, scoped(endpoint.variables()))
                 })
                 .collect()

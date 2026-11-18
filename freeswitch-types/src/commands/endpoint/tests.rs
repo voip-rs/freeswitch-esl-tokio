@@ -277,7 +277,8 @@ fn dial_string_set_variables() {
     let mut vars = Variables::new(VariablesType::Channel);
     vars.insert("k", "v")
         .unwrap();
-    ep.set_variables(Some(vars));
+    ep.set_variables(Some(vars))
+        .unwrap();
     assert!(ep
         .variables()
         .is_some());
@@ -448,7 +449,8 @@ fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
         .unwrap();
 
     let with_vars = |mut ep: Endpoint| {
-        ep.set_variables(Some(vars.clone()));
+        ep.set_variables(Some(vars.clone()))
+            .unwrap();
         ep
     };
     let cases: [Endpoint; 10] = [
@@ -514,7 +516,8 @@ fn every_endpoint_type_round_trips_at_an_argv_separator() {
         .unwrap();
 
     let with_vars = |mut ep: Endpoint| {
-        ep.set_variables(Some(vars.clone()));
+        ep.set_variables(Some(vars.clone()))
+            .unwrap();
         ep
     };
     let cases: [Endpoint; 8] = [

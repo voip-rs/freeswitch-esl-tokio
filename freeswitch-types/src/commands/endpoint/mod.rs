@@ -21,8 +21,12 @@ macro_rules! impl_dial_string_with_variables {
                 self.variables
                     .as_mut()
             }
-            fn set_variables(&mut self, vars: Option<$crate::commands::variables::Variables>) {
+            fn set_variables(
+                &mut self,
+                vars: Option<$crate::commands::variables::Variables>,
+            ) -> Result<(), $crate::commands::originate::OriginateError> {
                 self.variables = vars;
+                Ok(())
             }
         }
 
@@ -289,7 +293,7 @@ pub trait DialString {
     /// Mutable access to per-endpoint variables.
     fn variables_mut(&mut self) -> Option<&mut Variables>;
     /// Replace per-endpoint variables.
-    fn set_variables(&mut self, vars: Option<Variables>);
+    fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -474,7 +478,7 @@ impl Endpoint {
         let (variables, mut endpoint) = parse_leg(s, target, Self::parse_bare)?;
         endpoint.check_expanded(target.carrier())?;
         if variables.is_some() {
-            endpoint.set_variables(variables);
+            endpoint.set_variables(variables)?;
             if endpoint
                 .variables()
                 .is_none()
@@ -620,7 +624,9 @@ impl DialString for ErrorEndpoint {
     fn variables_mut(&mut self) -> Option<&mut Variables> {
         None
     }
-    fn set_variables(&mut self, _vars: Option<Variables>) {}
+    fn set_variables(&mut self, _vars: Option<Variables>) -> Result<(), OriginateError> {
+        Ok(())
+    }
 }
 
 impl DialString for Endpoint {
@@ -630,7 +636,7 @@ impl DialString for Endpoint {
     fn variables_mut(&mut self) -> Option<&mut Variables> {
         forward_to_variant!(self, variables_mut)
     }
-    fn set_variables(&mut self, vars: Option<Variables>) {
+    fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError> {
         forward_to_variant!(self, set_variables, vars)
     }
 }

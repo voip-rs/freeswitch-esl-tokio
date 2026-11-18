@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ChannelVariable::ExecuteOnOriginate.as_str(),
         hook.to_string(),
     )?;
-    endpoint.set_variables(Some(vars));
+    endpoint.set_variables(Some(vars))?;
     let originate = Originate::application(endpoint, Application::simple("park"));
     let wire = originate
         .display_with(block_parse)

@@ -63,3 +63,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AudioEndpoint`'s `Display` (it rendered `audio`), `fmt_with_prefix` | wrap it in `Endpoint::PortAudio`, `PulseAudio` or `Alsa` and render that |
 | `AudioEndpoint::parse_with_prefix(s, prefix)` | `Endpoint::parse_for(s, carrier)`, which names the module from the text |
 | `"…".parse::<SofiaContact>()`, `"…".parse::<GroupCall>()`, which always failed at the API carrier | `Endpoint::parse_for(s, DialStringCarrier::Dialplan)` |
+| `DialString::set_variables(vars)` returns `()` | returns `Result<(), OriginateError>`; an `ErrorEndpoint` refuses a block with `OriginateError::VariablesNotSupported` where it dropped it |

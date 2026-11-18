@@ -289,7 +289,7 @@ The per-channel variables an endpoint carries in its leading block:
 pub trait DialString {
     fn variables(&self) -> Option<&Variables>;
     fn variables_mut(&mut self) -> Option<&mut Variables>;
-    fn set_variables(&mut self, vars: Option<Variables>);
+    fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError>;
 }
 ```
 
