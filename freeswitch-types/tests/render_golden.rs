@@ -341,12 +341,11 @@ fn endpoint_corpus(records: &mut Vec<String>) {
         }
     }
 
-    let attach_vars = |mut ep: Endpoint| -> Endpoint {
+    let attach_vars = |mut ep: Endpoint| -> Result<Endpoint, OriginateError> {
         let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
             .expect("plain pairs build");
-        ep.set_variables(Some(vars))
-            .expect("an endpoint that carries a block");
-        ep
+        ep.set_variables(Some(vars))?;
+        Ok(ep)
     };
     let base_cases: Vec<(&str, Endpoint)> = vec![
         ("sofia", SofiaEndpoint::new("pbx", "192.0.2.1").into()),
@@ -379,8 +378,10 @@ fn endpoint_corpus(records: &mut Vec<String>) {
         ("alsa", Endpoint::Alsa(AudioEndpoint::new())),
     ];
     for (kind, ep) in base_cases {
-        let ep = attach_vars(ep);
-        endpoint_case(records, &format!("ep/{kind}/with-vars"), &ep, &targets3);
+        match attach_vars(ep) {
+            Ok(ep) => endpoint_case(records, &format!("ep/{kind}/with-vars"), &ep, &targets3),
+            Err(_) => rec(records, format!("ep/{kind}/with-vars"), "Err"),
+        }
     }
 }
 

@@ -477,15 +477,7 @@ impl Endpoint {
         let target = target.into();
         let (variables, mut endpoint) = parse_leg(s, target, Self::parse_bare)?;
         endpoint.check_expanded(target.carrier())?;
-        if variables.is_some() {
-            endpoint.set_variables(variables)?;
-            if endpoint
-                .variables()
-                .is_none()
-            {
-                return Err(OriginateError::VariablesNotSupported(endpoint.kind()));
-            }
-        }
+        endpoint.set_variables(variables)?;
         Ok(endpoint)
     }
 
@@ -624,8 +616,11 @@ impl DialString for ErrorEndpoint {
     fn variables_mut(&mut self) -> Option<&mut Variables> {
         None
     }
-    fn set_variables(&mut self, _vars: Option<Variables>) -> Result<(), OriginateError> {
-        Ok(())
+    fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError> {
+        match vars {
+            Some(_) => Err(OriginateError::VariablesNotSupported("error")),
+            None => Ok(()),
+        }
     }
 }
 

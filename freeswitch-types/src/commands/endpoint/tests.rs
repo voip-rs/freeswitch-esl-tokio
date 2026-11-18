@@ -311,6 +311,22 @@ fn error_endpoint_refuses_a_variable_block() {
     assert_eq!(ep.set_variables(None), Ok(()));
 }
 
+/// Parse hands the block to the endpoint, which refuses it on its own.
+#[test]
+fn parse_refuses_a_block_on_an_error_endpoint() {
+    assert_eq!(
+        Endpoint::parse_for("{k=v}error/USER_BUSY", DialStringCarrier::EslApi),
+        Err(OriginateError::VariablesNotSupported("error"))
+    );
+    assert_eq!(
+        crate::commands::BridgeDialString::parse_with(
+            "[k=v]error/USER_BUSY",
+            crate::commands::variables::BlockParse::default()
+        ),
+        Err(OriginateError::VariablesNotSupported("error"))
+    );
+}
+
 #[test]
 fn dial_string_on_endpoint_enum() {
     let mut vars = Variables::new(VariablesType::Default);
