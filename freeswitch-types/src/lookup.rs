@@ -44,6 +44,15 @@ fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
 
 parse_error! { ParseSipStatusCodeError("SIP status code"); }
 
+fn parse_sip_status_code(raw: &str) -> Result<u16, ParseSipStatusCodeError> {
+    match raw.as_bytes() {
+        [b'1'..=b'9', b'0'..=b'9', b'0'..=b'9'] => raw
+            .parse()
+            .map_err(|_| ParseSipStatusCodeError(raw.to_string())),
+        _ => Err(ParseSipStatusCodeError(raw.to_string())),
+    }
+}
+
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
 /// Implementors provide two methods -- `header_str(&str)` and `variable_str(&str)` --
@@ -338,12 +347,12 @@ pub trait HeaderLookup: SipHeaderRows {
 
     /// `Status` header (SIP response code) from `sofia::gateway_state` and
     /// `sofia::sip_user_state` events.
+    ///
+    /// Three digits, first one nonzero (RFC 3261 §7.2). 9xx is accepted: sofia-sip's
+    /// nua reports its own failures as 9xx, and these events carry them.
     fn sip_status_code(&self) -> Result<Option<u16>, ParseSipStatusCodeError> {
         self.header(EventHeader::Status)
-            .map(|raw| {
-                raw.parse()
-                    .map_err(|_| ParseSipStatusCodeError(raw.to_string()))
-            })
+            .map(parse_sip_status_code)
             .transpose()
     }
 
