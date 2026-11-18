@@ -86,7 +86,7 @@ pub use event::{
 };
 pub use headers::{case_alias_key, normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use log_level::{LogLevel, ParseLogLevelError};
-pub use lookup::{variable_key, HeaderLookup, ParseHeaderError};
+pub use lookup::{variable_key, HeaderLookup, ParseHeaderError, ParseSipStatusCodeError};
 #[cfg(feature = "esl")]
 pub use lossy_values::{LossyValue, LossyValues};
 pub use sip_header_catalog::{

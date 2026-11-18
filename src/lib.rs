@@ -178,7 +178,7 @@ pub use freeswitch_types::{
     ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
     ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
     ParseHangupCauseError, ParseHeaderError, ParseHoldActionError, ParseLogLevelError,
-    ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,
+    ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError, ParseSipStatusCodeError,
     ParseSipUserPingStatusError, ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit,
     SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName, SofiaEventSubclass,
     TimetableField, TimetablePrefix, UndeliverableVariable, UnvouchedVersion, UuidAnswer,

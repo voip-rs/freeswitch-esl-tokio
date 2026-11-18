@@ -14,7 +14,7 @@ use freeswitch_types::variables::ParseLoopbackLegError;
 use freeswitch_types::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseGatewayRegStateError, ParseHangupCauseError, ParseHeaderError, ParsePriorityError,
-    ParseTimetableError,
+    ParseSipStatusCodeError, ParseTimetableError,
 };
 use thiserror::Error;
 
@@ -194,11 +194,6 @@ pub enum EslError {
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
 /// loop can `?` a header accessor without naming the parser that failed.
-///
-/// Only for an error type this workspace owns. `sip_status_code` hands back a
-/// bare `ParseIntError`, and a `From` for that would swallow every unrelated
-/// integer parse in the caller and label it a header fault; that one accessor
-/// is converted by name.
 macro_rules! esl_error_from_header_parse {
     ($($(#[$attr:meta])* $Error:ty),+ $(,)?) => {
         $(
@@ -222,6 +217,7 @@ esl_error_from_header_parse! {
     ParseLoopbackLegError,
     ParsePriorityError,
     ParseTimetableError,
+    ParseSipStatusCodeError,
 }
 
 impl From<serde_json::Error> for EslError {
@@ -462,17 +458,13 @@ mod tests {
         assert!(!err.is_connection_error());
     }
 
-    // sip_status_code is the one accessor whose error this workspace does not
-    // own, so it converts by name and still lands in the same variant.
     #[test]
-    fn a_sip_status_code_fault_is_named_not_inferred() {
-        let inner = "notanumber"
-            .parse::<u16>()
-            .expect_err("non-numeric must fail");
-        let err = EslError::HeaderParse(ParseHeaderError::SipStatusCode(inner));
-        assert!(err
-            .to_string()
-            .starts_with("header parse error:"));
+    fn a_sip_status_code_fault_routes_through_the_union() {
+        let err = EslError::from(ParseSipStatusCodeError("notanumber".into()));
+        assert!(matches!(
+            err,
+            EslError::HeaderParse(ParseHeaderError::SipStatusCode(_))
+        ));
         assert!(!err.is_recoverable());
     }
 

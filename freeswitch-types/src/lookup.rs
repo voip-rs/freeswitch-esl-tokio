@@ -42,6 +42,8 @@ fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
         .transpose()
 }
 
+parse_error! { ParseSipStatusCodeError("SIP status code"); }
+
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
 /// Implementors provide two methods -- `header_str(&str)` and `variable_str(&str)` --
@@ -336,8 +338,13 @@ pub trait HeaderLookup: SipHeaderRows {
 
     /// `Status` header (SIP response code) from `sofia::gateway_state` and
     /// `sofia::sip_user_state` events.
-    fn sip_status_code(&self) -> Result<Option<u16>, std::num::ParseIntError> {
-        parse_opt(self.header(EventHeader::Status))
+    fn sip_status_code(&self) -> Result<Option<u16>, ParseSipStatusCodeError> {
+        self.header(EventHeader::Status)
+            .map(|raw| {
+                raw.parse()
+                    .map_err(|_| ParseSipStatusCodeError(raw.to_string()))
+            })
+            .transpose()
     }
 
     /// Parse the `State` header as a [`GatewayRegState`].
@@ -523,24 +530,17 @@ pub enum ParseHeaderError {
     /// From [`caller_timetable`](HeaderLookup::caller_timetable) and
     /// [`other_leg_timetable`](HeaderLookup::other_leg_timetable).
     Timetable(ParseTimetableError),
-    /// From [`sip_status_code`](HeaderLookup::sip_status_code), whose header
-    /// parses as a plain integer.
-    ///
-    /// Constructed by name, never through `?`: `ParseIntError` belongs to no
-    /// header, and a `From` for it would relabel every unrelated integer parse
-    /// in the caller as this one.
-    SipStatusCode(std::num::ParseIntError),
+    /// From [`sip_status_code`](HeaderLookup::sip_status_code).
+    SipStatusCode(ParseSipStatusCodeError),
 }
 
-/// `From` for each variant that owns its error type outright, plus the two
-/// trait impls over every variant.
+/// `From` for each variant, plus the two trait impls over every variant.
 ///
-/// A variant listed under `borrowed` carries an error type this crate does not
-/// own and cannot claim: it gets the trait arms and no conversion.
+/// Every variant carries an error type this crate owns: a `From` for a foreign
+/// one would relabel every unrelated parse in the caller as a header fault.
 macro_rules! parse_header_error_impls {
     (
-        owned { $($(#[$attr:meta])* $Variant:ident($Error:ty)),+ $(,)? }
-        borrowed { $($(#[$battr:meta])* $BVariant:ident),+ $(,)? }
+        $($(#[$attr:meta])* $Variant:ident($Error:ty)),+ $(,)?
     ) => {
         $(
             $(#[$attr])*
@@ -555,7 +555,6 @@ macro_rules! parse_header_error_impls {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match self {
                     $($(#[$attr])* Self::$Variant(e) => e.fmt(f),)+
-                    $($(#[$battr])* Self::$BVariant(e) => e.fmt(f),)+
                 }
             }
         }
@@ -564,7 +563,6 @@ macro_rules! parse_header_error_impls {
             fn source(&self) -> Option<&(dyn ::std::error::Error + 'static)> {
                 match self {
                     $($(#[$attr])* Self::$Variant(e) => Some(e),)+
-                    $($(#[$battr])* Self::$BVariant(e) => Some(e),)+
                 }
             }
         }
@@ -572,21 +570,17 @@ macro_rules! parse_header_error_impls {
 }
 
 parse_header_error_impls! {
-    owned {
-        ChannelState(ParseChannelStateError),
-        CallState(ParseCallStateError),
-        AnswerState(ParseAnswerStateError),
-        CallDirection(ParseCallDirectionError),
-        HangupCause(ParseHangupCauseError),
-        GatewayRegState(ParseGatewayRegStateError),
-        LoopbackLeg(ParseLoopbackLegError),
-        #[cfg(feature = "esl")]
-        Priority(ParsePriorityError),
-        Timetable(ParseTimetableError),
-    }
-    borrowed {
-        SipStatusCode,
-    }
+    ChannelState(ParseChannelStateError),
+    CallState(ParseCallStateError),
+    AnswerState(ParseAnswerStateError),
+    CallDirection(ParseCallDirectionError),
+    HangupCause(ParseHangupCauseError),
+    GatewayRegState(ParseGatewayRegStateError),
+    LoopbackLeg(ParseLoopbackLegError),
+    #[cfg(feature = "esl")]
+    Priority(ParsePriorityError),
+    Timetable(ParseTimetableError),
+    SipStatusCode(ParseSipStatusCodeError),
 }
 
 #[cfg(test)]
@@ -595,6 +589,19 @@ mod tests {
     use crate::variables::{LoopbackChannelName, LoopbackHangupCause, LoopbackLeg};
     use std::collections::HashMap;
     use std::error::Error;
+
+    #[test]
+    fn sip_status_code_keeps_the_rejected_value() {
+        let mut map = HashMap::new();
+        assert_eq!(map.sip_status_code(), Ok(None));
+        map.insert("Status".to_string(), "486".to_string());
+        assert_eq!(map.sip_status_code(), Ok(Some(486)));
+        map.insert("Status".to_string(), "70000".to_string());
+        assert_eq!(
+            map.sip_status_code(),
+            Err(ParseSipStatusCodeError("70000".into()))
+        );
+    }
 
     #[test]
     fn every_accessor_error_converts_into_the_union() {
@@ -632,11 +639,8 @@ mod tests {
                 "Timetable(ParseTimetableError",
             ),
             (
-                ParseHeaderError::SipStatusCode(
-                    "x".parse::<u16>()
-                        .expect_err("non-numeric must fail"),
-                ),
-                "SipStatusCode(ParseIntError",
+                ParseSipStatusCodeError("x".into()).into(),
+                "SipStatusCode(ParseSipStatusCodeError",
             ),
         ];
         for (err, expected) in cases {

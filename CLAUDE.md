@@ -99,11 +99,8 @@ methods (`with_foo()`).
   global claims: `?` on *any* integer parse anywhere in a caller's function then
   produces our error, relabelled as a header or wire fault it never touched. It
   also burns the single `From<E>` slot, so the next accessor that fails the same
-  way can never have its own variant. Give the variant a name and convert with
-  `.map_err(Variant)` at the one call site. `ParseHeaderError::SipStatusCode` is
-  the standing example. Wrap the foreign error in an owned newtype when a whole
-  family of accessors starts needing it — planned for `sip_status_code` at the
-  next major, since narrowing its return type is a break.
+  way can never have its own variant. Map the foreign error into an owned one
+  at the call site, as `sip_status_code` does with `ParseSipStatusCodeError`.
 
 ## Method Signature Conventions
 
