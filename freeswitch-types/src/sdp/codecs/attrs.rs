@@ -1,5 +1,8 @@
 //! `a=rtpmap`/`a=fmtp`/`a=ptime`/direction attribute parsing.
 //!
+//! Attribute names match in any case, as `su_casematch` in sofia's `parse_media_attr` and
+//! `strcasecmp` in the switch's own attribute walk (`switch_core_media.c:13658`) match them.
+//!
 //! Line numbers in this module index FreeSWITCH `v1.11.1`
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
@@ -53,16 +56,12 @@ pub(super) fn attribute_tables(
         fmtp: HashMap::new(),
     };
 
-    // Attribute names are compared byte-exactly here and in ptime_from_attrs/
-    // direction_from_attrs below, unlike FreeSWITCH's own attribute walk, which uses
-    // strcasecmp (switch_core_media.c:13658). RFC 8866 makes attribute names
-    // case-sensitive, so byte-exact stays the intended behaviour here; this is a
-    // documented divergence, not an oversight.
     for attr in &media.attributes {
         let name = attr
             .attribute
             .as_str();
-        if name != "rtpmap" && name != "fmtp" {
+        let fmtp = name.eq_ignore_ascii_case("fmtp");
+        if !fmtp && !name.eq_ignore_ascii_case("rtpmap") {
             continue;
         }
         let value = attr
@@ -75,7 +74,7 @@ pub(super) fn attribute_tables(
             });
             continue;
         };
-        if name == "fmtp" {
+        if fmtp {
             tables
                 .fmtp
                 .insert(pt, rest.to_string());
@@ -97,7 +96,10 @@ pub(super) fn ptime_from_attrs(
 ) -> Option<u32> {
     attrs
         .iter()
-        .find(|a| a.attribute == name)
+        .find(|a| {
+            a.attribute
+                .eq_ignore_ascii_case(name)
+        })
         .and_then(|a| {
             a.value
                 .as_deref()
@@ -127,43 +129,29 @@ pub(super) fn parse_ptime_value(
     }
 }
 
-/// The direction attribute names, which carry no value (`a=sendrecv`, never
-/// `a=sendrecv:…`).
-const DIRECTION_ATTRIBUTES: [&str; 4] = ["sendrecv", "sendonly", "recvonly", "inactive"];
-
-/// Return the first direction attribute from the list, if any.
+/// The direction the last direction attribute in the list sets, if any.
 ///
-/// A value-less attribute naming a direction in another case is not one — RFC 8866
-/// attribute names are case-sensitive — and is warned about instead of leaving the
-/// caller to read the enclosing level's direction as the peer's.
-pub(super) fn direction_from_attrs(
-    attrs: &[session::Attribute],
-    warnings: &mut Vec<SdpWarning>,
-) -> Option<SdpDirection> {
-    for attr in attrs
+/// `parse_session_attr` and `parse_media_attr` match the name in any case, whatever value
+/// follows it, and each one overwrites the mode the one before it set.
+pub(super) fn direction_from_attrs(attrs: &[session::Attribute]) -> Option<SdpDirection> {
+    const DIRECTIONS: [SdpDirection; 4] = [
+        SdpDirection::SendRecv,
+        SdpDirection::SendOnly,
+        SdpDirection::RecvOnly,
+        SdpDirection::Inactive,
+    ];
+    attrs
         .iter()
-        .filter(|a| {
-            a.value
-                .is_none()
+        .filter_map(|attr| {
+            DIRECTIONS
+                .into_iter()
+                .find(|direction| {
+                    direction
+                        .to_string()
+                        .eq_ignore_ascii_case(&attr.attribute)
+                })
         })
-    {
-        if !DIRECTION_ATTRIBUTES
-            .iter()
-            .any(|d| d.eq_ignore_ascii_case(&attr.attribute))
-        {
-            continue;
-        }
-        match attr
-            .attribute
-            .parse::<SdpDirection>()
-        {
-            Ok(direction) => return Some(direction),
-            Err(_) => warnings.push(SdpWarning::non_canonical_direction_attribute(
-                &attr.attribute,
-            )),
-        }
-    }
-    None
+        .next_back()
 }
 
 /// Extract a named parameter value from a semicolon-delimited fmtp string.
@@ -310,26 +298,6 @@ mod tests {
             codecs.sections()[0].direction(),
             crate::sdp::SdpDirection::RecvOnly
         );
-    }
-
-    #[test]
-    fn non_canonical_direction_attribute_warns_instead_of_inheriting_silently() {
-        // RFC 8866 attribute names are case-sensitive, so `a=SENDONLY` is not a
-        // direction. Inheriting the session's without a word makes a one-way call
-        // read as bidirectional in the parse output.
-        let sdp = format!(
-            "{}a=sendrecv\r\nm=audio 5004 RTP/AVP 0\r\na=SENDONLY\r\n",
-            sdp_header()
-        );
-        let codecs = SdpCodecs::parse(&sdp).unwrap();
-        assert_eq!(
-            codecs.sections()[0].direction(),
-            crate::sdp::SdpDirection::SendRecv
-        );
-        assert!(matches!(
-            codecs.warnings()[0],
-            SdpWarning::NonCanonicalDirectionAttribute { .. }
-        ));
     }
 
     #[test]

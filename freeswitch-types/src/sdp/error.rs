@@ -486,13 +486,6 @@ impl SdpWarning {
         }
     }
 
-    /// Construct a [`NonCanonicalDirectionAttribute`](SdpWarning::NonCanonicalDirectionAttribute) warning.
-    pub(crate) fn non_canonical_direction_attribute(attribute: impl Into<String>) -> Self {
-        Self::NonCanonicalDirectionAttribute {
-            attribute: attribute.into(),
-        }
-    }
-
     /// Construct a [`CodecStringTruncated`](SdpWarning::CodecStringTruncated) warning.
     pub(crate) fn codec_string_truncated(entries: usize, limit: usize) -> Self {
         Self::CodecStringTruncated { entries, limit }
@@ -747,11 +740,6 @@ mod tests {
                 SdpWarning::codec_name_unrepresentable("bad,name", "contains a delimiter"),
                 "8 bytes",
                 "bad,name",
-            ),
-            (
-                SdpWarning::non_canonical_direction_attribute("SENDONLY"),
-                "8 bytes",
-                "SENDONLY",
             ),
         ];
         for (warning, expected, forbidden) in cases {

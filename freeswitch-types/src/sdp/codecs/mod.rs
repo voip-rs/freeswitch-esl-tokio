@@ -170,8 +170,7 @@ impl SdpCodecs {
         // Session-level defaults; media-level attributes override these per section.
         let session_ptime = ptime_from_attrs(&attributes, "ptime", &mut result.warnings);
         let session_maxptime = ptime_from_attrs(&attributes, "maxptime", &mut result.warnings);
-        let session_direction = direction_from_attrs(&attributes, &mut result.warnings)
-            .unwrap_or(SdpDirection::SendRecv);
+        let session_direction = direction_from_attrs(&attributes).unwrap_or(SdpDirection::SendRecv);
 
         for media in &medias {
             // SdpMediaType::from_str is infallible (Err = std::convert::Infallible).
@@ -192,8 +191,7 @@ impl SdpCodecs {
                 formats: media
                     .fmt
                     .clone(),
-                direction: direction_from_attrs(&media.attributes, &mut result.warnings)
-                    .unwrap_or(session_direction),
+                direction: direction_from_attrs(&media.attributes).unwrap_or(session_direction),
                 entries: Vec::new(),
                 unmapped: Vec::new(),
                 non_codec: Vec::new(),
