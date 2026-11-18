@@ -154,6 +154,22 @@ impl SofiaGateway {
         .checked()
     }
 
+    /// Create a gateway endpoint under `profile`, for a gateway name holding `::`, which the
+    /// lookup key reads as written only after a profile.
+    pub fn on_profile(
+        profile: impl Into<String>,
+        gateway: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
+        Self {
+            gateway: gateway.into(),
+            destination: destination.into(),
+            profile: Some(profile.into()),
+            variables: None,
+        }
+        .checked()
+    }
+
     /// Set the SIP profile qualifier, refusing what parse refuses.
     pub fn with_profile(mut self, profile: impl Into<String>) -> Result<Self, OriginateError> {
         self.profile = Some(profile.into());
@@ -297,6 +313,22 @@ impl SofiaContact {
             user: user.into(),
             domain: domain.into(),
             profile: None,
+            variables: None,
+        }
+        .checked()
+    }
+
+    /// Create a sofia_contact expression under `profile`, for a user holding `/`, which the
+    /// function reads as part of the user only after a profile.
+    pub fn on_profile(
+        profile: impl Into<String>,
+        user: impl Into<String>,
+        domain: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
+        Self {
+            user: user.into(),
+            domain: domain.into(),
+            profile: Some(profile.into()),
             variables: None,
         }
         .checked()

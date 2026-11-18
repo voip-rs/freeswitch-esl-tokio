@@ -34,6 +34,20 @@ impl UserEndpoint {
         .checked()
     }
 
+    /// Create a user endpoint in `domain`, for an empty name, on which `user_outgoing_channel`
+    /// stops before its lookup unless a domain follows.
+    pub fn in_domain(
+        name: impl Into<String>,
+        domain: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
+        Self {
+            name: name.into(),
+            domain: Some(domain.into()),
+            variables: None,
+        }
+        .checked()
+    }
+
     /// Set the domain, refusing what parse refuses.
     pub fn with_domain(mut self, domain: impl Into<String>) -> Result<Self, OriginateError> {
         self.domain = Some(domain.into());

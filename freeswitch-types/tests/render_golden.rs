@@ -276,9 +276,7 @@ fn endpoint_corpus(records: &mut Vec<String>) {
             ("sofia", SofiaEndpoint::new("pbx", v).map(Endpoint::from)),
             (
                 "sofia-gateway",
-                SofiaGateway::new("gw1", v)
-                    .and_then(|ep| ep.with_profile("internal"))
-                    .map(Endpoint::from),
+                SofiaGateway::on_profile("internal", "gw1", v).map(Endpoint::from),
             ),
             (
                 "loopback",
@@ -288,15 +286,11 @@ fn endpoint_corpus(records: &mut Vec<String>) {
             ),
             (
                 "user",
-                UserEndpoint::new(v)
-                    .and_then(|ep| ep.with_domain("example.com"))
-                    .map(Endpoint::from),
+                UserEndpoint::in_domain(v, "example.com").map(Endpoint::from),
             ),
             (
                 "sofia-contact",
-                SofiaContact::new(v, "example.com")
-                    .and_then(|ep| ep.with_profile("internal"))
-                    .map(Endpoint::from),
+                SofiaContact::on_profile("internal", v, "example.com").map(Endpoint::from),
             ),
             (
                 "group-call",
