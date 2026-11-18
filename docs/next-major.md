@@ -11,23 +11,12 @@ revisited when it is finally actionable.
 
 ## freeswitch-types 3.0
 
-### Endpoint fields need to refuse what the module misreads
+### `Originate` builders accept an expression endpoint
 
-A sofia profile carrying `/`, `^` or `@` or reading `gateway`, a gateway or
-gateway profile carrying `@`, a gateway key whose `::` reads at another place,
-a loopback extension or context carrying `/`, an empty loopback context or
-dialplan or either after an `app=` extension, a user name carrying `@` or empty
-without a domain, an empty audio destination, a `sofia_contact` or `group_call`
-field carrying its function's separator or what a pass reads ahead of the
-expansion, an empty `sofia_contact` domain or profile, and `:_:` in any field
-build and render, then reach the module or function as something else. Parse and config load refuse them
-(`OriginateError::UndeliverableEndpointField`); the constructors, the `with_*`
-builders and the public fields cannot until those fields sit behind fallible
-setters.
-`Originate::application`, `extension`,
-`inline` and `endpoint_mut` accept a `SofiaContact` or `GroupCall`, which
-`originate` over the API never expands; parse at the API carrier and
-`Originate` config load refuse it as `OriginateError::UnexpandedExpression`.
+`Originate::application`, `extension`, `inline` and `endpoint_mut` accept a
+`SofiaContact` or `GroupCall`, which `originate` over the API never expands;
+parse at the API carrier and `Originate` config load refuse it as
+`OriginateError::UnexpandedExpression`.
 `expand originate …` is an API carrier on which an expression endpoint does
 expand; `DialStringCarrier` does not model it.
 

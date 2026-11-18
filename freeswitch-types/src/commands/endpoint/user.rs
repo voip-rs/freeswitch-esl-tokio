@@ -87,13 +87,12 @@ impl UserEndpoint {
             Some((name, domain)) => (name, Some(domain.to_owned())),
             None => (rest, None),
         };
-        let ep = Self {
+        Self {
             name: name.into(),
             domain,
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 

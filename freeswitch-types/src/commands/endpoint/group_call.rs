@@ -113,14 +113,13 @@ impl GroupCall {
         let (group, domain) = group_at_domain
             .split_once('@')
             .ok_or_else(|| OriginateError::ParseError("group_call needs group@domain".into()))?;
-        let ep = Self {
+        Self {
             group: group.into(),
             domain: domain.into(),
             order,
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 

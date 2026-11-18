@@ -1093,10 +1093,11 @@ fn expression_fields_split_where_the_functions_split() {
         (group.group(), group.domain(), group.order()),
         ("g", "d@e", Some(GroupCallOrder::First))
     );
-    let contact = SofiaContact::new("u/x", "example.com")
-        .unwrap()
-        .with_profile("p")
-        .unwrap();
+    let contact = SofiaContact::parse_bare("${sofia_contact(p/u/x@example.com)}").unwrap();
+    assert_eq!(
+        (contact.profile(), contact.user(), contact.domain()),
+        (Some("p"), "u/x", "example.com")
+    );
     assert_eq!(
         SofiaContact::parse_bare(&contact.to_string()).unwrap(),
         contact

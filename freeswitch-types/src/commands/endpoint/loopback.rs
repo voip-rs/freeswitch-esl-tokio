@@ -172,8 +172,7 @@ impl LoopbackEndpoint {
                 variables: None,
             }
         };
-        ep.check_deliverable()?;
-        Ok(ep)
+        ep.checked()
     }
 }
 

@@ -48,6 +48,7 @@ macro_rules! impl_dial_string_with_variables {
 
             /// This value, or what `check_deliverable` refuses in it.
             fn checked(self) -> Result<Self, $crate::commands::originate::OriginateError> {
+                self.check_deliverable()?;
                 Ok(self)
             }
         }
@@ -142,12 +143,11 @@ macro_rules! impl_endpoint_parse {
                 type Error = $crate::commands::originate::OriginateError;
 
                 fn try_from(config: config::$ty) -> Result<Self, Self::Error> {
-                    let ep = Self {
+                    Self {
                         $($required: config.$required,)*
                         $($optional: config.$optional,)*
-                    };
-                    ep.check_deliverable()?;
-                    Ok(ep)
+                    }
+                    .checked()
                 }
             }
         )*

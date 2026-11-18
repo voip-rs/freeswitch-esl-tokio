@@ -91,15 +91,14 @@ impl AudioEndpoint {
 
     pub(crate) fn parse_bare(text: &str, prefix: &str) -> Result<Self, OriginateError> {
         let rest = after_prefix(text, prefix, prefix)?;
-        let ep = Self {
+        Self {
             destination: rest
                 .strip_prefix('/')
                 .filter(|d| !d.is_empty())
                 .map(str::to_string),
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 

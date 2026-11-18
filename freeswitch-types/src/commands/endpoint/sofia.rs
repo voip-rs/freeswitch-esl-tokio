@@ -372,13 +372,12 @@ impl SofiaEndpoint {
             .ok_or_else(|| {
                 OriginateError::ParseError("sofia endpoint needs profile/destination".into())
             })?;
-        let ep = Self {
+        Self {
             profile: profile.into(),
             destination: destination.into(),
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 
@@ -428,14 +427,13 @@ impl SofiaGateway {
             Some((profile, gateway)) => (Some(profile.to_owned()), gateway),
             None => (None, gateway_part),
         };
-        let ep = Self {
+        Self {
             gateway: gateway.into(),
             destination: destination.into(),
             profile,
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 
@@ -485,14 +483,13 @@ impl SofiaContact {
         let (user, domain) = user_at_domain
             .split_once('@')
             .ok_or_else(|| OriginateError::ParseError("sofia_contact needs user@domain".into()))?;
-        let ep = Self {
+        Self {
             user: user.into(),
             domain: domain.into(),
             profile,
             variables: None,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
+        }
+        .checked()
     }
 }
 

@@ -192,8 +192,11 @@ fn read_single_leg(
     ))
 }
 
-pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
-    let built = prop_oneof![
+/// An endpoint built from arbitrary fields, or what its builder refuses.
+type Built = Result<Endpoint, OriginateError>;
+
+fn built_endpoint() -> impl Strategy<Value = Built> {
+    prop_oneof![
         (text(), option::of(text()), option::of(text())).prop_map(
             |(extension, context, dialplan)| {
                 let mut ep = LoopbackEndpoint::new(extension)?;
@@ -271,11 +274,11 @@ pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
                     None => ep,
                 }))
             }),
-    ];
-    built.prop_filter_map(
-        "the builder refuses what config load refuses",
-        |built: Result<Endpoint, OriginateError>| built.ok(),
-    )
+    ]
+}
+
+pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
+    built_endpoint().prop_filter_map("the builder refuses what config load refuses", Result::ok)
 }
 
 /// Left to the switch like a block value naming a variable; an expression's own `${` is not.
@@ -469,18 +472,18 @@ type BlockSpec = (Option<char>, Vec<Entry>);
 #[derive(Debug, Clone)]
 struct BridgeSpec {
     global: Option<BlockSpec>,
-    groups: Vec<Vec<(Endpoint, Option<BlockSpec>)>>,
+    groups: Vec<Vec<(Built, Option<BlockSpec>)>>,
 }
 
 fn bridge_spec() -> impl Strategy<Value = BridgeSpec> {
     let block = || (block_separator(), entries(1..3));
-    let endpoint = (bare_endpoint(), option::of(block()));
+    let endpoint = (built_endpoint(), option::of(block()));
     (option::of(block()), vec(vec(endpoint, 1..3), 1..3))
         .prop_map(|(global, groups)| BridgeSpec { global, groups })
 }
 
-/// The bridge the spec describes, or `None` where the builder refuses a separator or a field is
-/// left to the switch's expansion.
+/// The bridge the spec describes, or `None` where a builder refuses a field or separator or a
+/// field is left to the switch's expansion.
 fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
     let block = |scope, (sep, values): &BlockSpec| {
         build_vars(scope, "v", values, *sep).filter(|vars| !left_to_the_switch(vars))
@@ -489,6 +492,9 @@ fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
     for group in &spec.groups {
         let mut endpoints = Vec::new();
         for (bare, vars) in group {
+            let bare = bare
+                .as_ref()
+                .ok()?;
             if fields_name_a_variable(bare) {
                 return None;
             }
