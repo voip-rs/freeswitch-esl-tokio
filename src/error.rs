@@ -232,6 +232,13 @@ pub enum EslError {
     /// misread.
     #[error("transfer argument refused")]
     TransferArgument(#[from] TransferArgumentError),
+
+    /// A command lacked a field it cannot be written without. Nothing was sent.
+    #[error("{field} is missing")]
+    MissingField {
+        /// Which field.
+        field: &'static str,
+    },
 }
 
 /// How mod_event_socket would misread a filter header.
@@ -417,6 +424,7 @@ impl EslError {
             EslError::WireTerminatorInField { .. } => false,
             EslError::UnsplittableFilterHeader { .. } => false,
             EslError::TransferArgument(_) => false,
+            EslError::MissingField { .. } => false,
         }
     }
 
@@ -473,6 +481,7 @@ impl EslError {
             EslError::WireTerminatorInField { .. } => false,
             EslError::UnsplittableFilterHeader { .. } => false,
             EslError::TransferArgument(_) => false,
+            EslError::MissingField { .. } => false,
         }
     }
 
@@ -806,6 +815,13 @@ mod tests {
             (
                 EslError::WireTerminatorInField {
                     field: "api command",
+                },
+                false,
+                false,
+            ),
+            (
+                EslError::MissingField {
+                    field: "sendevent event name",
                 },
                 false,
                 false,

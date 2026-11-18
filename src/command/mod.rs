@@ -389,10 +389,8 @@ impl EslCommand {
                     .header(EventHeader::EventName)
                     .map(|s| s.to_string())
             })
-            .ok_or_else(|| {
-                EslError::protocol_error(
-                    "sendevent requires Event-Name header or event_type set on the EslEvent",
-                )
+            .ok_or(EslError::MissingField {
+                field: "sendevent event name (event type or Event-Name header)",
             })
     }
 
@@ -927,6 +925,7 @@ mod tests {
         let err = cmd
             .to_wire_format()
             .unwrap_err();
+        assert!(matches!(err, EslError::MissingField { .. }), "{err}");
         assert!(!err.is_connection_error(), "{err}");
         assert!(!err.is_recoverable(), "{err}");
     }
