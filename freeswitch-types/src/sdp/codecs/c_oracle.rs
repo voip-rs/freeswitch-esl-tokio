@@ -19,7 +19,7 @@ use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
 
 /// Lines whose handling waits on a fix still to land; each fix flips its own.
 const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = false;
-const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
+const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = false;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
 const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = false;
@@ -109,6 +109,10 @@ fn noise() -> impl Strategy<Value = String> {
             "a=rtpmap:96 opus",
             "a=rtpmap:96 bad,name/8000",
             "a=rtpmap:96 opus/abc",
+            "a=rtpmap:0 opus/48000/2 extra",
+            "a=rtpmap:96 opus/48000/",
+            "a=rtpmap:96x opus/8000",
+            "a=rtpmap:96 +8000",
         ]);
     }
     if !EXCLUDE_ATTRIBUTE_NAME_CASE {
@@ -407,9 +411,12 @@ fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
                 prop_assert_eq!(u64::from(codec.clock_rate()), rm.rate, "pt {} rate", rm.pt);
                 prop_assert_eq!(codec.fmtp(), fmtp.as_deref(), "pt {} fmtp", rm.pt);
                 if let Some(params) = &rm.params {
-                    let channels = String::from_utf8_lossy(params)
-                        .parse::<u32>()
-                        .ok();
+                    // The switch reads rm_params with atoi.
+                    let channels = Some(
+                        crate::sdp::num::atoi_prefix(&String::from_utf8_lossy(params))
+                            .0
+                            .unwrap_or(0),
+                    );
                     prop_assert_eq!(codec.channels(), channels, "pt {} channels", rm.pt);
                 }
             }

@@ -430,3 +430,76 @@ fn a_payload_attribute_with_an_unreadable_type_is_dropped_alone() {
         ]
     );
 }
+
+// parse_rtpmap refuses the offer when no clock rate follows the encoding of a listed payload type.
+#[test]
+fn an_rtpmap_without_a_readable_rate_is_refused() {
+    for (line, needle) in [
+        ("a=rtpmap:96 opus\r\n", "a=rtpmap:96"),
+        ("a=rtpmap:96 opus\r/48000/2\r\n", "a=rtpmap:96"),
+        ("a=rtpmap:96 bad,name/8000\r\n", "a=rtpmap:96"),
+        ("a=rtpmap:96 opus/abc\r\n", "a=rtpmap:96"),
+    ] {
+        let sdp = format!("{HEADER}m=audio 5004 RTP/AVP 0 96\r\n{line}");
+        let codecs = SdpCodecs::parse(&sdp).unwrap();
+        assert_eq!(
+            codecs.warnings(),
+            [rejects(
+                SwitchRejection::InvalidRtpmap,
+                Some(offset_of(&sdp, needle))
+            )],
+            "{line:?}"
+        );
+        assert_eq!(names(&codecs), ["PCMU"], "{line:?}");
+        assert_eq!(
+            codecs
+                .unmapped()
+                .map(|u| u.payload_type)
+                .collect::<Vec<_>>(),
+            [96],
+            "{line:?}"
+        );
+    }
+}
+
+// parse_rtpmap checks the rate only for a payload type the m= line lists, on a live section.
+#[test]
+fn an_unlisted_or_held_rtpmap_is_not_refused() {
+    let codecs = parse("m=audio 5004 RTP/AVP 0\r\na=rtpmap:97 opus\r\n");
+    assert!(
+        codecs
+            .warnings()
+            .is_empty(),
+        "{:?}",
+        codecs.warnings()
+    );
+    let codecs = parse("m=audio 0 RTP/AVP 96\r\na=rtpmap:96 opus\r\n");
+    assert!(
+        !codecs
+            .warnings()
+            .iter()
+            .any(|w| matches!(w, SdpWarning::SwitchRejects { .. })),
+        "{:?}",
+        codecs.warnings()
+    );
+}
+
+// parse_rtpmap ignores what follows the rate, and the switch reads the channels with atoi.
+#[test]
+fn an_rtpmap_reads_as_far_as_its_rate_and_channels() {
+    let codecs = parse(
+        "m=audio 5004 RTP/AVP 96 97\r\na=rtpmap:96 opus/48000/2 extra\r\na=rtpmap:97 L16/8000/\r\n",
+    );
+    assert!(
+        codecs
+            .warnings()
+            .is_empty(),
+        "{:?}",
+        codecs.warnings()
+    );
+    let channels: Vec<_> = codecs
+        .audio()
+        .map(|c| (c.name(), c.channels()))
+        .collect();
+    assert_eq!(channels, [("opus", Some(2)), ("L16", Some(0))]);
+}

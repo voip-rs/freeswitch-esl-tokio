@@ -7,3 +7,4 @@
 cc f2f02f44eddcb759dea6fccc53246ed9b8542a0b08a16bd14bcad2cf79e076ae # shrinks to "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\nc=IN IP4 192.0.2.1\r\nt=0 0\r\nm=audio 5004 RTP/AVP 1\r\n"
 cc 145e0e553b60e20a436f40b2d1f5c12aa35325bed127b98231ef956f3686c8ff # shrinks to "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\nc=IN IP4 192.0.2.1\r\nm=audio 5004 RTP/AVP 9 9\r\na=rtpmap:9 opus/8000\r\n"
 cc 3b72a8b3a832903439adb02ee90e5249bb8c47f0f62d340fb1a9f519cd7dd0db # shrinks to "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\nc=IN IP4 192.0.2.1\r\nm=audio 5004 RTP/AVP 0\r\na=rtpmap:* opus/8000\r\n"
+cc 702ce6be8f447fdd95c210d5538958a2c0631599befcf7c294e0e8e1356e63b1 # shrinks to "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\nc=IN IP4 192.0.2.1\r\nm=audio 5004 RTP/AVP 0\r\na=rtpmap:96 opus\r\n"
