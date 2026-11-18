@@ -182,6 +182,66 @@ mod tests {
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
 
+    /// transfer_function runs its argument through switch_separate_string on a
+    /// blank: spaces split, `'` groups, `\` escapes, and a leading `^^X` picks
+    /// another delimiter.
+    #[test]
+    fn transfer_refuses_a_field_the_blank_split_would_misread() {
+        for extension in ["a b", "it's", "a\\\\b", "^^:1000:XML", "", " 1000"] {
+            let err = AppCommand::transfer(extension).expect_err(extension);
+            assert!(
+                matches!(
+                    &err,
+                    TransferArgumentError::Unsplittable { field: TransferField::Extension, value }
+                        if value == extension
+                ),
+                "{extension:?}: {err}"
+            );
+        }
+        for context in ["my ctx", "", "'ctx'", "c\\tx"] {
+            let err = AppCommand::transfer_to_context("1000", DialplanType::XML, context)
+                .expect_err(context);
+            assert!(
+                matches!(
+                    &err,
+                    TransferArgumentError::Unsplittable { field: TransferField::Context, value }
+                        if value == context
+                ),
+                "{context:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn transfer_refuses_an_extension_read_as_a_leg_selector() {
+        for extension in ["-bleg", "-BOTH", "-Both"] {
+            let err = AppCommand::transfer(extension).expect_err(extension);
+            assert!(
+                matches!(&err, TransferArgumentError::LegSelector { extension: e } if e == extension),
+                "{extension:?}: {err}"
+            );
+        }
+    }
+
+    /// A `"` only means something after `\`, a `\` only before a character it
+    /// escapes, and `^^` only at the very start.
+    #[test]
+    fn transfer_keeps_what_the_split_leaves_alone() {
+        for (extension, context) in [
+            ("+15551234567", "public"),
+            ("*98", "x^^y"),
+            ("a\"b", "default"),
+            ("a\\b", "^^:x"),
+        ] {
+            let cmd = AppCommand::transfer_to_context(extension, DialplanType::XML, context)
+                .unwrap_or_else(|e| panic!("{extension:?} {context:?}: {e}"));
+            assert_eq!(
+                extract_args(&cmd),
+                Some(format!("{extension} XML {context}").as_str())
+            );
+        }
+    }
+
     #[test]
     fn bridge_renders_the_dial_string() {
         use crate::commands::{Endpoint, SofiaGateway};
