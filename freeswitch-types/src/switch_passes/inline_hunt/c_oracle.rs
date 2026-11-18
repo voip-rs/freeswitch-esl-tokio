@@ -29,7 +29,7 @@ fn inline_targets_parse_as_the_c_hunt_reads_them() {
             if target.starts_with('&') {
                 return Ok(());
             }
-            match parse_originate_target(&target, Some(&DialplanType::Inline)) {
+            match parse_originate_target(&target, Some(&DialplanType::INLINE)) {
                 Ok(OriginateTarget::InlineApplications(apps)) => {
                     let parsed: Vec<InlineApplication> = apps
                         .iter()

@@ -75,7 +75,7 @@ async fn live_originate_application_target() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_extension_target() {
     let cmd = Originate::extension(test_9199(), "9199")
-        .dialplan(DialplanType::Xml)
+        .dialplan(DialplanType::XML)
         .unwrap()
         .context("test");
 
@@ -195,7 +195,7 @@ async fn originate_positionals(separator: Option<char>) {
         test_9199(),
         Application::new("socket", Some("127.0.0.1:1 async full")),
     )
-    .dialplan(DialplanType::Xml)
+    .dialplan(DialplanType::XML)
     .expect("an application target takes XML")
     .context("test")
     .cid_name("  Front  Desk  ")

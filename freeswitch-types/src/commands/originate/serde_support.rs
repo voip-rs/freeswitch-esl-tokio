@@ -1,14 +1,6 @@
 use super::*;
 use crate::switch_passes::originate_function::check_target_readable;
 
-/// A config's dialplan: a [`DialplanType`] spelled as its serde form, or any other name.
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
-pub(super) enum DialplanField {
-    Typed(DialplanType),
-    Named(String),
-}
-
 /// Intermediate type for serde, mirroring the old public-field layout.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct OriginateRaw {
@@ -16,7 +8,7 @@ pub(super) struct OriginateRaw {
     #[serde(flatten)]
     pub target: OriginateTarget,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dialplan: Option<DialplanField>,
+    pub dialplan: Option<DialplanType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -33,12 +25,7 @@ impl TryFrom<OriginateRaw> for Originate {
     type Error = OriginateError;
 
     fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
-        let dialplan = raw
-            .dialplan
-            .map(|field| match field {
-                DialplanField::Typed(dp) => Dialplan::Typed(dp),
-                DialplanField::Named(name) => Dialplan::from_name(name),
-            });
+        let dialplan = raw.dialplan;
         raw.endpoint
             .check_expanded(DialStringCarrier::EslApi)?;
         check_dialplan_fits(&raw.target, dialplan.as_ref())?;
@@ -101,12 +88,7 @@ impl From<Originate> for OriginateRaw {
         Self {
             endpoint: o.endpoint,
             target: o.target,
-            dialplan: o
-                .dialplan
-                .map(|dp| match dp {
-                    Dialplan::Typed(dp) => DialplanField::Typed(dp),
-                    Dialplan::Named(name) => DialplanField::Named(name),
-                }),
+            dialplan: o.dialplan,
             context: o.context,
             cid_name: o.cid_name,
             cid_num: o.cid_num,

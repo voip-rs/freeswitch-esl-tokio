@@ -64,7 +64,7 @@ let cmd = Originate::inline(gw(), vec![
 
 // Extension target with dialplan and context
 let ext_cmd = Originate::extension(gw(), "1000")
-    .dialplan(DialplanType::Xml).unwrap()
+    .dialplan(DialplanType::XML).unwrap()
     .context("default");
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
 let wire = cmd.display_with(block_parse).to_string();

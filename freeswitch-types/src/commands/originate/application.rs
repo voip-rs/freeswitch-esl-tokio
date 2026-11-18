@@ -1,63 +1,88 @@
 //! The originate command's target and dialplan: the application or extension it runs, and the
 //! dialplan module a transfer names.
+//!
+//! [`DialplanType`] keeps its representation private so a known name always resolves to its
+//! typed value: `check_dialplan_fits` and equality compare the typed `inline`, and a public
+//! variant holding a name would let `"inline"` or `"XML"` past both.
 
 use std::fmt;
 use std::str::FromStr;
 
-/// FreeSWITCH dialplan type for originate commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
-#[non_exhaustive]
-pub enum DialplanType {
-    /// Inline dialplan: applications execute directly without XML lookup.
+/// The dialplan module a transfer looks up: `inline`, `XML`, or any other name.
+///
+/// `originate_function` hands whatever word sits in the dialplan slot to the transfer, and a
+/// name no module registers hangs the channel up. Names compare ignoring ASCII case, as the
+/// switch looks a dialplan module up.
+#[derive(Debug, Clone)]
+pub struct DialplanType(Repr);
+
+#[derive(Debug, Clone)]
+enum Repr {
     Inline,
-    /// XML dialplan: route through the XML dialplan engine.
     Xml,
+    Named(String),
 }
 
 impl DialplanType {
-    pub(crate) fn wire_name(&self) -> &'static str {
-        match self {
-            Self::Inline => "inline",
-            Self::Xml => "XML",
+    /// Inline dialplan: applications execute directly without XML lookup.
+    pub const INLINE: Self = Self(Repr::Inline);
+    /// XML dialplan: route through the XML dialplan engine.
+    pub const XML: Self = Self(Repr::Xml);
+
+    /// The dialplan module registered under `name`. `inline` and `xml` in any case resolve to
+    /// [`INLINE`](Self::INLINE) and [`XML`](Self::XML).
+    pub fn named(name: impl Into<String>) -> Result<Self, ParseDialplanTypeError> {
+        Ok(Self::from_name(name.into()))
+    }
+
+    /// `name` resolved to a known dialplan where it reads as one.
+    pub(crate) fn from_name(name: String) -> Self {
+        if name.eq_ignore_ascii_case("inline") {
+            Self::INLINE
+        } else if name.eq_ignore_ascii_case("xml") {
+            Self::XML
+        } else {
+            Self(Repr::Named(name))
+        }
+    }
+
+    /// The name as the switch receives it.
+    pub fn name(&self) -> &str {
+        match &self.0 {
+            Repr::Inline => "inline",
+            Repr::Xml => "XML",
+            Repr::Named(name) => name,
+        }
+    }
+
+    pub(crate) fn is_inline(&self) -> bool {
+        matches!(self.0, Repr::Inline)
+    }
+}
+
+impl PartialEq for DialplanType {
+    fn eq(&self, other: &Self) -> bool {
+        self.name()
+            .eq_ignore_ascii_case(other.name())
+    }
+}
+
+impl Eq for DialplanType {}
+
+impl std::hash::Hash for DialplanType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for b in self
+            .name()
+            .bytes()
+        {
+            state.write_u8(b.to_ascii_lowercase());
         }
     }
 }
 
 impl fmt::Display for DialplanType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.wire_name())
-    }
-}
-
-/// The dialplan slot: a [`DialplanType`], or the name of a dialplan module it does not cover.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Dialplan {
-    Typed(DialplanType),
-    Named(String),
-}
-
-impl Dialplan {
-    pub(crate) fn from_name(name: String) -> Self {
-        match name.parse() {
-            Ok(dp) => Self::Typed(dp),
-            Err(_) => Self::Named(name),
-        }
-    }
-
-    pub(crate) fn name(&self) -> &str {
-        match self {
-            Self::Typed(dp) => dp.wire_name(),
-            Self::Named(name) => name,
-        }
-    }
-
-    pub(crate) fn typed(&self) -> Option<&DialplanType> {
-        match self {
-            Self::Typed(dp) => Some(dp),
-            Self::Named(_) => None,
-        }
+        f.write_str(self.name())
     }
 }
 
@@ -67,13 +92,27 @@ impl FromStr for DialplanType {
     type Err = ParseDialplanTypeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq_ignore_ascii_case("inline") {
-            Ok(Self::Inline)
-        } else if s.eq_ignore_ascii_case("xml") {
-            Ok(Self::Xml)
-        } else {
-            Err(ParseDialplanTypeError(s.to_string()))
+        Self::named(s)
+    }
+}
+
+/// Serialized as the name, but the known two in lowercase (`xml`), the spelling configs use.
+#[cfg(feature = "serde")]
+impl serde::Serialize for DialplanType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match &self.0 {
+            Repr::Inline => serializer.serialize_str("inline"),
+            Repr::Xml => serializer.serialize_str("xml"),
+            Repr::Named(name) => serializer.serialize_str(name),
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for DialplanType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Self::named(name).map_err(serde::de::Error::custom)
     }
 }
 
@@ -136,23 +175,22 @@ impl Application {
         &mut self.args
     }
 
-    /// Format as inline (`name:args`) or XML (`&name(args)`) syntax.
-    pub fn to_string_with_dialplan(&self, dialplan: &DialplanType) -> String {
-        match dialplan {
-            DialplanType::Inline => match &self.args {
+    /// Format as inline (`name:args`) syntax under the inline dialplan, else as an application
+    /// target (`&name(args)`), which `originate` runs whatever the dialplan.
+    pub(crate) fn to_string_with_dialplan(&self, dialplan: &DialplanType) -> String {
+        if dialplan.is_inline() {
+            return match &self.args {
                 Some(args) => format!("{}:{}", self.name, args),
                 None => self
                     .name
                     .clone(),
-            },
-            DialplanType::Xml => {
-                let args = self
-                    .args
-                    .as_deref()
-                    .unwrap_or("");
-                format!("&{}({})", self.name, args)
-            }
+            };
         }
+        let args = self
+            .args
+            .as_deref()
+            .unwrap_or("");
+        format!("&{}({})", self.name, args)
     }
 }
 

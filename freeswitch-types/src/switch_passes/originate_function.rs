@@ -4,9 +4,7 @@
 use super::inline_hunt::{
     check_inline_delimiter, split_inline_actions, split_inline_prefix, DEFAULT_INLINE_DELIMITER,
 };
-use crate::commands::originate::{
-    Application, Dialplan, DialplanType, OriginateError, OriginateTarget,
-};
+use crate::commands::originate::{Application, DialplanType, OriginateError, OriginateTarget};
 
 #[cfg(test)]
 pub(crate) mod c_oracle;
@@ -55,7 +53,7 @@ pub(crate) fn check_target_readable(target: &OriginateTarget) -> Result<(), Orig
 /// An originate's arguments after the endpoint, as the switch reads them.
 pub(crate) struct Slots {
     pub(crate) target: String,
-    pub(crate) dialplan: Option<Dialplan>,
+    pub(crate) dialplan: Option<DialplanType>,
     pub(crate) context: Option<String>,
     pub(crate) cid_name: Option<String>,
     pub(crate) cid_num: Option<String>,
@@ -79,7 +77,7 @@ impl Slots {
         let dialplan = args
             .next()
             .flatten()
-            .map(Dialplan::from_name);
+            .map(DialplanType::from_name);
         let mut next = || {
             args.next()
                 .flatten()
@@ -130,7 +128,7 @@ pub(crate) fn parse_originate_target(
         let target = OriginateTarget::Application(Application::new(name, args));
         check_target_readable(&target)?;
         Ok(target)
-    } else if matches!(dialplan, Some(DialplanType::Inline)) {
+    } else if dialplan.is_some_and(DialplanType::is_inline) {
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
         check_inline_delimiter(delimiter)?;

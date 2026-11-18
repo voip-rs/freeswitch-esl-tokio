@@ -11,14 +11,6 @@ revisited when it is finally actionable.
 
 ## freeswitch-types 3.0
 
-### `DialplanType` should carry any dialplan name
-
-`originate_function` hands whatever word sits in the dialplan slot to the
-transfer, so the type covers two of an open set. A variant holding the name
-would make it lose `Copy`, a break; `Originate::dialplan_raw` and
-`dialplan_name` carry the name beside it until then. Fold them into the variant
-and drop the pair.
-
 ### `AudioEndpoint::fmt_with_prefix` should be private
 
 It takes a `&mut fmt::Formatter`, which a caller can only obtain inside a
@@ -91,8 +83,7 @@ expand; `DialStringCarrier` does not model it.
 `originate_function` reads every argument equal to `undef` as absent, so a
 positional set to it arrives as unset, and a target set to it trips the switch's
 assert on the missing extension. Parse and config load refuse both; `extension`,
-`context`, `cid_name`, `cid_num` and `dialplan_raw` cannot until they return
-`Result`.
+`context`, `cid_name` and `cid_num` cannot until they return `Result`.
 
 ### `Originate::extension` and `application` need to refuse what `originate_function` misreads
 
@@ -109,7 +100,7 @@ refuse them; the constructors, `target_mut`, `Application::new` and
 dialplan, so an extension under `inline` and inline applications under any other
 dialplan misfire: an inline action list set under `XML` is transferred as an
 extension, no application runs, and the originate still answers `+OK` on the
-wire. `dialplan`, `dialplan_raw` and config load refuse both;
+wire. `dialplan` and config load refuse both;
 `set_dialplan` and a target swapped through `target_mut` cannot until they
 return `Result`.
 

@@ -100,13 +100,13 @@ mod tests {
 
     #[test]
     fn transfer_with_dialplan() {
-        let cmd = AppCommand::transfer("1000", Some(DialplanType::Xml), None);
+        let cmd = AppCommand::transfer("1000", Some(DialplanType::XML), None);
         assert_eq!(extract_args(&cmd), Some("1000 XML"));
     }
 
     #[test]
     fn transfer_with_dialplan_and_context() {
-        let cmd = AppCommand::transfer("1000", Some(DialplanType::Xml), Some("myctx"));
+        let cmd = AppCommand::transfer("1000", Some(DialplanType::XML), Some("myctx"));
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
 

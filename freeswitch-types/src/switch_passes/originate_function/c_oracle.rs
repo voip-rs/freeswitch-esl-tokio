@@ -49,7 +49,7 @@ pub(crate) fn target_spec() -> impl Strategy<Value = TargetSpec> {
 pub(crate) fn dialplan_spec() -> impl Strategy<Value = DialplanSpec> {
     prop_oneof![
         2 => Just(DialplanSpec::Unset),
-        1 => select(&[DialplanType::Xml, DialplanType::Inline][..]).prop_map(DialplanSpec::Typed),
+        1 => select(&[DialplanType::XML, DialplanType::INLINE][..]).prop_map(DialplanSpec::Typed),
         1 => text().prop_map(DialplanSpec::Raw),
     ]
 }
@@ -112,10 +112,10 @@ pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
     let mut originate = match &spec.dialplan {
         DialplanSpec::Unset => originate,
         DialplanSpec::Typed(dialplan) => originate
-            .dialplan(*dialplan)
+            .dialplan(dialplan.clone())
             .ok()?,
         DialplanSpec::Raw(name) => originate
-            .dialplan_raw(name)
+            .dialplan(DialplanType::named(name.as_str()).ok()?)
             .ok()?,
     };
     originate.set_context(
@@ -242,8 +242,8 @@ pub(crate) fn intended(
 ) -> (Vec<Option<String>>, SwitchTarget) {
     let inline = matches!(spec.target, TargetSpec::Inline(..));
     let dialplan = originate
-        .dialplan_name()
-        .map(str::to_owned)
+        .dialplan_type()
+        .map(DialplanType::to_string)
         .or_else(|| inline.then(|| "inline".to_owned()));
     let mut slots = vec![
         Some(ORIGINATE_ENDPOINT.to_owned()),

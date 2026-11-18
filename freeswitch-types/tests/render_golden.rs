@@ -405,13 +405,14 @@ fn o_inline_with_delim() -> Result<Originate, OriginateError> {
 }
 fn o_inline_xml_conflict() -> Result<Originate, OriginateError> {
     Originate::inline(base_endpoint(), vec![Application::simple("park")])?
-        .dialplan(DialplanType::Xml)
+        .dialplan(DialplanType::XML)
 }
 fn o_dialplan_xml() -> Result<Originate, OriginateError> {
-    Originate::extension(base_endpoint(), "1000").dialplan(DialplanType::Xml)
+    Originate::extension(base_endpoint(), "1000").dialplan(DialplanType::XML)
 }
-fn o_dialplan_raw() -> Result<Originate, OriginateError> {
-    Originate::extension(base_endpoint(), "1000").dialplan_raw("custom_dialplan")
+fn o_dialplan_named() -> Result<Originate, OriginateError> {
+    Originate::extension(base_endpoint(), "1000")
+        .dialplan(DialplanType::named("custom_dialplan").expect("not undef"))
 }
 fn o_positionals_none() -> Result<Originate, OriginateError> {
     Ok(Originate::extension(base_endpoint(), "1000"))
@@ -464,7 +465,7 @@ const ORIGINATE_CASES: &[(&str, OriginateBuilder)] = &[
     ("inline-with-delim", o_inline_with_delim),
     ("inline-xml-conflict", o_inline_xml_conflict),
     ("dialplan-xml", o_dialplan_xml),
-    ("dialplan-raw", o_dialplan_raw),
+    ("dialplan-raw", o_dialplan_named),
     ("positionals-none", o_positionals_none),
     ("positionals-empty-context", o_positionals_empty_context),
     ("positionals-spaced", o_positionals_spaced),

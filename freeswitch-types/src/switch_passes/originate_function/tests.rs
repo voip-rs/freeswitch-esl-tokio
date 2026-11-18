@@ -4,7 +4,7 @@ use super::*;
 /// `&` as an extension.
 #[test]
 fn parse_target_reads_an_application_before_the_dialplan() {
-    for dialplan in [None, Some(&DialplanType::Inline), Some(&DialplanType::Xml)] {
+    for dialplan in [None, Some(&DialplanType::INLINE), Some(&DialplanType::XML)] {
         let target = parse_originate_target("&park(:,)", dialplan).unwrap();
         assert_eq!(
             target,
@@ -52,7 +52,7 @@ fn parse_target_xml_with_args() {
 fn parse_target_two_inline_apps() {
     let target = parse_originate_target(
         "conference:1,hangup:NORMAL_CLEARING",
-        Some(&DialplanType::Inline),
+        Some(&DialplanType::INLINE),
     )
     .unwrap();
     if let OriginateTarget::InlineApplications(apps) = target {
@@ -68,7 +68,7 @@ fn parse_target_two_inline_apps() {
 
 #[test]
 fn parse_target_inline_bare_name() {
-    let target = parse_originate_target("hangup", Some(&DialplanType::Inline)).unwrap();
+    let target = parse_originate_target("hangup", Some(&DialplanType::INLINE)).unwrap();
     if let OriginateTarget::InlineApplications(apps) = target {
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0].name(), "hangup");
@@ -83,7 +83,7 @@ fn parse_target_inline_bare_name() {
 #[test]
 fn parse_target_inline_mixed_bare_and_args() {
     let target =
-        parse_originate_target("park,hangup:NORMAL_CLEARING", Some(&DialplanType::Inline)).unwrap();
+        parse_originate_target("park,hangup:NORMAL_CLEARING", Some(&DialplanType::INLINE)).unwrap();
     if let OriginateTarget::InlineApplications(apps) = target {
         assert_eq!(apps.len(), 2);
         assert_eq!(apps[0].name(), "park");
@@ -99,7 +99,7 @@ fn parse_target_inline_mixed_bare_and_args() {
 
 #[test]
 fn parse_target_inline_trailing_colon_collapses_to_none() {
-    let target = parse_originate_target("park:", Some(&DialplanType::Inline)).unwrap();
+    let target = parse_originate_target("park:", Some(&DialplanType::INLINE)).unwrap();
     if let OriginateTarget::InlineApplications(apps) = target {
         assert!(apps[0]
             .args()

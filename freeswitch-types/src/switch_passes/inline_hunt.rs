@@ -63,7 +63,7 @@ pub(crate) fn render_inline(apps: &[Application], delimiter: char) -> String {
         let _ = write_escaped(
             &mut list,
             delimiter,
-            app.to_string_with_dialplan(&DialplanType::Inline),
+            app.to_string_with_dialplan(&DialplanType::INLINE),
         );
     }
     list

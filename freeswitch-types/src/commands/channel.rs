@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn uuid_transfer_with_dialplan() {
-        let cmd = UuidTransfer::new(UUID, "1000").with_dialplan(DialplanType::Xml);
+        let cmd = UuidTransfer::new(UUID, "1000").with_dialplan(DialplanType::XML);
         assert_eq!(cmd.to_string(), format!("uuid_transfer {} 1000 XML", UUID));
     }
 

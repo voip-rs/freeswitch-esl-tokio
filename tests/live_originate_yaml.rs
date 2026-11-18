@@ -68,7 +68,7 @@ fn yaml_loopback_originate_parses() {
         cmd.target(),
         OriginateTarget::Application(app) if app.name() == "park" && app.args().is_none()
     ));
-    assert_eq!(cmd.dialplan_type(), Some(&DialplanType::Xml));
+    assert_eq!(cmd.dialplan_type(), Some(&DialplanType::XML));
     assert_eq!(cmd.context_str(), Some("test"));
     assert_eq!(cmd.caller_id_name(), Some("Fallback CID"));
     assert_eq!(cmd.caller_id_number(), Some("5550199"));
@@ -598,7 +598,7 @@ async fn live_originate_loopback_bowout_on_execute() {
         client
             .api(
                 &UuidTransfer::new(&a_leg, "bridge:null/nearend")
-                    .with_dialplan(DialplanType::Inline)
+                    .with_dialplan(DialplanType::INLINE)
                     .to_string(),
             )
             .await

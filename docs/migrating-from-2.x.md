@@ -45,3 +45,8 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | 2.x | 3.0 |
 |---|---|
 | `commands::parse_originate_target(s, dialplan)` | parse the whole line as an `Originate`, whose target is read the way `originate_function` reads it |
+| `DialplanType::Xml`, `DialplanType::Inline`, matched as enum variants | `DialplanType::XML`, `DialplanType::INLINE`, compared with `==`; the type is no longer `Copy` |
+| `Originate::dialplan_raw(name)` | `.dialplan(DialplanType::named(name)?)`; `inline` and `xml` in any case resolve to the known two |
+| `Originate::dialplan_name()` | `dialplan_type().map(DialplanType::name)`; `dialplan_type()` now returns a named dialplan too, where it returned `None` |
+| `"name".parse::<DialplanType>()` refuses any name but `inline` and `xml` | accepts any dialplan name |
+| `Application::to_string_with_dialplan` | no public replacement; render the `Originate` |

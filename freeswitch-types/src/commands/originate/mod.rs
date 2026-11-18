@@ -19,7 +19,6 @@ mod error;
 #[cfg(feature = "serde")]
 mod serde_support;
 
-pub(crate) use application::Dialplan;
 pub use application::{Application, DialplanType, OriginateTarget, ParseDialplanTypeError};
 pub use error::OriginateError;
 
@@ -33,9 +32,9 @@ pub(super) const DEFAULT_CONTEXT: &str = "default";
 /// inline hunt only under `inline`, so an extension there and an action list elsewhere misfire.
 fn check_dialplan_fits(
     target: &OriginateTarget,
-    dialplan: Option<&Dialplan>,
+    dialplan: Option<&DialplanType>,
 ) -> Result<(), OriginateError> {
-    let inline = matches!(dialplan, Some(Dialplan::Typed(DialplanType::Inline)));
+    let inline = dialplan.is_some_and(DialplanType::is_inline);
     match target {
         OriginateTarget::Extension(_) if inline => Err(OriginateError::ExtensionWithInlineDialplan),
         OriginateTarget::InlineApplications(_) if dialplan.is_some() && !inline => {
@@ -76,7 +75,7 @@ pub use super::endpoint::Endpoint;
 pub struct Originate {
     endpoint: Endpoint,
     target: OriginateTarget,
-    dialplan: Option<Dialplan>,
+    dialplan: Option<DialplanType>,
     context: Option<String>,
     cid_name: Option<String>,
     cid_num: Option<String>,
@@ -249,27 +248,13 @@ impl Originate {
         self.argv_separator
     }
 
-    /// Set the dialplan type.
+    /// Set the dialplan.
     ///
-    /// Returns `Err` if setting `Inline` on an `Extension` target, or anything but `Inline` on
+    /// Returns `Err` if setting `inline` on an `Extension` target, or anything but `inline` on
     /// inline applications, which `originate` would transfer as an extension.
-    pub fn dialplan(self, dp: DialplanType) -> Result<Self, OriginateError> {
-        self.with_dialplan(Dialplan::Typed(dp))
-    }
-
-    /// Name the dialplan module, for one [`DialplanType`] does not cover. The switch looks the
-    /// name up when the channel is transferred, so a name no module registers hangs it up.
-    ///
-    /// A name reading as a [`DialplanType`] in any case sets that type. Refused as
-    /// [`dialplan`](Self::dialplan) refuses: `inline` on an `Extension` target, any other name
-    /// on inline applications.
-    pub fn dialplan_raw(self, name: impl Into<String>) -> Result<Self, OriginateError> {
-        self.with_dialplan(Dialplan::from_name(name.into()))
-    }
-
-    fn with_dialplan(mut self, dialplan: Dialplan) -> Result<Self, OriginateError> {
-        check_dialplan_fits(&self.target, Some(&dialplan))?;
-        self.dialplan = Some(dialplan);
+    pub fn dialplan(mut self, dp: DialplanType) -> Result<Self, OriginateError> {
+        check_dialplan_fits(&self.target, Some(&dp))?;
+        self.dialplan = Some(dp);
         Ok(self)
     }
 
@@ -318,19 +303,10 @@ impl Originate {
         &mut self.target
     }
 
-    /// The dialplan type, if explicitly set. `None` as well for a dialplan set by name; see
-    /// [`dialplan_name`](Self::dialplan_name).
+    /// The dialplan, if explicitly set.
     pub fn dialplan_type(&self) -> Option<&DialplanType> {
         self.dialplan
             .as_ref()
-            .and_then(Dialplan::typed)
-    }
-
-    /// The dialplan as the switch receives it, typed or named, if set.
-    pub fn dialplan_name(&self) -> Option<&str> {
-        self.dialplan
-            .as_ref()
-            .map(Dialplan::name)
     }
 
     /// The dialplan context, if set.
@@ -364,7 +340,7 @@ impl Originate {
 
     /// Override the dialplan type after construction.
     pub fn set_dialplan(&mut self, dp: Option<DialplanType>) {
-        self.dialplan = dp.map(Dialplan::Typed);
+        self.dialplan = dp;
     }
 
     /// Override the dialplan context after construction. `undef` in any case reads as absent
@@ -394,15 +370,11 @@ impl Originate {
     /// reads them by position, so an absent slot before that is `None` rather than skipped.
     fn positional_tail(&self) -> Vec<Option<String>> {
         let dialplan = match (&self.target, &self.dialplan) {
-            (OriginateTarget::InlineApplications(_), None) => {
-                Some(DialplanType::Inline.wire_name())
-            }
-            (_, dialplan) => dialplan
-                .as_ref()
-                .map(Dialplan::name),
+            (OriginateTarget::InlineApplications(_), None) => Some(&DialplanType::INLINE),
+            (_, dialplan) => dialplan.as_ref(),
         };
         let slots = [
-            dialplan.map(str::to_string),
+            dialplan.map(DialplanType::to_string),
             self.context
                 .clone(),
             self.cid_name
@@ -492,7 +464,7 @@ impl Originate {
     fn target_text(&self) -> String {
         match &self.target {
             OriginateTarget::Extension(ext) => ext.clone(),
-            OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
+            OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::XML),
             OriginateTarget::InlineApplications(apps) => match self.inline_delimiter {
                 Some(delimiter) => format!("m:{delimiter}:{}", render_inline(apps, delimiter)),
                 None => render_inline(apps, DEFAULT_INLINE_DELIMITER),
@@ -564,12 +536,7 @@ impl Originate {
             timeout,
         } = Slots::read(arguments.map(|argument| argument.text))?;
 
-        let target = parse_originate_target(
-            &target_str,
-            dialplan
-                .as_ref()
-                .and_then(Dialplan::typed),
-        )?;
+        let target = parse_originate_target(&target_str, dialplan.as_ref())?;
 
         let timeout = match timeout {
             None => None,

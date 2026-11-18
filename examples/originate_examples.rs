@@ -2,7 +2,7 @@
 //!
 //! Part 1 (no connection required): builds each endpoint type and prints the
 //! resulting wire string. Covers variable scoping ({} default, [] channel,
-//! <> enterprise), all DialplanType variants, all OriginateTarget forms,
+//! <> enterprise), known and named dialplans, all OriginateTarget forms,
 //! and JSON deserialization.
 //!
 //! Part 2: connects to FreeSWITCH, places a test call via bgapi, and reports
@@ -225,12 +225,24 @@ fn print_endpoint_examples(block_parse: BlockParse) {
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")),
         "1000",
     )
-    // Safe unwrap: DialplanType::Xml is a valid dialplan for extensions
-    .dialplan(DialplanType::Xml)
+    // Safe unwrap: DialplanType::XML is a valid dialplan for extensions
+    .dialplan(DialplanType::XML)
     .unwrap()
     .context("default");
     // originate sofia/gateway/gw1/18005551234 1000 XML default
     println!("{}", cmd.display_with(block_parse));
+
+    // Any other dialplan module goes by the name it registers; the switch hangs the
+    // channel up if no module answers to it.
+    let cmd = Originate::extension(
+        Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")),
+        "1000",
+    )
+    // Safe unwraps: "enum" is a valid name, and a named dialplan fits an extension
+    .dialplan(DialplanType::named("enum").unwrap())
+    .unwrap();
+    // originate sofia/gateway/gw1/18005551234 1000 enum
+    println!("{}", cmd);
 
     // Application: single &app(args) XML form
     println!("\n-- Application (&app(args)) with spaces auto-quoted --");
@@ -257,9 +269,9 @@ fn print_endpoint_examples(block_parse: BlockParse) {
     )
     // Safe unwrap: non-empty application list is valid
     .unwrap()
-    // DialplanType::Inline is emitted as "inline" on the wire
-    // Safe unwrap: DialplanType::Inline is valid for inline applications
-    .dialplan(DialplanType::Inline)
+    // DialplanType::INLINE is emitted as "inline" on the wire
+    // Safe unwrap: DialplanType::INLINE is valid for inline applications
+    .dialplan(DialplanType::INLINE)
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 conference:test_room,hangup inline
     println!("{}", cmd.display_with(block_parse));

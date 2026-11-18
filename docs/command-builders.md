@@ -166,8 +166,8 @@ rules, refusing an eighth argument and an `undef` target, which the switch
 asserts is set and aborts on. A target of `&` and more is an application
 whatever the dialplan, its arguments ending at the first `)`: parse and config
 load refuse an application carrying a `)` there, and config load an extension
-opening `&`. A dialplan word `DialplanType` does not cover is
-kept by name (`dialplan_raw()` / `dialplan_name()`); the transfer looks a
+opening `&`. Any other dialplan word is kept as `DialplanType::named()`,
+`inline` and `xml` in any case resolving to the typed two; the transfer looks a
 dialplan module up by it, and a name no module registers hangs the channel up
 with `NO_ROUTE_DESTINATION` (measured). A positional left `None` but forced
 present by a later one is written `undef` on either split, and the switch falls
@@ -301,8 +301,8 @@ Key design choices:
 
 - **`DialplanType`** — serde uses `"xml"`/`"inline"` (lowercase, config-friendly).
   `Display` uses `"XML"`/`"inline"` (wire format). Independent representations.
-  An `Originate` config's `dialplan` also takes any other name, kept as the
-  switch receives it, and refuses `undef`.
+  Any other name serializes as itself, kept as the switch receives it; an
+  `Originate` config refuses `undef`.
 - **`Variables`** — flat YAML map deserializes as `VariablesType::Default` (the
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.
