@@ -22,6 +22,12 @@ pub enum EslArrayError {
         /// Configured maximum.
         max: usize,
     },
+    /// An item holds the [`EslArray::SEPARATOR`], which the switch splits on
+    /// with no escape (`switch_separate_string_string`).
+    SeparatorInItem {
+        /// Position of the item in the array.
+        index: usize,
+    },
 }
 
 impl fmt::Display for EslArrayError {
@@ -30,6 +36,9 @@ impl fmt::Display for EslArrayError {
             Self::MissingPrefix => f.write_str("missing ARRAY:: prefix"),
             Self::TooManyItems { count, max } => {
                 write!(f, "array has {count} items, maximum is {max}")
+            }
+            Self::SeparatorInItem { index } => {
+                write!(f, "array item {index} holds the |: separator")
             }
         }
     }
@@ -43,6 +52,13 @@ fn check_item_count(count: usize) -> Result<(), EslArrayError> {
             count,
             max: MAX_ARRAY_ITEMS,
         });
+    }
+    Ok(())
+}
+
+fn check_item(index: usize, item: &str) -> Result<(), EslArrayError> {
+    if item.contains(ARRAY_SEPARATOR) {
+        return Err(EslArrayError::SeparatorInItem { index });
     }
     Ok(())
 }
@@ -82,28 +98,32 @@ impl EslArray {
         Self::new(items)
     }
 
-    /// Create a new array from a vec of items.
-    ///
-    /// Returns [`EslArrayError::TooManyItems`] past [`MAX_ARRAY_ITEMS`], as
-    /// [`parse`](Self::parse) does.
+    /// Create a new array from a vec of items, refusing what
+    /// [`parse`](Self::parse) could not read back: see [`EslArrayError`].
     pub fn new(items: Vec<String>) -> Result<Self, EslArrayError> {
         check_item_count(items.len())?;
+        for (index, item) in items
+            .iter()
+            .enumerate()
+        {
+            check_item(index, item)?;
+        }
         Ok(Self(items))
     }
 
-    /// Append an item to the end; refused, leaving the array as it was, past
-    /// [`MAX_ARRAY_ITEMS`].
+    /// Append an item to the end; a refusal leaves the array as it was.
     pub fn push(&mut self, value: String) -> Result<(), EslArrayError> {
         check_item_count(self.len() + 1)?;
+        check_item(self.len(), &value)?;
         self.0
             .push(value);
         Ok(())
     }
 
-    /// Prepend an item to the front; refused, leaving the array as it was,
-    /// past [`MAX_ARRAY_ITEMS`].
+    /// Prepend an item to the front; a refusal leaves the array as it was.
     pub fn unshift(&mut self, value: String) -> Result<(), EslArrayError> {
         check_item_count(self.len() + 1)?;
+        check_item(0, &value)?;
         self.0
             .insert(0, value);
         Ok(())

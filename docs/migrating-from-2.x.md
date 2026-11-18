@@ -102,3 +102,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `InvalidHeaderName` | `InvalidHeaderNameError` |
 | `EslArray::new(items)` returns `EslArray`; `push(v)`, `unshift(v)` return `()` | return `Result<_, EslArrayError>`, refusing with `TooManyItems` past `MAX_ARRAY_ITEMS`, as `parse` does; deserializing an `EslArray` refuses the same |
 | `HeaderLookup::sip_status_code()` returns `Result<Option<u16>, std::num::ParseIntError>`; `ParseHeaderError::SipStatusCode` wraps that `ParseIntError` and is built by name | returns `Result<Option<u16>, ParseSipStatusCodeError>`, which keeps the rejected value; it converts into `ParseHeaderError` and `EslError` with `?` like every other accessor error |
+| `EslArray::new`, `push`, `unshift` and deserialize accept an item holding `\|:` | refused with `EslArrayError::SeparatorInItem { index }`: the switch splits on every `\|:` with no escape, so the item would come back as two |
