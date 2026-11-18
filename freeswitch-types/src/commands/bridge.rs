@@ -42,12 +42,15 @@ pub struct BridgeDialString {
 }
 
 impl BridgeDialString {
-    /// Create a new bridge dial string with the given failover groups.
+    /// Create a new bridge dial string with the given failover groups, refusing what
+    /// [`parse_with`](Self::parse_with) refuses at the default [`BlockParse`].
     pub fn new(groups: Vec<Vec<Endpoint>>) -> Result<Self, OriginateError> {
-        Ok(Self {
+        let bridge = Self {
             variables: None,
             groups,
-        })
+        };
+        bridge.check_legs(BlockParse::default())?;
+        Ok(bridge)
     }
 
     /// Set global default-scope variables.
@@ -375,11 +378,8 @@ impl TryFrom<config::BridgeDialString> for BridgeDialString {
     type Error = OriginateError;
 
     fn try_from(config: config::BridgeDialString) -> Result<Self, Self::Error> {
-        let bridge = Self {
-            variables: config.variables,
-            groups: config.groups,
-        };
-        bridge.check_legs(BlockParse::default())?;
+        let mut bridge = Self::new(config.groups)?;
+        bridge.variables = config.variables;
         Ok(bridge)
     }
 }
@@ -930,26 +930,25 @@ mod tests {
     }
 
     /// A `[` in an earlier leg, its `]` in a later leg's endpoint, and a `^^` block between.
-    fn bracket_around_block(sep: char, value: &str) -> BridgeDialString {
+    fn bracket_around_block(sep: char, value: &str) -> Vec<Endpoint> {
         let mut vars = Variables::new(VariablesType::Channel)
             .with_separator(sep)
             .unwrap();
         vars.insert("v0", value)
             .unwrap();
-        BridgeDialString::new(vec![vec![
+        vec![
             Endpoint::PortAudio(AudioEndpoint::new().with_destination("[\\")),
             SofiaGateway::new("]", "")
                 .with_variables(vars)
                 .into(),
-        ]])
-        .unwrap()
+        ]
     }
 
     /// The comma scan takes the `^^,` head inside the range for a plain comma and writes the
     /// block's own default, which the block then splits on alike.
     #[test]
     fn a_comma_head_the_scan_rewrites_round_trips() {
-        let bridge = bracket_around_block(',', "undef");
+        let bridge = BridgeDialString::new(vec![bracket_around_block(',', "undef")]).unwrap();
         let rendered = bridge.to_string();
         let back: BridgeDialString = rendered
             .parse()
@@ -969,8 +968,16 @@ mod tests {
     /// leg's `^^:` value, which then reaches the channel as the scan's placeholder.
     #[test]
     fn a_range_rewriting_a_later_legs_value_is_refused() {
-        let bridge = bracket_around_block(':', "a,b");
-        let rendered = bridge.to_string();
+        let group = bracket_around_block(':', "a,b");
+        let rendered = group
+            .iter()
+            .map(|endpoint| {
+                endpoint
+                    .display_for(CARRIER)
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(",");
         assert!(
             matches!(
                 rendered.parse::<BridgeDialString>(),
@@ -979,7 +986,11 @@ mod tests {
             "{rendered}: {:?}",
             rendered.parse::<BridgeDialString>()
         );
-        let json = serde_json::to_value(&bridge).unwrap();
+        assert_eq!(
+            BridgeDialString::new(vec![group.clone()]),
+            Err(OriginateError::BracketSpansLegs { group: 0 })
+        );
+        let json = serde_json::json!({ "groups": [group] });
         assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
     }
 
