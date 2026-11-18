@@ -1201,7 +1201,9 @@ async fn escaping_at_an_argv_separator(scope: VariablesType) {
                 );
                 let endpoint = Endpoint::Loopback(
                     LoopbackEndpoint::new("9199")
+                        .unwrap()
                         .with_context("test")
+                        .unwrap()
                         .with_variables(vars),
                 );
                 let keys: Vec<&str> = pairs

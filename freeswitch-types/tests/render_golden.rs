@@ -271,52 +271,56 @@ fn endpoint_corpus(records: &mut Vec<String>) {
 
     for &name in ENDPOINT_HOSTILE {
         let v = hostile(name);
-        let cases: Vec<(&str, Endpoint)> = vec![
-            ("sofia", SofiaEndpoint::new("pbx", v).into()),
-            ("sofia-gateway", {
-                let mut ep = SofiaGateway::new("gw1", v);
-                ep.profile = Some("internal".to_string());
-                ep.into()
-            }),
-            ("loopback", {
-                let mut ep = LoopbackEndpoint::new(v);
-                ep.context = Some("ctx".to_string());
-                ep.into()
-            }),
-            ("user", {
-                let mut ep = UserEndpoint::new(v);
-                ep.domain = Some("example.com".to_string());
-                ep.into()
-            }),
-            ("sofia-contact", {
-                let mut ep = SofiaContact::new(v, "example.com");
-                ep.profile = Some("internal".to_string());
-                ep.into()
-            }),
-            ("group-call", {
-                let mut ep = GroupCall::new(v, "example.com");
-                ep.order = Some(GroupCallOrder::Enterprise);
-                ep.into()
-            }),
+        let audio = || AudioEndpoint::new().with_destination(v);
+        let cases: Vec<(&str, Result<Endpoint, OriginateError>)> = vec![
+            ("sofia", SofiaEndpoint::new("pbx", v).map(Endpoint::from)),
             (
-                "portaudio",
-                Endpoint::PortAudio(AudioEndpoint::new().with_destination(v)),
+                "sofia-gateway",
+                SofiaGateway::new("gw1", v)
+                    .and_then(|ep| ep.with_profile("internal"))
+                    .map(Endpoint::from),
             ),
             (
-                "pulseaudio",
-                Endpoint::PulseAudio(AudioEndpoint::new().with_destination(v)),
+                "loopback",
+                LoopbackEndpoint::new(v)
+                    .and_then(|ep| ep.with_context("ctx"))
+                    .map(Endpoint::from),
             ),
             (
-                "alsa",
-                Endpoint::Alsa(AudioEndpoint::new().with_destination(v)),
+                "user",
+                UserEndpoint::new(v)
+                    .and_then(|ep| ep.with_domain("example.com"))
+                    .map(Endpoint::from),
             ),
+            (
+                "sofia-contact",
+                SofiaContact::new(v, "example.com")
+                    .and_then(|ep| ep.with_profile("internal"))
+                    .map(Endpoint::from),
+            ),
+            (
+                "group-call",
+                GroupCall::new(v, "example.com").map(|ep| {
+                    ep.with_order(GroupCallOrder::Enterprise)
+                        .into()
+                }),
+            ),
+            ("portaudio", audio().map(Endpoint::PortAudio)),
+            ("pulseaudio", audio().map(Endpoint::PulseAudio)),
+            ("alsa", audio().map(Endpoint::Alsa)),
         ];
         for (kind, ep) in cases {
-            endpoint_case(records, &format!("ep/{kind}/{name}"), &ep, &targets3);
+            let id = format!("ep/{kind}/{name}");
+            match ep {
+                Ok(ep) => endpoint_case(records, &id, &ep, &targets3),
+                Err(_) => rec(records, id, "Err"),
+            }
         }
     }
 
-    let app_ep: Endpoint = LoopbackEndpoint::new("app=lua:script.lua").into();
+    let app_ep: Endpoint = LoopbackEndpoint::new("app=lua:script.lua")
+        .unwrap()
+        .into();
     endpoint_case(records, "ep/loopback-app", &app_ep, &targets3);
 
     for cause_text in [
@@ -348,30 +352,45 @@ fn endpoint_corpus(records: &mut Vec<String>) {
         Ok(ep)
     };
     let base_cases: Vec<(&str, Endpoint)> = vec![
-        ("sofia", SofiaEndpoint::new("pbx", "192.0.2.1").into()),
+        (
+            "sofia",
+            SofiaEndpoint::new("pbx", "192.0.2.1")
+                .unwrap()
+                .into(),
+        ),
         (
             "sofia-gateway",
-            SofiaGateway::new("gw1", "18005551234").into(),
+            SofiaGateway::new("gw1", "18005551234")
+                .unwrap()
+                .into(),
         ),
         (
             "loopback",
             LoopbackEndpoint::new("9199")
+                .unwrap()
                 .with_context("test")
+                .unwrap()
                 .into(),
         ),
         (
             "user",
             UserEndpoint::new("bob")
+                .unwrap()
                 .with_domain("example.com")
+                .unwrap()
                 .into(),
         ),
         (
             "sofia-contact",
-            SofiaContact::new("bob", "example.com").into(),
+            SofiaContact::new("bob", "example.com")
+                .unwrap()
+                .into(),
         ),
         (
             "group-call",
-            GroupCall::new("support", "example.com").into(),
+            GroupCall::new("support", "example.com")
+                .unwrap()
+                .into(),
         ),
         ("error", ErrorEndpoint::new(HangupCause::UserBusy).into()),
         ("portaudio", Endpoint::PortAudio(AudioEndpoint::new())),
@@ -387,7 +406,9 @@ fn endpoint_corpus(records: &mut Vec<String>) {
 
 fn base_endpoint() -> Endpoint {
     LoopbackEndpoint::new("9199")
+        .unwrap()
         .with_context("test")
+        .unwrap()
         .into()
 }
 
@@ -539,8 +560,12 @@ fn originate_corpus(records: &mut Vec<String>) {
 fn bridge_corpus(records: &mut Vec<String>) {
     let vars = Variables::with_vars(VariablesType::Default, [("hangup_after_bridge", "true")])
         .expect("a plain pair builds");
-    let ep1: Endpoint = SofiaGateway::new("gw-a", "it's,weird").into();
-    let ep2: Endpoint = SofiaGateway::new("gw-b", "a|b\\c").into();
+    let ep1: Endpoint = SofiaGateway::new("gw-a", "it's,weird")
+        .unwrap()
+        .into();
+    let ep2: Endpoint = SofiaGateway::new("gw-b", "a|b\\c")
+        .unwrap()
+        .into();
     let ep3: Endpoint = ErrorEndpoint::new(HangupCause::NoRouteDestination).into();
     let bridge = BridgeDialString::new(vec![vec![ep1, ep2], vec![ep3]])
         .unwrap()

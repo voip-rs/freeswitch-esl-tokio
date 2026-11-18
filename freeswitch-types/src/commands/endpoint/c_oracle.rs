@@ -198,13 +198,13 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         Endpoint::Loopback(ep) => {
             let read = c.loopback_outgoing_channel(after("loopback/")?.as_bytes());
             let application = ep
-                .extension
+                .extension()
                 .get(..4)
                 .is_some_and(|head| head.eq_ignore_ascii_case("app="));
             if application {
-                let (name, arg) = match ep.extension[4..].split_once(':') {
+                let (name, arg) = match ep.extension()[4..].split_once(':') {
                     Some((name, arg)) => (name, Some(arg)),
-                    None => (&ep.extension[4..], None),
+                    None => (&ep.extension()[4..], None),
                 };
                 let mut want = vec![(bytes("loopback_app"), bytes(name))];
                 want.extend(arg.map(|arg| (bytes("loopback_app_arg"), bytes(arg))));
@@ -219,15 +219,13 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                     ),
                     (
                         false,
-                        bytes(&ep.extension),
+                        bytes(ep.extension()),
                         Some(bytes(
-                            ep.context
-                                .as_deref()
+                            ep.context()
                                 .unwrap_or("default")
                         )),
                         Some(bytes(
-                            ep.dialplan
-                                .as_deref()
+                            ep.dialplan()
                                 .unwrap_or("xml")
                         )),
                     ),
@@ -243,33 +241,33 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                     destination.as_bytes(),
                     &Sofia {
                         profiles: &[ep
-                            .profile
+                            .profile()
                             .as_bytes()],
                         gateways: &[],
                         headers,
                     },
                 );
                 let mut reference = c.sofia_outgoing_channel(
-                    format!("internal/{}", ep.destination).as_bytes(),
+                    format!("internal/{}", ep.destination()).as_bytes(),
                     &Sofia {
                         profiles: &[b"internal"],
                         gateways: &[],
                         headers,
                     },
                 );
-                let destination = format!("{}/{}", ep.profile, ep.destination);
+                let destination = format!("{}/{}", ep.profile(), ep.destination());
                 holds_destination(c, text, &destination, headers, &read)?;
                 let encoding = encoding(headers);
                 holds_user(text, encoding, ep.user(encoding), &read)?;
                 let mut read = read;
                 prop_assert!(
-                    compare_registrations(&mut read, &ep.profile, &mut reference, "internal"),
+                    compare_registrations(&mut read, ep.profile(), &mut reference, "internal"),
                     "{:?} with {:?}: registrations differ",
                     text,
                     headers
                 );
                 prop_assert_eq!(
-                    named(read, &ep.profile, ""),
+                    named(read, ep.profile(), ""),
                     named(reference, "internal", ""),
                     "{:?} with {:?}",
                     text,
@@ -279,11 +277,11 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         }
         Endpoint::SofiaGateway(ep) => {
             let destination = after("sofia/")?;
-            let key = match &ep.profile {
-                Some(profile) => format!("{profile}::{}", ep.gateway),
+            let key = match ep.profile() {
+                Some(profile) => format!("{profile}::{}", ep.gateway()),
                 None => ep
-                    .gateway
-                    .clone(),
+                    .gateway()
+                    .to_owned(),
             };
             for headers in [SUPPRESSED, &[][..]] {
                 let read = c.sofia_outgoing_channel(
@@ -294,12 +292,12 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         headers,
                     },
                 );
-                let destination = format!("gateway/{key}/{}", ep.destination);
+                let destination = format!("gateway/{key}/{}", ep.destination());
                 holds_destination(c, text, &destination, headers, &read)?;
                 let encoding = encoding(headers);
                 holds_user(text, encoding, ep.user(encoding), &read)?;
                 let reference = c.sofia_outgoing_channel(
-                    format!("gateway/gw1/{}", ep.destination).as_bytes(),
+                    format!("gateway/gw1/{}", ep.destination()).as_bytes(),
                     &Sofia {
                         profiles: &[],
                         gateways: &[b"gw1"],
@@ -318,13 +316,12 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         Endpoint::User(ep) => {
             let read = c.user_outgoing_channel(after("user/")?.as_bytes());
             let want = UserOutgoing {
-                user: bytes(&ep.name),
+                user: bytes(ep.name()),
                 domain: ep
-                    .domain
-                    .as_deref()
+                    .domain()
                     .map_or_else(|| DEFAULT_DOMAIN.to_vec(), bytes),
                 default_domain: ep
-                    .domain
+                    .domain()
                     .is_none(),
             };
             prop_assert_eq!(read, Some(want), "{:?}", text);
@@ -332,14 +329,10 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         Endpoint::SofiaContact(ep) => {
             let arg = expression_argument(c, text, "sofia_contact")?;
             let searched = ep
-                .profile
-                .as_deref()
+                .profile()
                 .filter(|profile| *profile != "*");
-            let profile = searched.unwrap_or(&ep.domain);
-            let everywhere = ep
-                .profile
-                .as_deref()
-                == Some("*");
+            let profile = searched.unwrap_or(ep.domain());
+            let everywhere = ep.profile() == Some("*");
             let read = c.sofia_contact(&arg, &[profile.as_bytes()]);
             let (lookups, selects) = if everywhere {
                 (vec![], vec![])
@@ -348,8 +341,8 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                     vec![bytes(profile)],
                     vec![ContactSelect {
                         profile: bytes(profile),
-                        user: Some(bytes(&ep.user)),
-                        domain: Some(bytes(&ep.domain)),
+                        user: Some(bytes(ep.user())),
+                        domain: Some(bytes(ep.domain())),
                         ..ContactSelect::default()
                     }],
                 )
@@ -363,14 +356,14 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
         }
         Endpoint::GroupCall(ep) => {
             let arg = expression_argument(c, text, "group_call")?;
-            let call_delim = match ep.order {
+            let call_delim = match ep.order() {
                 None | Some(GroupCallOrder::All) => ",",
                 Some(GroupCallOrder::Enterprise) => ":_:",
                 Some(GroupCallOrder::First) => "|",
             };
             let want = GroupCallRead {
-                group: bytes(&ep.group),
-                domain: Some(bytes(&ep.domain)),
+                group: bytes(ep.group()),
+                domain: Some(bytes(ep.domain())),
                 call_delim: bytes(call_delim),
                 default_domain: false,
             };

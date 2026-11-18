@@ -6,38 +6,49 @@ use crate::commands::variables::Variables;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::UserEndpoint"))]
-#[non_exhaustive]
 pub struct UserEndpoint {
     /// User name from the directory.
-    pub name: String,
+    name: String,
     /// Domain name (optional, uses default domain if absent).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub domain: Option<String>,
+    domain: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 impl UserEndpoint {
-    /// Create a new user endpoint.
-    pub fn new(name: impl Into<String>) -> Self {
+    /// Create a new user endpoint, refusing what parse refuses.
+    pub fn new(name: impl Into<String>) -> Result<Self, OriginateError> {
         Self {
             name: name.into(),
             domain: None,
             variables: None,
         }
+        .checked()
     }
 
-    /// Set the domain.
-    pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
+    /// Set the domain, refusing what parse refuses.
+    pub fn with_domain(mut self, domain: impl Into<String>) -> Result<Self, OriginateError> {
         self.domain = Some(domain.into());
-        self
+        self.checked()
+    }
+
+    /// User name from the directory.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Domain name, `None` for the switch's default domain.
+    pub fn domain(&self) -> Option<&str> {
+        self.domain
+            .as_deref()
     }
 }
 
@@ -72,9 +83,14 @@ impl UserEndpoint {
 
     pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
         let rest = after_prefix(text, "user/", "user")?;
-        let ep = match rest.split_once('@') {
-            Some((name, domain)) => Self::new(name).with_domain(domain),
-            None => Self::new(rest),
+        let (name, domain) = match rest.split_once('@') {
+            Some((name, domain)) => (name, Some(domain.to_owned())),
+            None => (rest, None),
+        };
+        let ep = Self {
+            name: name.into(),
+            domain,
+            variables: None,
         };
         ep.check_deliverable()?;
         Ok(ep)

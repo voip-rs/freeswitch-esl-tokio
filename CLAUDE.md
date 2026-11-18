@@ -52,11 +52,15 @@ destructuring, and omitting the attribute lets internal code benefit from
 exhaustive compiler checks.
 
 **Public fields split:** Types with invariants or builder APIs
-(`ExecuteOptions`, `EslConnectOptions`, `Application`, `BridgeDialString`)
-use private fields + accessor methods. Pure data/DTO structs with
-`#[non_exhaustive]` and constructors (`SofiaGateway`, `SofiaEndpoint`,
-`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`) keep public fields — no
-validation constraints on individual fields.
+(`ExecuteOptions`, `EslConnectOptions`, `Application`, `BridgeDialString`,
+and the endpoint structs `SofiaEndpoint`, `SofiaGateway`, `SofiaContact`,
+`LoopbackEndpoint`, `UserEndpoint`, `GroupCall`, `AudioEndpoint`,
+`ErrorEndpoint`) use private fields + accessor methods. An endpoint field the
+switch can misread is set only through a fallible constructor or `with_*`
+builder running the whole-value `check_deliverable` that parse and config load
+run, since one field's rule can depend on another (a gateway's `::` on its
+profile). Pure data/DTO structs with `#[non_exhaustive]` and constructors keep
+public fields only while no value of any field is undeliverable.
 
 **Exception:** single-field error newtypes (`pub struct ParseFooError(pub String)`)
 are exempt. These will never grow additional fields, and adding `#[non_exhaustive]`
@@ -117,10 +121,12 @@ methods (`with_foo()`).
   builders that belong to one module (conference, sofia gateway commands) stay
   in their submodules; sofia state enums and `SofiaChannelName` are core.
 
-- **`_mut()` accessors on serde command builders.** Structs that are both
-  serde-deserializable and command builders (e.g. `Originate`, endpoint types)
-  must pair each read accessor for an owned field (`&T`, `&Enum`) with a
-  `_mut()` variant. Callers deserialize from config then need to tweak fields.
+- **Readers and fallible builders on serde command builders.** Structs that are
+  both serde-deserializable and command builders (e.g. `Originate`, endpoint
+  types) expose a reader per field and change one only through a builder that
+  refuses what config load refuses. No `_mut()` or `set_*` that would let a
+  caller write past that check; a caller tweaking a loaded value rebuilds it
+  through the builders.
 
 Follow existing patterns in the codebase for `impl Into<String>`, `Duration`,
 `impl IntoIterator<Item = impl Borrow<T>>`, `HeaderLookup`, `From<Concrete>`.

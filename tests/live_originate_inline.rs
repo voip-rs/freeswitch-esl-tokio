@@ -37,7 +37,9 @@ fn parked_loopback(uuid: &str) -> Endpoint {
         .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
+            .unwrap()
             .with_context("test")
+            .unwrap()
             .with_variables(vars),
     )
 }

@@ -10,18 +10,17 @@ use crate::switch_passes::originate_legs::splits_into_threads;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::SofiaEndpoint"))]
-#[non_exhaustive]
 pub struct SofiaEndpoint {
     /// SIP profile name (e.g. `internal`, `external`).
-    pub profile: String,
+    profile: String,
     /// SIP URI or destination number.
-    pub destination: String,
+    destination: String,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 /// SIP endpoint via a configured gateway:
@@ -29,24 +28,23 @@ pub struct SofiaEndpoint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::SofiaGateway"))]
-#[non_exhaustive]
 pub struct SofiaGateway {
     /// Gateway name as configured in the SIP profile.
-    pub gateway: String,
+    gateway: String,
     /// Destination number or SIP user part.
-    pub destination: String,
+    destination: String,
     /// SIP profile name to qualify the gateway lookup.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub profile: Option<String>,
+    profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 /// Runtime expression resolving registered SIP contacts:
@@ -65,24 +63,23 @@ pub struct SofiaGateway {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::SofiaContact"))]
-#[non_exhaustive]
 pub struct SofiaContact {
     /// User part of the contact lookup.
-    pub user: String,
+    user: String,
     /// Domain for the contact lookup.
-    pub domain: String,
+    domain: String,
     /// SIP profile name, or `"*"` for all profiles.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub profile: Option<String>,
+    profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 /// `SWITCH_URL_UNSAFE`: a byte of it ahead of the user's `@` makes `protect_dest_uri` rewrite.
@@ -106,13 +103,27 @@ pub enum DestinationEncoding {
 }
 
 impl SofiaEndpoint {
-    /// Create a new SIP profile endpoint.
-    pub fn new(profile: impl Into<String>, destination: impl Into<String>) -> Self {
+    /// Create a new SIP profile endpoint, refusing what parse refuses.
+    pub fn new(
+        profile: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
         Self {
             profile: profile.into(),
             destination: destination.into(),
             variables: None,
         }
+        .checked()
+    }
+
+    /// SIP profile name (e.g. `internal`, `external`).
+    pub fn profile(&self) -> &str {
+        &self.profile
+    }
+
+    /// SIP URI or destination number.
+    pub fn destination(&self) -> &str {
+        &self.destination
     }
 
     /// The user this leg dials, unencoded, cut from `destination` where mod_sofia cuts it.
@@ -129,20 +140,40 @@ impl SofiaEndpoint {
 }
 
 impl SofiaGateway {
-    /// Create a new SIP gateway endpoint.
-    pub fn new(gateway: impl Into<String>, destination: impl Into<String>) -> Self {
+    /// Create a new SIP gateway endpoint, refusing what parse refuses.
+    pub fn new(
+        gateway: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
         Self {
             gateway: gateway.into(),
             destination: destination.into(),
             profile: None,
             variables: None,
         }
+        .checked()
     }
 
-    /// Set the SIP profile qualifier.
-    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
+    /// Set the SIP profile qualifier, refusing what parse refuses.
+    pub fn with_profile(mut self, profile: impl Into<String>) -> Result<Self, OriginateError> {
         self.profile = Some(profile.into());
-        self
+        self.checked()
+    }
+
+    /// Gateway name as configured in the SIP profile.
+    pub fn gateway(&self) -> &str {
+        &self.gateway
+    }
+
+    /// Destination number or SIP user part.
+    pub fn destination(&self) -> &str {
+        &self.destination
+    }
+
+    /// SIP profile name qualifying the gateway lookup.
+    pub fn profile(&self) -> Option<&str> {
+        self.profile
+            .as_deref()
     }
 
     /// The user this leg dials, unencoded, cut from `destination` where mod_sofia cuts it.
@@ -260,23 +291,40 @@ fn protect_dest_uri(destination: &str) -> (Cow<'_, str>, Option<Range<usize>>) {
 }
 
 impl SofiaContact {
-    /// Create a new sofia_contact runtime expression.
-    pub fn new(user: impl Into<String>, domain: impl Into<String>) -> Self {
+    /// Create a new sofia_contact runtime expression, refusing what parse refuses.
+    pub fn new(user: impl Into<String>, domain: impl Into<String>) -> Result<Self, OriginateError> {
         Self {
             user: user.into(),
             domain: domain.into(),
             profile: None,
             variables: None,
         }
+        .checked()
     }
 
-    /// Set the SIP profile for the contact lookup.
+    /// Set the SIP profile for the contact lookup, refusing what parse refuses.
     ///
     /// Pass `"*"` to search all loaded SIP profiles for the user's
     /// registration instead of a single named profile.
-    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
+    pub fn with_profile(mut self, profile: impl Into<String>) -> Result<Self, OriginateError> {
         self.profile = Some(profile.into());
-        self
+        self.checked()
+    }
+
+    /// User part of the contact lookup.
+    pub fn user(&self) -> &str {
+        &self.user
+    }
+
+    /// Domain for the contact lookup.
+    pub fn domain(&self) -> &str {
+        &self.domain
+    }
+
+    /// SIP profile name, or `"*"` for all profiles.
+    pub fn profile(&self) -> Option<&str> {
+        self.profile
+            .as_deref()
     }
 }
 
@@ -324,7 +372,11 @@ impl SofiaEndpoint {
             .ok_or_else(|| {
                 OriginateError::ParseError("sofia endpoint needs profile/destination".into())
             })?;
-        let ep = Self::new(profile, destination);
+        let ep = Self {
+            profile: profile.into(),
+            destination: destination.into(),
+            variables: None,
+        };
         ep.check_deliverable()?;
         Ok(ep)
     }
@@ -372,9 +424,15 @@ impl SofiaGateway {
             .ok_or_else(|| {
                 OriginateError::ParseError("sofia gateway needs gateway/destination".into())
             })?;
-        let ep = match gateway_part.split_once("::") {
-            Some((profile, gateway)) => Self::new(gateway, destination).with_profile(profile),
-            None => Self::new(gateway_part, destination),
+        let (profile, gateway) = match gateway_part.split_once("::") {
+            Some((profile, gateway)) => (Some(profile.to_owned()), gateway),
+            None => (None, gateway_part),
+        };
+        let ep = Self {
+            gateway: gateway.into(),
+            destination: destination.into(),
+            profile,
+            variables: None,
         };
         ep.check_deliverable()?;
         Ok(ep)
@@ -767,7 +825,10 @@ mod tests {
 
     #[test]
     fn sofia_contact_profile_with_at_sign() {
-        let ep = SofiaContact::new("1000", "example.com").with_profile("user@realm");
+        let ep = SofiaContact::new("1000", "example.com")
+            .unwrap()
+            .with_profile("user@realm")
+            .unwrap();
         let s = ep.to_string();
         assert_eq!(s, "${sofia_contact(user@realm/1000@example.com)}");
         // Round-trip: the first @ is in profile, the parser splits on / first
@@ -846,6 +907,7 @@ mod tests {
             ],
             |destination, encoding| {
                 SofiaEndpoint::new("internal", destination)
+                    .unwrap()
                     .user(encoding)
                     .map(Cow::into_owned)
             },
@@ -870,7 +932,9 @@ mod tests {
             ],
             |destination, encoding| {
                 SofiaGateway::new("montreal", destination)
+                    .unwrap()
                     .with_profile("voipms")
+                    .unwrap()
                     .user(encoding)
                     .map(Cow::into_owned)
             },

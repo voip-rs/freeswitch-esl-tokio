@@ -82,7 +82,7 @@
 //! use freeswitch_esl_tokio::commands::SofiaGateway;
 //!
 //! let cmd = Originate::application(
-//!     Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
+//!     Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap()),
 //!     Application::simple("park"),
 //! )
 //! .cid_name("Outbound Call")

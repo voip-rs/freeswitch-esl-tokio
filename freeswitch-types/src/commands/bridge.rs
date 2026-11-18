@@ -398,9 +398,13 @@ mod tests {
     #[test]
     fn a_bracket_spanning_legs_after_expansion_is_refused() {
         let group: Vec<Endpoint> = vec![
-            crate::commands::endpoint::UserEndpoint::new("['").into(),
+            crate::commands::endpoint::UserEndpoint::new("['")
+                .unwrap()
+                .into(),
             SofiaGateway::new("", "]")
+                .unwrap()
                 .with_profile(" ")
+                .unwrap()
                 .into(),
         ];
         let json = serde_json::json!({ "groups": [group] });
@@ -416,9 +420,13 @@ mod tests {
     #[test]
     fn new_refuses_what_parse_refuses() {
         let spanning: Vec<Endpoint> = vec![
-            crate::commands::endpoint::UserEndpoint::new("['").into(),
+            crate::commands::endpoint::UserEndpoint::new("['")
+                .unwrap()
+                .into(),
             SofiaGateway::new("", "]")
+                .unwrap()
                 .with_profile(" ")
+                .unwrap()
                 .into(),
         ];
         assert_eq!(
@@ -455,6 +463,7 @@ mod tests {
             .insert("path", r"C:\path")
             .unwrap();
         let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
+            .unwrap()
             .with_variables(ep_vars)
             .into()]])
         .unwrap()
@@ -479,7 +488,7 @@ mod tests {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("cid", "it's")
             .unwrap();
-        let ep = SofiaGateway::new("gw", "18005551234");
+        let ep = SofiaGateway::new("gw", "18005551234").unwrap();
         let bridge = BridgeDialString::new(vec![vec![ep.into()]])
             .unwrap()
             .with_variables(vars.clone());
@@ -504,6 +513,7 @@ mod tests {
             .insert("other", "a,b")
             .unwrap();
         let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
+            .unwrap()
             .with_variables(ep_vars)
             .into()]])
         .unwrap();
@@ -533,9 +543,9 @@ mod tests {
     #[test]
     fn display_single_endpoint() {
         let bridge =
-            BridgeDialString::new(vec![vec![
-                SofiaGateway::new("my_provider", "18005551234").into()
-            ]])
+            BridgeDialString::new(vec![vec![SofiaGateway::new("my_provider", "18005551234")
+                .unwrap()
+                .into()]])
             .unwrap();
         assert_eq!(bridge.to_string(), "sofia/gateway/my_provider/18005551234");
     }
@@ -543,8 +553,12 @@ mod tests {
     #[test]
     fn display_simultaneous_ring() {
         let bridge = BridgeDialString::new(vec![vec![
-            SofiaGateway::new("primary", "18005551234").into(),
-            SofiaGateway::new("secondary", "18005551234").into(),
+            SofiaGateway::new("primary", "18005551234")
+                .unwrap()
+                .into(),
+            SofiaGateway::new("secondary", "18005551234")
+                .unwrap()
+                .into(),
         ]])
         .unwrap();
         assert_eq!(
@@ -556,8 +570,12 @@ mod tests {
     #[test]
     fn display_sequential_failover() {
         let bridge = BridgeDialString::new(vec![
-            vec![SofiaGateway::new("primary", "18005551234").into()],
-            vec![SofiaGateway::new("backup", "18005551234").into()],
+            vec![SofiaGateway::new("primary", "18005551234")
+                .unwrap()
+                .into()],
+            vec![SofiaGateway::new("backup", "18005551234")
+                .unwrap()
+                .into()],
         ])
         .unwrap();
         assert_eq!(
@@ -570,10 +588,16 @@ mod tests {
     fn display_mixed_simultaneous_and_sequential() {
         let bridge = BridgeDialString::new(vec![
             vec![
-                SofiaGateway::new("primary", "1234").into(),
-                SofiaGateway::new("secondary", "1234").into(),
+                SofiaGateway::new("primary", "1234")
+                    .unwrap()
+                    .into(),
+                SofiaGateway::new("secondary", "1234")
+                    .unwrap()
+                    .into(),
             ],
-            vec![SofiaGateway::new("backup", "1234").into()],
+            vec![SofiaGateway::new("backup", "1234")
+                .unwrap()
+                .into()],
         ])
         .unwrap();
         assert_eq!(
@@ -588,9 +612,9 @@ mod tests {
         vars.insert("hangup_after_bridge", "true")
             .unwrap();
         let bridge =
-            BridgeDialString::new(vec![vec![
-                SofiaEndpoint::new("internal", "1000@domain").into()
-            ]])
+            BridgeDialString::new(vec![vec![SofiaEndpoint::new("internal", "1000@domain")
+                .unwrap()
+                .into()]])
             .unwrap()
             .with_variables(vars);
         assert_eq!(
@@ -607,9 +631,12 @@ mod tests {
             .unwrap();
         let bridge = BridgeDialString::new(vec![vec![
             SofiaGateway::new("gw1", "1234")
+                .unwrap()
                 .with_variables(ep_vars)
                 .into(),
-            SofiaGateway::new("gw2", "1234").into(),
+            SofiaGateway::new("gw2", "1234")
+                .unwrap()
+                .into(),
         ]])
         .unwrap();
         assert_eq!(
@@ -621,7 +648,9 @@ mod tests {
     #[test]
     fn display_with_error_endpoint_failover() {
         let bridge = BridgeDialString::new(vec![
-            vec![SofiaGateway::new("primary", "1234").into()],
+            vec![SofiaGateway::new("primary", "1234")
+                .unwrap()
+                .into()],
             vec![ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into()],
         ])
         .unwrap();
@@ -634,7 +663,9 @@ mod tests {
     #[test]
     fn display_with_loopback() {
         let bridge = BridgeDialString::new(vec![vec![LoopbackEndpoint::new("9199")
+            .unwrap()
             .with_context("default")
+            .unwrap()
             .into()]])
         .unwrap();
         assert_eq!(bridge.to_string(), "loopback/9199/default");
@@ -744,7 +775,7 @@ mod tests {
         let ep = &bridge.groups()[0][0];
         if let Endpoint::SofiaGateway(gw) = ep {
             assert!(gw
-                .variables
+                .variables()
                 .is_some());
         } else {
             panic!("expected SofiaGateway");
@@ -816,9 +847,9 @@ mod tests {
     #[test]
     fn serde_round_trip_single() {
         let bridge =
-            BridgeDialString::new(vec![vec![
-                SofiaGateway::new("my_provider", "18005551234").into()
-            ]])
+            BridgeDialString::new(vec![vec![SofiaGateway::new("my_provider", "18005551234")
+                .unwrap()
+                .into()]])
             .unwrap();
         let json = serde_json::to_string(&bridge).unwrap();
         let parsed: BridgeDialString = serde_json::from_str(&json).unwrap();
@@ -832,8 +863,12 @@ mod tests {
             .unwrap();
         let bridge = BridgeDialString::new(vec![
             vec![
-                SofiaGateway::new("primary", "1234").into(),
-                SofiaGateway::new("secondary", "1234").into(),
+                SofiaGateway::new("primary", "1234")
+                    .unwrap()
+                    .into(),
+                SofiaGateway::new("secondary", "1234")
+                    .unwrap()
+                    .into(),
             ],
             vec![ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into()],
         ])
@@ -899,10 +934,16 @@ mod tests {
     fn a_separator_in_endpoint_text_round_trips() {
         let bridge = BridgeDialString::new(vec![
             vec![
-                SofiaEndpoint::new("internal", "a,b").into(),
-                SofiaEndpoint::new("internal", "c|d").into(),
+                SofiaEndpoint::new("internal", "a,b")
+                    .unwrap()
+                    .into(),
+                SofiaEndpoint::new("internal", "c|d")
+                    .unwrap()
+                    .into(),
             ],
-            vec![LoopbackEndpoint::new("it's a").into()],
+            vec![LoopbackEndpoint::new("it's a")
+                .unwrap()
+                .into()],
         ])
         .unwrap();
         let rendered = bridge.to_string();
@@ -937,8 +978,13 @@ mod tests {
         vars.insert("v0", value)
             .unwrap();
         vec![
-            Endpoint::PortAudio(AudioEndpoint::new().with_destination("[\\")),
+            Endpoint::PortAudio(
+                AudioEndpoint::new()
+                    .with_destination("[\\")
+                    .unwrap(),
+            ),
             SofiaGateway::new("]", "")
+                .unwrap()
                 .with_variables(vars)
                 .into(),
         ]
@@ -996,7 +1042,11 @@ mod tests {
 
     fn loopbacks(count: usize) -> Vec<Endpoint> {
         (0..count)
-            .map(|n| LoopbackEndpoint::new(n.to_string()).into())
+            .map(|n| {
+                LoopbackEndpoint::new(n.to_string())
+                    .unwrap()
+                    .into()
+            })
             .collect()
     }
 

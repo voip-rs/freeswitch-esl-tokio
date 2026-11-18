@@ -11,6 +11,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::bridge::BridgeDialString;
+use super::originate::OriginateError;
 use super::{
     originate_quote, originate_unquote, AudioEndpoint, BlockParse, DialString, DialStringCarrier,
     DialStringTarget, Endpoint, ErrorEndpoint, FlattenedDialString, FlattenedLeg, GroupCall,
@@ -192,26 +193,37 @@ fn read_single_leg(
 }
 
 pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
-    prop_oneof![
+    let built = prop_oneof![
         (text(), option::of(text()), option::of(text())).prop_map(
             |(extension, context, dialplan)| {
-                let mut ep = LoopbackEndpoint::new(extension);
-                ep.context = context;
-                ep.dialplan = dialplan;
-                ep.into()
+                let mut ep = LoopbackEndpoint::new(extension)?;
+                if let Some(context) = context {
+                    ep = ep.with_context(context)?;
+                }
+                if let Some(dialplan) = dialplan {
+                    ep = ep.with_dialplan(dialplan)?;
+                }
+                Ok(ep.into())
             }
         ),
-        (text(), text())
-            .prop_map(|(profile, destination)| { SofiaEndpoint::new(profile, destination).into() }),
+        (text(), text()).prop_map(|(profile, destination)| {
+            SofiaEndpoint::new(profile, destination).map(Endpoint::from)
+        }),
         (text(), text(), option::of(text())).prop_map(|(gateway, destination, profile)| {
-            let mut ep = SofiaGateway::new(gateway, destination);
-            ep.profile = profile;
-            ep.into()
+            let ep = SofiaGateway::new(gateway, destination)?;
+            Ok(match profile {
+                Some(profile) => ep.with_profile(profile)?,
+                None => ep,
+            }
+            .into())
         }),
         (text(), option::of(text())).prop_map(|(name, domain)| {
-            let mut ep = UserEndpoint::new(name);
-            ep.domain = domain;
-            ep.into()
+            let ep = UserEndpoint::new(name)?;
+            Ok(match domain {
+                Some(domain) => ep.with_domain(domain)?,
+                None => ep,
+            }
+            .into())
         }),
         select(
             &[
@@ -220,11 +232,14 @@ pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
                 HangupCause::NormalClearing,
             ][..]
         )
-        .prop_map(|cause| ErrorEndpoint::new(cause).into()),
+        .prop_map(|cause| Ok(ErrorEndpoint::new(cause).into())),
         (text(), text(), option::of(text())).prop_map(|(user, domain, profile)| {
-            let mut ep = SofiaContact::new(user, domain);
-            ep.profile = profile;
-            ep.into()
+            let ep = SofiaContact::new(user, domain)?;
+            Ok(match profile {
+                Some(profile) => ep.with_profile(profile)?,
+                None => ep,
+            }
+            .into())
         }),
         (
             text(),
@@ -238,54 +253,62 @@ pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
             ))
         )
             .prop_map(|(group, domain, order)| {
-                let mut ep = GroupCall::new(group, domain);
-                ep.order = order;
-                ep.into()
+                let ep = GroupCall::new(group, domain)?;
+                Ok(match order {
+                    Some(order) => ep.with_order(order),
+                    None => ep,
+                }
+                .into())
             }),
         (
             select(&[Endpoint::PortAudio, Endpoint::PulseAudio, Endpoint::Alsa][..]),
             option::of(text())
         )
             .prop_map(|(variant, destination)| {
-                let mut ep = AudioEndpoint::new();
-                ep.destination = destination;
-                variant(ep)
+                let ep = AudioEndpoint::new();
+                Ok(variant(match destination {
+                    Some(destination) => ep.with_destination(destination)?,
+                    None => ep,
+                }))
             }),
-    ]
+    ];
+    built.prop_filter_map(
+        "the builder refuses what config load refuses",
+        |built: Result<Endpoint, OriginateError>| built.ok(),
+    )
 }
 
 /// Left to the switch like a block value naming a variable; an expression's own `${` is not.
 pub(crate) fn fields_name_a_variable(bare: &Endpoint) -> bool {
     match bare {
-        Endpoint::SofiaContact(ep) => [
-            Some(&ep.user),
-            Some(&ep.domain),
-            ep.profile
-                .as_ref(),
-        ]
-        .into_iter()
-        .flatten()
-        .any(|field| names_a_variable(field)),
-        Endpoint::GroupCall(ep) => names_a_variable(&ep.group) || names_a_variable(&ep.domain),
+        Endpoint::SofiaContact(ep) => [Some(ep.user()), Some(ep.domain()), ep.profile()]
+            .into_iter()
+            .flatten()
+            .any(names_a_variable),
+        Endpoint::GroupCall(ep) => names_a_variable(ep.group()) || names_a_variable(ep.domain()),
         other => names_a_variable(&other.module_text()),
     }
 }
 
 /// A loopback dialplan without a context renders the switch's default context in the gap.
 fn canonical(endpoint: &Endpoint) -> Endpoint {
-    let mut endpoint = endpoint.clone();
-    if let Endpoint::Loopback(loopback) = &mut endpoint {
-        if loopback
-            .dialplan
-            .is_some()
-            && loopback
-                .context
-                .is_none()
+    match endpoint {
+        Endpoint::Loopback(loopback)
+            if loopback
+                .dialplan()
+                .is_some()
+                && loopback
+                    .context()
+                    .is_none() =>
         {
-            loopback.context = Some("default".to_owned());
+            loopback
+                .clone()
+                .with_context("default")
+                .expect("a dialplan already renders the default context")
+                .into()
         }
+        other => other.clone(),
     }
-    endpoint
 }
 
 #[derive(Debug, Clone)]

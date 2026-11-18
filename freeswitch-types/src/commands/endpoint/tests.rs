@@ -105,7 +105,9 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         .to_string();
     assert!(refused.contains("group_call"), "{refused}");
     let built = Originate::application(
-        GroupCall::new("support", "example.com").into(),
+        GroupCall::new("support", "example.com")
+            .unwrap()
+            .into(),
         Application::simple("park"),
     );
     assert_eq!(
@@ -187,7 +189,7 @@ fn whitespace_other_than_a_space_is_kept() {
     let Endpoint::Loopback(loopback) = &ep else {
         panic!("expected Loopback: {ep:?}");
     };
-    assert_eq!(loopback.extension, "\u{b}");
+    assert_eq!(loopback.extension(), "\u{b}");
 
     assert!(Variables::parse_for("\u{b}{k=v}", DialStringCarrier::Dialplan).is_err());
 
@@ -211,9 +213,9 @@ fn endpoint_from_str_with_variables() {
         .parse()
         .unwrap();
     if let Endpoint::Sofia(inner) = &ep {
-        assert_eq!(inner.profile, "internal");
+        assert_eq!(inner.profile(), "internal");
         assert!(inner
-            .variables
+            .variables()
             .is_some());
     } else {
         panic!("expected Sofia variant");
@@ -224,11 +226,7 @@ fn endpoint_from_str_with_variables() {
 
 #[test]
 fn endpoint_display_delegates_to_inner() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
     assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
 }
 
@@ -239,11 +237,9 @@ fn dial_string_variables_returns_some() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("k", "v")
         .unwrap();
-    let ep = SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000".into(),
-        variables: Some(vars),
-    };
+    let ep = SofiaEndpoint::new("internal", "1000")
+        .unwrap()
+        .with_variables(vars);
     assert!(ep
         .variables()
         .is_some());
@@ -257,11 +253,7 @@ fn dial_string_variables_returns_some() {
 
 #[test]
 fn dial_string_variables_returns_none() {
-    let ep = SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000".into(),
-        variables: None,
-    };
+    let ep = SofiaEndpoint::new("internal", "1000").unwrap();
     assert!(ep
         .variables()
         .is_none());
@@ -269,11 +261,7 @@ fn dial_string_variables_returns_none() {
 
 #[test]
 fn dial_string_set_variables() {
-    let mut ep = SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000".into(),
-        variables: None,
-    };
+    let mut ep = SofiaEndpoint::new("internal", "1000").unwrap();
     let mut vars = Variables::new(VariablesType::Channel);
     vars.insert("k", "v")
         .unwrap();
@@ -332,11 +320,11 @@ fn dial_string_on_endpoint_enum() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("k", "v")
         .unwrap();
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000".into(),
-        variables: Some(vars),
-    });
+    let ep = Endpoint::Sofia(
+        SofiaEndpoint::new("internal", "1000")
+            .unwrap()
+            .with_variables(vars),
+    );
     assert!(ep
         .variables()
         .is_some());
@@ -351,28 +339,42 @@ fn serde_endpoint_enum_tags_round_trip() {
     let cases: [(&str, Endpoint); 7] = [
         (
             "sofia",
-            SofiaEndpoint::new("internal", "1000@example.com").into(),
+            SofiaEndpoint::new("internal", "1000@example.com")
+                .unwrap()
+                .into(),
         ),
-        ("sofia_gateway", SofiaGateway::new("gw1", "1234").into()),
+        (
+            "sofia_gateway",
+            SofiaGateway::new("gw1", "1234")
+                .unwrap()
+                .into(),
+        ),
         (
             "loopback",
             LoopbackEndpoint::new("9199")
+                .unwrap()
                 .with_context("default")
+                .unwrap()
                 .into(),
         ),
         (
             "user",
             UserEndpoint::new("bob")
+                .unwrap()
                 .with_domain("example.com")
+                .unwrap()
                 .into(),
         ),
         (
             "sofia_contact",
-            SofiaContact::new("1000", "example.com").into(),
+            SofiaContact::new("1000", "example.com")
+                .unwrap()
+                .into(),
         ),
         (
             "group_call",
             GroupCall::new("support", "example.com")
+                .unwrap()
                 .with_order(GroupCallOrder::All)
                 .into(),
         ),
@@ -390,23 +392,14 @@ fn serde_endpoint_enum_tags_round_trip() {
 
 #[test]
 fn serde_endpoint_skips_none_variables() {
-    let ep = SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000".into(),
-        variables: None,
-    };
+    let ep = SofiaEndpoint::new("internal", "1000").unwrap();
     let json = serde_json::to_string(&ep).unwrap();
     assert!(!json.contains("variables"));
 }
 
 #[test]
 fn serde_endpoint_skips_none_profile() {
-    let ep = SofiaGateway {
-        gateway: "gw".into(),
-        destination: "1234".into(),
-        profile: None,
-        variables: None,
-    };
+    let ep = SofiaGateway::new("gw", "1234").unwrap();
     let json = serde_json::to_string(&ep).unwrap();
     assert!(!json.contains("profile"));
 }
@@ -431,9 +424,11 @@ fn audio_endpoints_render_and_parse_per_module() {
             .strip_prefix(module)
             .and_then(|rest| rest.strip_prefix('/'))
             .map(str::to_string);
-        let ep = variant(AudioEndpoint {
-            destination: destination.clone(),
-            variables: None,
+        let ep = variant(match destination {
+            Some(destination) => AudioEndpoint::new()
+                .with_destination(destination)
+                .unwrap(),
+            None => AudioEndpoint::new(),
         });
         assert_eq!(ep.to_string(), wire);
 
@@ -462,6 +457,7 @@ fn audio_endpoint_carries_variables() {
     let ep = Endpoint::PortAudio(
         AudioEndpoint::new()
             .with_destination("auto_answer")
+            .unwrap()
             .with_variables(vars),
     );
     assert_eq!(ep.to_string(), "{codec=PCMU}portaudio/auto_answer");
@@ -489,39 +485,56 @@ fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
         ep
     };
     let cases: [Endpoint; 10] = [
-        with_vars(SofiaEndpoint::new("internal", "1000@example.com").into()),
+        with_vars(
+            SofiaEndpoint::new("internal", "1000@example.com")
+                .unwrap()
+                .into(),
+        ),
         with_vars(
             SofiaGateway::new("gw", "1234")
+                .unwrap()
                 .with_profile("external")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             LoopbackEndpoint::new("9199")
+                .unwrap()
                 .with_context("default")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             UserEndpoint::new("bob")
+                .unwrap()
                 .with_domain("example.com")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             SofiaContact::new("1000", "example.com")
+                .unwrap()
                 .with_profile("*")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             GroupCall::new("support", "example.com")
+                .unwrap()
                 .with_order(GroupCallOrder::All)
                 .into(),
         ),
         ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into(),
         with_vars(Endpoint::PortAudio(
-            AudioEndpoint::new().with_destination("auto_answer"),
+            AudioEndpoint::new()
+                .with_destination("auto_answer")
+                .unwrap(),
         )),
         with_vars(Endpoint::PulseAudio(AudioEndpoint::new())),
         with_vars(Endpoint::Alsa(
-            AudioEndpoint::new().with_destination("auto_answer"),
+            AudioEndpoint::new()
+                .with_destination("auto_answer")
+                .unwrap(),
         )),
     ];
 
@@ -556,27 +569,47 @@ fn every_endpoint_type_round_trips_at_an_argv_separator() {
         ep
     };
     let cases: [Endpoint; 8] = [
-        with_vars(SofiaEndpoint::new("internal", "1000@example.com").into()),
+        with_vars(
+            SofiaEndpoint::new("internal", "1000@example.com")
+                .unwrap()
+                .into(),
+        ),
         with_vars(
             SofiaGateway::new("gw", "1234")
+                .unwrap()
                 .with_profile("external")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             LoopbackEndpoint::new("9199")
+                .unwrap()
                 .with_context("default")
+                .unwrap()
                 .into(),
         ),
         with_vars(
             UserEndpoint::new("bob")
+                .unwrap()
                 .with_domain("example.com")
+                .unwrap()
                 .into(),
         ),
-        with_vars(SofiaContact::new("1000", "example.com").into()),
-        with_vars(GroupCall::new("support", "example.com").into()),
+        with_vars(
+            SofiaContact::new("1000", "example.com")
+                .unwrap()
+                .into(),
+        ),
+        with_vars(
+            GroupCall::new("support", "example.com")
+                .unwrap()
+                .into(),
+        ),
         ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into(),
         with_vars(Endpoint::Alsa(
-            AudioEndpoint::new().with_destination("auto_answer"),
+            AudioEndpoint::new()
+                .with_destination("auto_answer")
+                .unwrap(),
         )),
     ];
 
@@ -626,11 +659,7 @@ fn an_endpoint_cut_by_the_blank_split_is_refused() {
 
 #[test]
 fn from_sofia_endpoint() {
-    let inner = SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "1000@example.com".into(),
-        variables: None,
-    };
+    let inner = SofiaEndpoint::new("internal", "1000@example.com").unwrap();
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -639,12 +668,7 @@ fn from_sofia_endpoint() {
 
 #[test]
 fn from_sofia_gateway() {
-    let inner = SofiaGateway {
-        gateway: "gw1".into(),
-        destination: "1234".into(),
-        profile: None,
-        variables: None,
-    };
+    let inner = SofiaGateway::new("gw1", "1234").unwrap();
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -653,7 +677,10 @@ fn from_sofia_gateway() {
 
 #[test]
 fn from_loopback_endpoint() {
-    let inner = LoopbackEndpoint::new("9199").with_context("default");
+    let inner = LoopbackEndpoint::new("9199")
+        .unwrap()
+        .with_context("default")
+        .unwrap();
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -662,11 +689,10 @@ fn from_loopback_endpoint() {
 
 #[test]
 fn from_user_endpoint() {
-    let inner = UserEndpoint {
-        name: "bob".into(),
-        domain: Some("example.com".into()),
-        variables: None,
-    };
+    let inner = UserEndpoint::new("bob")
+        .unwrap()
+        .with_domain("example.com")
+        .unwrap();
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -675,12 +701,7 @@ fn from_user_endpoint() {
 
 #[test]
 fn from_sofia_contact() {
-    let inner = SofiaContact {
-        user: "1000".into(),
-        domain: "example.com".into(),
-        profile: None,
-        variables: None,
-    };
+    let inner = SofiaContact::new("1000", "example.com").unwrap();
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -689,7 +710,9 @@ fn from_sofia_contact() {
 
 #[test]
 fn from_group_call() {
-    let inner = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
+    let inner = GroupCall::new("support", "example.com")
+        .unwrap()
+        .with_order(GroupCallOrder::All);
     let ep: Endpoint = inner
         .clone()
         .into();
@@ -718,51 +741,69 @@ fn endpoint_text_is_escaped_for_the_leg_splits() {
     let api = DialStringTarget::new(DialStringCarrier::EslApi);
     let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
     let separators: Endpoint = LoopbackEndpoint::new("a,b")
+        .unwrap()
         .with_context("c|d")
+        .unwrap()
         .into();
     let cases: [(DialStringTarget, Endpoint, &str); 10] = [
         (api, separators.clone(), r"loopback/a\,b/c\|d"),
         (dialplan, separators, r"loopback/a\,b/c\|d"),
         (
             api,
-            LoopbackEndpoint::new(r"C:\x").into(),
+            LoopbackEndpoint::new(r"C:\x")
+                .unwrap()
+                .into(),
             r"loopback/C:\\\\\\\\x",
         ),
         (
             api,
-            LoopbackEndpoint::new("it's").into(),
+            LoopbackEndpoint::new("it's")
+                .unwrap()
+                .into(),
             r"loopback/it\\\\\\\'s",
         ),
         (
             dialplan,
-            LoopbackEndpoint::new("it's").into(),
+            LoopbackEndpoint::new("it's")
+                .unwrap()
+                .into(),
             r"loopback/it\\\\\\'s",
         ),
         (
             api,
-            SofiaEndpoint::new("internal", "a b").into(),
+            SofiaEndpoint::new("internal", "a b")
+                .unwrap()
+                .into(),
             "'sofia/internal/a b'",
         ),
         (
             api,
             UserEndpoint::new("bob")
+                .unwrap()
                 .with_domain("end ")
+                .unwrap()
                 .into(),
             r"user/bob@end\\\\s",
         ),
         (
             dialplan,
-            SofiaEndpoint::new("internal", "pa$$").into(),
+            SofiaEndpoint::new("internal", "pa$$")
+                .unwrap()
+                .into(),
             r"\'sofia/internal/pa\$\$",
         ),
         (
             dialplan,
-            SofiaEndpoint::new("internal", "${v}").into(),
+            SofiaEndpoint::new("internal", "${v}")
+                .unwrap()
+                .into(),
             "sofia/internal/${v}",
         ),
         (
             dialplan,
-            LoopbackEndpoint::new("pa$$${v}").into(),
+            LoopbackEndpoint::new("pa$$${v}")
+                .unwrap()
+                .into(),
             "loopback/pa$$${v}",
         ),
     ];
@@ -783,17 +824,29 @@ const HOSTILE_FIELDS: &[&str] = &[
 
 fn hostile_endpoints(field: &str) -> [Endpoint; 5] {
     [
-        SofiaEndpoint::new("internal", field).into(),
+        SofiaEndpoint::new("internal", field)
+            .unwrap()
+            .into(),
         SofiaGateway::new("gw", field)
+            .unwrap()
             .with_profile("external")
+            .unwrap()
             .into(),
         LoopbackEndpoint::new(field)
+            .unwrap()
             .with_context(field)
+            .unwrap()
             .into(),
         UserEndpoint::new(field)
+            .unwrap()
             .with_domain(field)
+            .unwrap()
             .into(),
-        Endpoint::Alsa(AudioEndpoint::new().with_destination(field)),
+        Endpoint::Alsa(
+            AudioEndpoint::new()
+                .with_destination(field)
+                .unwrap(),
+        ),
     ]
 }
 
@@ -912,8 +965,8 @@ fn a_loopback_application_is_one_extension() {
     let ep: LoopbackEndpoint = "loopback/app=bridge:null/farend"
         .parse()
         .unwrap();
-    assert_eq!(ep.extension, "app=bridge:null/farend");
-    assert_eq!(ep.context, None);
+    assert_eq!(ep.extension(), "app=bridge:null/farend");
+    assert_eq!(ep.context(), None);
     assert_eq!(ep.to_string(), "loopback/app=bridge:null/farend");
 }
 
@@ -969,18 +1022,34 @@ fn expression_and_audio_fields_the_switch_misreads_are_refused() {
 #[test]
 fn empty_fields_the_module_reads_as_written_round_trip() {
     let cases: [Endpoint; 8] = [
-        LoopbackEndpoint::new("").into(),
-        SofiaEndpoint::new("", "1000").into(),
-        SofiaEndpoint::new("internal", "").into(),
+        LoopbackEndpoint::new("")
+            .unwrap()
+            .into(),
+        SofiaEndpoint::new("", "1000")
+            .unwrap()
+            .into(),
+        SofiaEndpoint::new("internal", "")
+            .unwrap()
+            .into(),
         SofiaGateway::new("gw", "1")
+            .unwrap()
             .with_profile("")
+            .unwrap()
             .into(),
         UserEndpoint::new("bob")
+            .unwrap()
             .with_domain("")
+            .unwrap()
             .into(),
-        GroupCall::new("", "example.com").into(),
-        GroupCall::new("support", "").into(),
-        SofiaContact::new("", "example.com").into(),
+        GroupCall::new("", "example.com")
+            .unwrap()
+            .into(),
+        GroupCall::new("support", "")
+            .unwrap()
+            .into(),
+        SofiaContact::new("", "example.com")
+            .unwrap()
+            .into(),
     ];
     for ep in cases {
         for target in [
@@ -1021,18 +1090,13 @@ fn empty_fields_the_module_reads_as_written_round_trip() {
 fn expression_fields_split_where_the_functions_split() {
     let group = GroupCall::parse_bare("${group_call(g@d@e+F)}").unwrap();
     assert_eq!(
-        (
-            group
-                .group
-                .as_str(),
-            group
-                .domain
-                .as_str(),
-            group.order
-        ),
+        (group.group(), group.domain(), group.order()),
         ("g", "d@e", Some(GroupCallOrder::First))
     );
-    let contact = SofiaContact::new("u/x", "example.com").with_profile("p");
+    let contact = SofiaContact::new("u/x", "example.com")
+        .unwrap()
+        .with_profile("p")
+        .unwrap();
     assert_eq!(
         SofiaContact::parse_bare(&contact.to_string()).unwrap(),
         contact

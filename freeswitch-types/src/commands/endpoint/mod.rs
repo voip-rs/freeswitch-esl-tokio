@@ -31,6 +31,12 @@ macro_rules! impl_dial_string_with_variables {
         }
 
         impl $ty {
+            /// Per-channel variables prepended as a block.
+            pub fn variables(&self) -> Option<&$crate::commands::variables::Variables> {
+                self.variables
+                    .as_ref()
+            }
+
             /// Set per-channel variables.
             pub fn with_variables(
                 mut self,
@@ -38,6 +44,11 @@ macro_rules! impl_dial_string_with_variables {
             ) -> Self {
                 self.variables = Some(variables);
                 self
+            }
+
+            /// This value, or what `check_deliverable` refuses in it.
+            fn checked(self) -> Result<Self, $crate::commands::originate::OriginateError> {
+                Ok(self)
             }
         }
     };

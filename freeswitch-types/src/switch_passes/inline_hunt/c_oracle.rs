@@ -88,7 +88,12 @@ fn inline_actions_arrive_through_the_c_hunt() {
             any::<bool>(),
         ),
         |c, (delimiter, apps, separated)| {
-            let endpoint = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+            let endpoint = Endpoint::Loopback(
+                LoopbackEndpoint::new("9199")
+                    .unwrap()
+                    .with_context("test")
+                    .unwrap(),
+            );
             let built = apps
                 .iter()
                 .map(|(name, args)| Application::new(*name, args.clone()));

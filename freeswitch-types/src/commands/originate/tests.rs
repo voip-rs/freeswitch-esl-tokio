@@ -31,11 +31,7 @@ fn parse_strips_only_the_switch_whitespace() {
 
 #[test]
 fn endpoint_uri_only() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     assert_eq!(ep.to_string(), "sofia/internal/123@example.com");
 }
 
@@ -44,11 +40,11 @@ fn endpoint_uri_with_variable() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("one_variable", "1")
         .unwrap();
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: Some(vars),
-    });
+    let ep = Endpoint::Sofia(
+        SofiaEndpoint::new("internal", "123@example.com")
+            .unwrap()
+            .with_variables(vars),
+    );
     assert_eq!(
         ep.to_string(),
         "{one_variable=1}sofia/internal/123@example.com"
@@ -60,11 +56,11 @@ fn endpoint_variable_with_quote() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("one_variable", "one'quote")
         .unwrap();
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: Some(vars),
-    });
+    let ep = Endpoint::Sofia(
+        SofiaEndpoint::new("internal", "123@example.com")
+            .unwrap()
+            .with_variables(vars),
+    );
     // An endpoint renders for the ESL API carrier, which is the deeper of
     // the two escapings.
     assert_eq!(
@@ -82,7 +78,11 @@ fn display_and_from_str_are_the_default_revision() {
     vars.insert("cid", "it's")
         .unwrap();
     let orig = Originate::application(
-        Endpoint::SofiaGateway(SofiaGateway::new("gw", "1234").with_variables(vars)),
+        Endpoint::SofiaGateway(
+            SofiaGateway::new("gw", "1234")
+                .unwrap()
+                .with_variables(vars),
+        ),
         Application::simple("park"),
     );
 
@@ -104,7 +104,9 @@ fn loopback_endpoint_display() {
         .unwrap();
     let ep = Endpoint::Loopback(
         LoopbackEndpoint::new("aUri")
+            .unwrap()
             .with_context("aContext")
+            .unwrap()
             .with_variables(vars),
     );
     assert_eq!(ep.to_string(), "{one_variable=1}loopback/aUri/aContext");
@@ -115,12 +117,11 @@ fn sofia_gateway_endpoint_display() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("one_variable", "1")
         .unwrap();
-    let ep = Endpoint::SofiaGateway(SofiaGateway {
-        destination: "aUri".into(),
-        profile: None,
-        gateway: "internal".into(),
-        variables: Some(vars),
-    });
+    let ep = Endpoint::SofiaGateway(
+        SofiaGateway::new("internal", "aUri")
+            .unwrap()
+            .with_variables(vars),
+    );
     assert_eq!(
         ep.to_string(),
         "{one_variable=1}sofia/gateway/internal/aUri"
@@ -157,11 +158,7 @@ fn application_inline_no_args() {
 
 #[test]
 fn originate_xml_display() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("conference", Some("1")))
         .dialplan(DialplanType::XML)
         .unwrap();
@@ -173,11 +170,7 @@ fn originate_xml_display() {
 
 #[test]
 fn originate_inline_display() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::inline(ep, vec![Application::new("conference", Some("1"))])
         .unwrap()
         .dialplan(DialplanType::INLINE)
@@ -190,11 +183,7 @@ fn originate_inline_display() {
 
 #[test]
 fn originate_extension_display() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -227,22 +216,14 @@ fn originate_extension_no_dialplan() {
 
 #[test]
 fn originate_extension_with_inline_errors() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let result = Originate::extension(ep, "1000").dialplan(DialplanType::INLINE);
     assert!(result.is_err());
 }
 
 #[test]
 fn originate_empty_inline_errors() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let result = Originate::inline(ep, vec![]);
     assert!(result.is_err());
 }
@@ -259,7 +240,12 @@ fn originate_from_string_round_trip() {
 
 #[test]
 fn originate_socket_app_quoted() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let orig = Originate::application(
         ep,
         Application::new("socket", Some("127.0.0.1:8040 async full")),
@@ -286,11 +272,7 @@ fn originate_socket_round_trip() {
 
 #[test]
 fn originate_display_round_trip() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("conference", Some("1")))
         .dialplan(DialplanType::XML)
         .unwrap();
@@ -329,11 +311,7 @@ fn originate_inline_multi_app_round_trip() {
 
 #[test]
 fn originate_inline_auto_dialplan() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::inline(ep, vec![Application::simple("park")]).unwrap();
     assert!(orig
         .to_string()
@@ -485,11 +463,7 @@ fn serde_application_skips_none_args() {
 
 #[test]
 fn serde_originate_application_round_trip() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("park", None::<&str>))
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -588,11 +562,7 @@ fn serde_inline_gets_a_separator_without_naming_one() {
 
 #[test]
 fn serde_originate_skips_none_fields() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("park", None::<&str>));
     let json = serde_json::to_string(&orig).unwrap();
     assert!(!json.contains("dialplan"));
@@ -659,11 +629,7 @@ fn originate_target_from_vec() {
 
 #[test]
 fn originate_target_application_wire_format() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::simple("park"));
     assert_eq!(
         orig.to_string(),
@@ -673,7 +639,12 @@ fn originate_target_application_wire_format() {
 
 #[test]
 fn originate_timeout_only_fills_positional_gaps() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let cmd =
         Originate::application(ep, Application::simple("park")).timeout(Duration::from_secs(30));
     assert_eq!(
@@ -684,7 +655,12 @@ fn originate_timeout_only_fills_positional_gaps() {
 
 #[test]
 fn originate_cid_num_only_fills_preceding_gaps() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
     assert_eq!(
         cmd.to_string(),
@@ -694,7 +670,12 @@ fn originate_cid_num_only_fills_preceding_gaps() {
 
 #[test]
 fn originate_context_only_fills_dialplan() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let cmd = Originate::extension(ep, "1000").context("myctx");
     assert_eq!(
         cmd.to_string(),
@@ -705,7 +686,12 @@ fn originate_context_only_fills_dialplan() {
 /// A slot forced present by a later one is `undef`, which reads back as absent.
 #[test]
 fn originate_gap_filler_round_trips() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
     let wire = cmd.to_string();
     let parsed: Originate = wire
@@ -724,12 +710,13 @@ fn serde_originate_full_round_trip_with_variables() {
     ep_vars
         .insert("sip_h_X-Custom", "value with spaces")
         .unwrap();
-    let ep = Endpoint::SofiaGateway(SofiaGateway {
-        gateway: "my_provider".into(),
-        destination: "18005551234".into(),
-        profile: Some("external".into()),
-        variables: Some(ep_vars),
-    });
+    let ep = Endpoint::SofiaGateway(
+        SofiaGateway::new("my_provider", "18005551234")
+            .unwrap()
+            .with_profile("external")
+            .unwrap()
+            .with_variables(ep_vars),
+    );
     let orig = Originate::application(ep, Application::new("park", None::<&str>))
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -745,7 +732,12 @@ fn serde_originate_full_round_trip_with_variables() {
 
 #[test]
 fn serde_originate_inline_round_trip_with_all_fields() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("default")
+            .unwrap(),
+    );
     let orig = Originate::inline(
         ep,
         vec![
@@ -768,11 +760,7 @@ fn serde_originate_inline_round_trip_with_all_fields() {
 
 #[test]
 fn originate_context_named_inline() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -789,11 +777,7 @@ fn originate_context_named_inline() {
 
 #[test]
 fn originate_context_named_xml() {
-    let ep = Endpoint::Sofia(SofiaEndpoint {
-        profile: "internal".into(),
-        destination: "123@example.com".into(),
-        variables: None,
-    });
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -861,7 +845,12 @@ fn errors_keep_their_source() {
 /// on, they are re-quoted at every hop and the switch dials the quotes.
 #[test]
 fn quoted_caller_id_round_trips_without_gaining_quotes() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let cmd = Originate::application(ep, Application::simple("park"))
         .cid_name("Outbound Call")
         .cid_num("555 1234");
@@ -883,7 +872,12 @@ fn quoted_caller_id_round_trips_without_gaining_quotes() {
 /// override per call. Clearing a field is half of that and had no coverage.
 #[test]
 fn originate_mutators_set_and_clear_every_optional_field() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("default")
+            .unwrap(),
+    );
     let mut cmd = Originate::extension(ep, "1000");
 
     cmd.set_dialplan(Some(DialplanType::XML));
@@ -909,10 +903,10 @@ fn originate_mutators_set_and_clear_every_optional_field() {
 
 #[test]
 fn originate_mut_accessors_reach_the_endpoint_and_the_target() {
-    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com"));
+    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
     let mut cmd = Originate::application(ep, Application::new("socket", Some("old")));
 
-    *cmd.endpoint_mut() = Endpoint::Loopback(LoopbackEndpoint::new("9199"));
+    *cmd.endpoint_mut() = Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap());
     if let OriginateTarget::Application(app) = cmd.target_mut() {
         *app.name_mut() = "playback".into();
         *app.args_mut() = Some("/tmp/test.wav".into());
@@ -928,7 +922,12 @@ fn originate_mut_accessors_reach_the_endpoint_and_the_target() {
 
 #[test]
 fn originate_accessors() {
-    let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
+    let ep = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("default")
+            .unwrap(),
+    );
     let cmd = Originate::extension(ep, "1000")
         .dialplan(DialplanType::XML)
         .unwrap()
@@ -946,7 +945,7 @@ fn originate_accessors() {
 }
 
 fn null_endpoint() -> Endpoint {
-    Endpoint::Loopback(LoopbackEndpoint::new("9199"))
+    Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap())
 }
 
 #[test]
@@ -1169,7 +1168,12 @@ fn parses_a_prefixed_inline_target() {
 }
 
 fn test_endpoint() -> Endpoint {
-    Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"))
+    Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    )
 }
 
 fn spaced_endpoint() -> Endpoint {
@@ -1178,7 +1182,9 @@ fn spaced_endpoint() -> Endpoint {
         .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
+            .unwrap()
             .with_context("test")
+            .unwrap()
             .with_variables(vars),
     )
 }

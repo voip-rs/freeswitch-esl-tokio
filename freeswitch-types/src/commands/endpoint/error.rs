@@ -7,16 +7,20 @@ use crate::commands::originate::OriginateError;
 /// Bridge to a specific hangup cause: `error/{cause}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
 pub struct ErrorEndpoint {
     /// Hangup cause code.
-    pub cause: HangupCause,
+    cause: HangupCause,
 }
 
 impl ErrorEndpoint {
     /// Create a new error endpoint with the given hangup cause.
     pub fn new(cause: HangupCause) -> Self {
         Self { cause }
+    }
+
+    /// Hangup cause code.
+    pub fn cause(&self) -> HangupCause {
+        self.cause
     }
 }
 

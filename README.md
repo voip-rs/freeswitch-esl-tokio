@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ]).await?;
 
     let cmd = Originate::inline(
-        Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
+        Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")?),
         [
             Application::new(
                 "playback",

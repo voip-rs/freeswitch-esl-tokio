@@ -46,16 +46,11 @@ fn yaml_loopback_originate_parses() {
     let Endpoint::Loopback(ref ep) = *cmd.endpoint() else {
         panic!("expected a loopback endpoint, got {:?}", cmd.endpoint());
     };
-    assert_eq!(ep.extension, "9199");
-    assert_eq!(
-        ep.context
-            .as_deref(),
-        Some("test")
-    );
+    assert_eq!(ep.extension(), "9199");
+    assert_eq!(ep.context(), Some("test"));
 
     let vars = ep
-        .variables
-        .as_ref()
+        .variables()
         .expect("endpoint must carry variables");
     // `scope: channel` in YAML -> [] brackets on the wire.
     assert_eq!(vars.scope(), VariablesType::Channel);
@@ -92,15 +87,14 @@ fn yaml_loopback_bowout_parses() {
         panic!("expected a loopback endpoint, got {:?}", cmd.endpoint());
     };
     // mod_loopback's `app=<application>[:<args>]` destination form.
-    assert_eq!(ep.extension, "app=bridge:null/farend");
+    assert_eq!(ep.extension(), "app=bridge:null/farend");
     assert!(ep
-        .context
+        .context()
         .is_none());
 
     // A bare YAML mapping (no scope/vars wrapper) means Default scope -> {}.
     let vars = ep
-        .variables
-        .as_ref()
+        .variables()
         .expect("endpoint must carry variables");
     assert_eq!(vars.scope(), VariablesType::Default);
     assert_eq!(vars.get("loopback_bowout"), Some("true"));
@@ -536,7 +530,11 @@ async fn live_originate_loopback_bowout_on_execute() {
     vars.insert("loopback_bowout", "false")
         .unwrap();
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("app=bridge:null/farend").with_variables(vars)),
+        Endpoint::Loopback(
+            LoopbackEndpoint::new("app=bridge:null/farend")
+                .unwrap()
+                .with_variables(vars),
+        ),
         Application::park(),
     );
 

@@ -164,7 +164,7 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
     vars.insert("loopback_bowout_on_execute", "true")?;
 
     let originate = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new(&endpoint).with_variables(vars)),
+        Endpoint::Loopback(LoopbackEndpoint::new(&endpoint)?.with_variables(vars)),
         Application::new("socket", Some(addr.as_str())),
     );
     let wire = originate

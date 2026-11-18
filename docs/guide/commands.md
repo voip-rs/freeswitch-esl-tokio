@@ -27,11 +27,11 @@ let target = DialStringTarget::new(DialStringCarrier::EslApi)
     .with_block_parse(BlockParse::for_version(&version).unwrap());
 
 // Direct SIP profile routing
-let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com"));
+let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
 assert_eq!(ep.display_for(target).to_string(), "sofia/internal/1000@example.com");
 
 // SIP gateway routing
-let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
+let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap());
 assert_eq!(ep.display_for(target).to_string(), "sofia/gateway/my_provider/18005551234");
 
 // Parse from wire format
@@ -54,7 +54,7 @@ use freeswitch_esl_tokio::FreeswitchVersion;
 let version: FreeswitchVersion = "1.10.12".parse()?;
 let block_parse = BlockParse::for_version(&version)?;
 
-let gw = || Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
+let gw = || Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap());
 
 // Inline applications
 let cmd = Originate::inline(gw(), vec![
@@ -88,7 +88,7 @@ let version: FreeswitchVersion = "1.10.12".parse().unwrap();
 let block_parse = BlockParse::for_version(&version).unwrap();
 
 let cmd = Originate::application(
-    Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default")),
+    Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap().with_context("default").unwrap()),
     Application::new("socket", Some("127.0.0.1:8040 async full")),
 )
 .cid_name("Front Desk")
@@ -119,10 +119,10 @@ let block_parse = BlockParse::for_version(&version)?;
 // Try primary and secondary simultaneously, then failover to backup
 let bridge = BridgeDialString::new(vec![
     vec![
-        Endpoint::SofiaGateway(SofiaGateway::new("primary", "18005551234")),
-        Endpoint::SofiaGateway(SofiaGateway::new("secondary", "18005551234")),
+        Endpoint::SofiaGateway(SofiaGateway::new("primary", "18005551234")?),
+        Endpoint::SofiaGateway(SofiaGateway::new("secondary", "18005551234")?),
     ],
-    vec![Endpoint::SofiaGateway(SofiaGateway::new("backup", "18005551234"))],
+    vec![Endpoint::SofiaGateway(SofiaGateway::new("backup", "18005551234")?)],
 ])?;
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
@@ -143,7 +143,7 @@ use freeswitch_esl_tokio::commands::*;
 use freeswitch_esl_tokio::FreeswitchVersion;
 
 let cmd = Originate::application(
-    Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
+    Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap()),
     Application::simple("park"),
 );
 

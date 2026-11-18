@@ -6,55 +6,73 @@ use crate::commands::variables::Variables;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::LoopbackEndpoint"))]
-#[non_exhaustive]
 pub struct LoopbackEndpoint {
     /// Extension number or pattern, or `app=<name>[:<args>]`, which mod_loopback runs as an
     /// application and follows with no context or dialplan.
-    pub extension: String,
+    extension: String,
     /// Dialplan context. `None` omits the context segment, letting
     /// FreeSWITCH use its default.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub context: Option<String>,
+    context: Option<String>,
     /// Dialplan for the re-entered leg. `None` omits the segment, letting
     /// FreeSWITCH use its default.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dialplan: Option<String>,
+    dialplan: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 impl LoopbackEndpoint {
-    /// Create a new loopback endpoint with no explicit context.
-    pub fn new(extension: impl Into<String>) -> Self {
+    /// Create a new loopback endpoint with no explicit context, refusing what parse refuses.
+    pub fn new(extension: impl Into<String>) -> Result<Self, OriginateError> {
         Self {
             extension: extension.into(),
             context: None,
             dialplan: None,
             variables: None,
         }
+        .checked()
     }
 
-    /// Set the dialplan context.
-    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+    /// Set the dialplan context, refusing what parse refuses.
+    pub fn with_context(mut self, context: impl Into<String>) -> Result<Self, OriginateError> {
         self.context = Some(context.into());
-        self
+        self.checked()
     }
 
-    /// Set the dialplan. It is the third positional segment, so rendering one
-    /// without a context emits [`DEFAULT_CONTEXT`] in the gap.
-    pub fn with_dialplan(mut self, dialplan: impl Into<String>) -> Self {
+    /// Set the dialplan, refusing what parse refuses. It is the third positional segment, so
+    /// rendering one without a context emits [`DEFAULT_CONTEXT`] in the gap.
+    pub fn with_dialplan(mut self, dialplan: impl Into<String>) -> Result<Self, OriginateError> {
         self.dialplan = Some(dialplan.into());
-        self
+        self.checked()
+    }
+
+    /// Extension number or pattern, or `app=<name>[:<args>]`, which mod_loopback runs as an
+    /// application.
+    pub fn extension(&self) -> &str {
+        &self.extension
+    }
+
+    /// Dialplan context, `None` for the switch's default.
+    pub fn context(&self) -> Option<&str> {
+        self.context
+            .as_deref()
+    }
+
+    /// Dialplan for the re-entered leg, `None` for the switch's default.
+    pub fn dialplan(&self) -> Option<&str> {
+        self.dialplan
+            .as_deref()
     }
 }
 
@@ -132,21 +150,27 @@ impl LoopbackEndpoint {
     pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
         let rest = after_prefix(text, "loopback/", KIND)?;
         let ep = if is_application(rest) {
-            Self::new(rest)
+            Self {
+                extension: rest.into(),
+                context: None,
+                dialplan: None,
+                variables: None,
+            }
         } else {
             let mut segments = rest.splitn(3, '/');
-            let mut ep = Self::new(
-                segments
+            Self {
+                extension: segments
                     .next()
-                    .unwrap_or(rest),
-            );
-            ep.context = segments
-                .next()
-                .map(str::to_string);
-            ep.dialplan = segments
-                .next()
-                .map(str::to_string);
-            ep
+                    .unwrap_or(rest)
+                    .into(),
+                context: segments
+                    .next()
+                    .map(str::to_string),
+                dialplan: segments
+                    .next()
+                    .map(str::to_string),
+                variables: None,
+            }
         };
         ep.check_deliverable()?;
         Ok(ep)
@@ -172,13 +196,16 @@ mod tests {
 
     #[test]
     fn loopback_display_no_context() {
-        let ep = LoopbackEndpoint::new("9199");
+        let ep = LoopbackEndpoint::new("9199").unwrap();
         assert_eq!(ep.to_string(), "loopback/9199");
     }
 
     #[test]
     fn loopback_display_with_context() {
-        let ep = LoopbackEndpoint::new("9199").with_context("default");
+        let ep = LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("default")
+            .unwrap();
         assert_eq!(ep.to_string(), "loopback/9199/default");
     }
 
@@ -188,7 +215,9 @@ mod tests {
         vars.insert("loopback_initial_codec", "L16@48000h")
             .unwrap();
         let ep = LoopbackEndpoint::new("100")
+            .unwrap()
             .with_context("test")
+            .unwrap()
             .with_variables(vars);
         assert_eq!(
             ep.to_string(),
@@ -222,7 +251,10 @@ mod tests {
 
     #[test]
     fn loopback_round_trip_with_context() {
-        let ep = LoopbackEndpoint::new("100").with_context("myctx");
+        let ep = LoopbackEndpoint::new("100")
+            .unwrap()
+            .with_context("myctx")
+            .unwrap();
         let s = ep.to_string();
         let parsed: LoopbackEndpoint = s
             .parse()
@@ -256,7 +288,10 @@ mod tests {
     /// without the second; the builder supplies the switch's own default.
     #[test]
     fn loopback_dialplan_without_a_context_fills_the_gap() {
-        let ep = LoopbackEndpoint::new("9199").with_dialplan("inline");
+        let ep = LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_dialplan("inline")
+            .unwrap();
         assert_eq!(ep.to_string(), "loopback/9199/default/inline");
         assert_eq!(
             ep.to_string()
@@ -270,7 +305,7 @@ mod tests {
 
     #[test]
     fn loopback_round_trip_no_context() {
-        let ep = LoopbackEndpoint::new("9199");
+        let ep = LoopbackEndpoint::new("9199").unwrap();
         let s = ep.to_string();
         let parsed: LoopbackEndpoint = s
             .parse()
@@ -302,7 +337,10 @@ mod tests {
 
     #[test]
     fn serde_loopback_endpoint() {
-        let ep = LoopbackEndpoint::new("9199").with_context("default");
+        let ep = LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("default")
+            .unwrap();
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: LoopbackEndpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);

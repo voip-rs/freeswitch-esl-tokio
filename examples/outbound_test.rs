@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // the Originate builder quotes it. `async full` is what makes linger and
     // the api verbs available at all -- see docs/outbound-esl-quirks.md.
     let originate = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199")?.with_context("test")?),
         // The switch dials this, so the family is the one it reaches us on;
         // the listener above takes either.
         Application::new(

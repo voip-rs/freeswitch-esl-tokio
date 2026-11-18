@@ -59,7 +59,7 @@ pub use super::endpoint::Endpoint;
 /// # use std::time::Duration;
 /// # use freeswitch_types::commands::*;
 /// let cmd = Originate::application(
-///     Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
+///     Endpoint::Loopback(LoopbackEndpoint::new("9196").unwrap().with_context("default").unwrap()),
 ///     Application::simple("park"),
 /// )
 /// .cid_name("Alice")
@@ -225,7 +225,7 @@ impl Originate {
     /// # use freeswitch_types::FreeswitchVersion;
     /// let block_parse = BlockParse::for_version(&"1.10.12".parse::<FreeswitchVersion>()?)?;
     /// let cmd = Originate::application(
-    ///     Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default")),
+    ///     Endpoint::Loopback(LoopbackEndpoint::new("9199")?.with_context("default")?),
     ///     Application::new("socket", Some("127.0.0.1:8040 async full")),
     /// )
     /// .cid_name("Front Desk")

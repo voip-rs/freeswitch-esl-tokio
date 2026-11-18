@@ -24,41 +24,59 @@ wire_enum! {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::GroupCall"))]
-#[non_exhaustive]
 pub struct GroupCall {
     /// Group name from the directory.
-    pub group: String,
+    group: String,
     /// Domain for the group lookup.
-    pub domain: String,
+    domain: String,
     /// Distribution order.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub order: Option<GroupCallOrder>,
+    order: Option<GroupCallOrder>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 impl GroupCall {
-    /// Create a new group_call expression.
-    pub fn new(group: impl Into<String>, domain: impl Into<String>) -> Self {
+    /// Create a new group_call expression, refusing what parse refuses.
+    pub fn new(
+        group: impl Into<String>,
+        domain: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
         Self {
             group: group.into(),
             domain: domain.into(),
             order: None,
             variables: None,
         }
+        .checked()
     }
 
     /// Set the distribution order.
     pub fn with_order(mut self, order: GroupCallOrder) -> Self {
         self.order = Some(order);
         self
+    }
+
+    /// Group name from the directory.
+    pub fn group(&self) -> &str {
+        &self.group
+    }
+
+    /// Domain for the group lookup.
+    pub fn domain(&self) -> &str {
+        &self.domain
+    }
+
+    /// Distribution order, `None` to omit the `+order` suffix.
+    pub fn order(&self) -> Option<GroupCallOrder> {
+        self.order
     }
 }
 
@@ -122,13 +140,15 @@ mod tests {
 
     #[test]
     fn group_call_display() {
-        let ep = GroupCall::new("support", "example.com");
+        let ep = GroupCall::new("support", "example.com").unwrap();
         assert_eq!(ep.to_string(), "${group_call(support@example.com)}");
     }
 
     #[test]
     fn group_call_display_with_order() {
-        let ep = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
+        let ep = GroupCall::new("support", "example.com")
+            .unwrap()
+            .with_order(GroupCallOrder::All);
         assert_eq!(ep.to_string(), "${group_call(support@example.com+A)}");
     }
 
@@ -152,7 +172,9 @@ mod tests {
 
     #[test]
     fn group_call_round_trip() {
-        let ep = GroupCall::new("calltakers", "example.com").with_order(GroupCallOrder::Enterprise);
+        let ep = GroupCall::new("calltakers", "example.com")
+            .unwrap()
+            .with_order(GroupCallOrder::Enterprise);
         let s = ep.to_string();
         let parsed = GroupCall::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
@@ -160,7 +182,9 @@ mod tests {
 
     #[test]
     fn serde_group_call() {
-        let ep = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
+        let ep = GroupCall::new("support", "example.com")
+            .unwrap()
+            .with_order(GroupCallOrder::All);
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: GroupCall = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);

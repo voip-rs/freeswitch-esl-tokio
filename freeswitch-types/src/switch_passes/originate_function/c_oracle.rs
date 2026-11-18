@@ -93,7 +93,12 @@ pub(crate) fn originate_spec() -> impl Strategy<Value = OriginateSpec> {
 pub(crate) const ORIGINATE_ENDPOINT: &str = "loopback/9199/test";
 
 pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
-    let endpoint = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
+    let endpoint = Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    );
     let apps = |apps: &[(&str, Option<String>)]| {
         apps.iter()
             .map(|(name, args)| Application::new(*name, args.clone()))

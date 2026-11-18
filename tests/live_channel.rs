@@ -31,7 +31,12 @@ use tokio::time::Instant;
 
 /// The dialplan extension every originate in this file dials.
 fn test_9199() -> Endpoint {
-    Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"))
+    Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .unwrap()
+            .with_context("test")
+            .unwrap(),
+    )
 }
 
 /// [`test_9199`] with application arguments delivered as the originate line left them.
@@ -41,7 +46,9 @@ fn unexpanded_9199() -> Endpoint {
         .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
+            .unwrap()
             .with_context("test")
+            .unwrap()
             .with_variables(vars),
     )
 }
@@ -364,7 +371,11 @@ async fn unanswered_originate_elapsed(
     vars.insert("ignore_early_media", "true")
         .unwrap();
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("app=park").with_variables(vars)),
+        Endpoint::Loopback(
+            LoopbackEndpoint::new("app=park")
+                .unwrap()
+                .with_variables(vars),
+        ),
         Application::simple("park"),
     )
     .timeout(Duration::from_secs(seconds))
@@ -597,7 +608,9 @@ async fn live_sip_hangup_disposition_on_both_sides_of_a_bye() {
     let uuid = create_uuid(&client).await;
     let destination = format!("sip:9199@127.0.0.1:{port}");
     let endpoint = Endpoint::Sofia(
-        SofiaEndpoint::new("lab-lo", destination.as_str()).with_variables(uuid_block(&uuid, &[])),
+        SofiaEndpoint::new("lab-lo", destination.as_str())
+            .unwrap()
+            .with_variables(uuid_block(&uuid, &[])),
     );
     let cmd = Originate::application(endpoint, Application::simple("park"));
 
@@ -730,7 +743,9 @@ async fn live_loopback_fields_arrive_on_either_carrier() {
         let context = hostile_field("ctx");
         let endpoint = Endpoint::Loopback(
             LoopbackEndpoint::new(extension.as_str())
+                .unwrap()
                 .with_context(context.as_str())
+                .unwrap()
                 .with_variables(uuid_block(&uuid, &[])),
         );
 
@@ -777,7 +792,9 @@ async fn live_sofia_destination_arrives_on_either_carrier() {
         let destination = format!("sip:{}@127.0.0.1:9", hostile_field("dest"));
         let vars = uuid_block(&uuid, &[("sofia_suppress_url_encoding", "true")]);
         let endpoint = Endpoint::Sofia(
-            SofiaEndpoint::new("lab-lo", destination.as_str()).with_variables(vars),
+            SofiaEndpoint::new("lab-lo", destination.as_str())
+                .unwrap()
+                .with_variables(vars),
         );
 
         let mut reaper = ChannelReaper::new(&client);
@@ -826,6 +843,7 @@ async fn live_sofia_destination_encodes_the_user_part_by_tree() {
         let uuid = create_uuid(&client).await;
         let endpoint = Endpoint::Sofia(
             SofiaEndpoint::new("lab-lo", "sip:a%41 b@127.0.0.1:9")
+                .unwrap()
                 .with_variables(uuid_block(&uuid, &[])),
         );
 
@@ -891,7 +909,12 @@ async fn live_user_fields_arrive_on_either_carrier() {
     for carrier in CARRIERS {
         let marker = create_uuid(&client).await;
         let name = hostile_field(&marker);
-        let endpoint = Endpoint::User(UserEndpoint::new(name.as_str()).with_domain("example.com"));
+        let endpoint = Endpoint::User(
+            UserEndpoint::new(name.as_str())
+                .unwrap()
+                .with_domain("example.com")
+                .unwrap(),
+        );
 
         let mut reaper = ChannelReaper::new(&client);
         if let Some(anchor) = dial_without_waiting(&client, &endpoint, carrier).await {
@@ -934,7 +957,9 @@ async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
         let anchor = parked_anchor(&client, &format!("{{some_var={expanded}}}null/anchor")).await;
         let endpoint = Endpoint::Loopback(
             LoopbackEndpoint::new(extension.as_str())
+                .unwrap()
                 .with_context("default")
+                .unwrap()
                 .with_variables(uuid_block(&uuid, &[])),
         );
         let dial = BridgeDialString::new(vec![vec![endpoint]])

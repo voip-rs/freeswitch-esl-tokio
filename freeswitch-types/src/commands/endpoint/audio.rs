@@ -18,20 +18,19 @@ use crate::commands::variables::{DialStringTarget, Variables};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::AudioEndpoint"))]
-#[non_exhaustive]
 pub struct AudioEndpoint {
     /// Destination string (e.g. `auto_answer`). `None` for bare module name.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub destination: Option<String>,
+    destination: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
+    variables: Option<Variables>,
 }
 
 impl AudioEndpoint {
@@ -40,10 +39,19 @@ impl AudioEndpoint {
         Self::default()
     }
 
-    /// Set the destination string.
-    pub fn with_destination(mut self, destination: impl Into<String>) -> Self {
+    /// Set the destination string, refusing what parse refuses.
+    pub fn with_destination(
+        mut self,
+        destination: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
         self.destination = Some(destination.into());
-        self
+        self.checked()
+    }
+
+    /// Destination string (e.g. `auto_answer`), `None` for the bare module name.
+    pub fn destination(&self) -> Option<&str> {
+        self.destination
+            .as_deref()
     }
 
     /// Write with the module `prefix` the [`Endpoint`](super::Endpoint) variant names.
@@ -109,7 +117,6 @@ impl_endpoint_parse!(config:
 mod tests {
     use super::super::Endpoint;
     use super::*;
-    use crate::commands::endpoint::DialString;
     use crate::commands::variables::DialStringCarrier;
 
     fn parse(s: &str) -> Endpoint {

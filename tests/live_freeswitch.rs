@@ -40,7 +40,7 @@ async fn wait_disconnected(client: &EslClient) {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_api_originate_leaves_an_expression_unexpanded() {
     let (client, _events, _permit) = connect().await;
-    let group = GroupCall::new("nosuchgroup", "example.com");
+    let group = GroupCall::new("nosuchgroup", "example.com").unwrap();
     let originate = Originate::application(
         group
             .clone()
@@ -341,7 +341,9 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
         .unwrap();
 
     let endpoint = LoopbackEndpoint::new("9199")
+        .unwrap()
         .with_context("test")
+        .unwrap()
         .with_variables(vars);
 
     // The switch dials this literal, so it names the family the switch itself
@@ -521,7 +523,7 @@ async fn park_and_await(event_type: EslEventType) -> freeswitch_esl_tokio::EslEv
         .expect("subscribe failed");
 
     let originate = Originate::application(
-        Endpoint::from(LoopbackEndpoint::new("9199")),
+        Endpoint::from(LoopbackEndpoint::new("9199").unwrap()),
         Application::park(),
     );
     let uuid = client
