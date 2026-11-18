@@ -76,8 +76,8 @@ pub use commands::{
     InvalidArgvSeparator, Originate, OriginateError, OriginateTarget, ParseBlockParseError,
     ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError, ParseMuteActionError,
     UndeliverableVariable, UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
-    UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableFault, VariablePart,
-    Variables, VariablesType,
+    UuidHold, UuidHoldAction, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableFault,
+    VariablePart, Variables, VariablesType,
 };
 #[cfg(feature = "esl")]
 pub use event::{

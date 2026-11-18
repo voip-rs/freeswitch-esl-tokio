@@ -32,11 +32,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `UuidHold.off: bool` should be `HoldAction`
-
-`ConferenceHold` spells hold-versus-unhold with the `HoldAction` wire enum;
-`UuidHold` spells it with a bare bool. Reuse the enum.
-
 ### `EventFormat::from_str` is case-insensitive on a wire token
 
 The value goes on the wire in `event <format> ...`, so under the FromStr casing

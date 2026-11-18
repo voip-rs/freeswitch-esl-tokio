@@ -182,8 +182,8 @@ pub use freeswitch_types::{
     ParseSipUserPingStatusError, ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit,
     SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName, SofiaEventSubclass,
     TimetableField, TimetablePrefix, UndeliverableVariable, UnvouchedVersion, UuidAnswer,
-    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
-    UuidTransfer, VariableFault, VariableName, VariablePart, Variables, VariablesType,
+    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidHoldAction, UuidKill, UuidSendDtmf,
+    UuidSetVar, UuidTransfer, VariableFault, VariableName, VariablePart, Variables, VariablesType,
     DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT, MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
 };
 

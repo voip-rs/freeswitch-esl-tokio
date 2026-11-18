@@ -234,7 +234,7 @@ write-only commands.
 | `UuidAnswer` | `uuid_answer {uuid}` |
 | `UuidBridge` | `uuid_bridge {uuid} {other}` |
 | `UuidDeflect` | `uuid_deflect {uuid} {uri}` |
-| `UuidHold` | `uuid_hold [off] {uuid}` |
+| `UuidHold` | `uuid_hold [off\|toggle] {uuid}` |
 | `UuidKill` | `uuid_kill {uuid} [cause]` |
 | `UuidGetVar` | `uuid_getvar {uuid} {key}` |
 | `UuidSetVar` | `uuid_setvar {uuid} {key} {value}` |

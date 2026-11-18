@@ -82,40 +82,70 @@ impl fmt::Display for UuidDeflect {
     }
 }
 
-/// Place a channel on hold or take it off hold: `uuid_hold [off] <uuid>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What `uuid_hold` does to the channel, read from its optional first word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+pub enum UuidHoldAction {
+    /// No keyword: place on hold.
+    Hold,
+    /// `off`: take off hold.
+    Unhold,
+    /// `toggle`: hold if active, unhold if held.
+    Toggle,
+}
+
+/// Place a channel on hold, take it off, or toggle:
+/// `uuid_hold [off|toggle] <uuid>`.
+///
+/// The optional `<display>` argument mod_commands takes after the UUID for
+/// hold and toggle is not modelled.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UuidHold {
-    /// Channel UUID.
-    pub uuid: String,
-    /// `true` = take off hold; `false` = place on hold.
-    pub off: bool,
+    uuid: String,
+    action: UuidHoldAction,
 }
 
 impl UuidHold {
     /// Place a channel on hold.
     pub fn hold(uuid: impl Into<String>) -> Self {
-        Self {
-            uuid: uuid.into(),
-            off: false,
-        }
+        Self::new(uuid, UuidHoldAction::Hold)
     }
 
     /// Take a channel off hold.
     pub fn unhold(uuid: impl Into<String>) -> Self {
+        Self::new(uuid, UuidHoldAction::Unhold)
+    }
+
+    /// Toggle a channel's hold state.
+    pub fn toggle(uuid: impl Into<String>) -> Self {
+        Self::new(uuid, UuidHoldAction::Toggle)
+    }
+
+    /// Build for an action chosen at run time.
+    pub fn new(uuid: impl Into<String>, action: UuidHoldAction) -> Self {
         Self {
             uuid: uuid.into(),
-            off: true,
+            action,
         }
+    }
+
+    /// Channel UUID.
+    pub fn uuid(&self) -> &str {
+        &self.uuid
+    }
+
+    /// What the command does to the channel.
+    pub fn action(&self) -> UuidHoldAction {
+        self.action
     }
 }
 
 impl fmt::Display for UuidHold {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.off {
-            write!(f, "uuid_hold off {}", self.uuid)
-        } else {
-            write!(f, "uuid_hold {}", self.uuid)
+        match self.action {
+            UuidHoldAction::Hold => write!(f, "uuid_hold {}", self.uuid),
+            UuidHoldAction::Unhold => write!(f, "uuid_hold off {}", self.uuid),
+            UuidHoldAction::Toggle => write!(f, "uuid_hold toggle {}", self.uuid),
         }
     }
 }
@@ -354,6 +384,14 @@ mod tests {
     fn uuid_hold_off() {
         let cmd = UuidHold::unhold(UUID);
         assert_eq!(cmd.to_string(), format!("uuid_hold off {}", UUID));
+    }
+
+    #[test]
+    fn uuid_hold_toggle() {
+        let cmd = UuidHold::toggle(UUID);
+        assert_eq!(cmd.to_string(), format!("uuid_hold toggle {}", UUID));
+        assert_eq!(cmd.action(), UuidHoldAction::Toggle);
+        assert_eq!(cmd.uuid(), UUID);
     }
 
     #[test]
