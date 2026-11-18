@@ -1,10 +1,13 @@
-//! RFC 3551 static payload types, and FreeSWITCH's default rate, ptime and bitrate
-//! tables.
+//! Static payload types, and FreeSWITCH's default rate, ptime and bitrate tables.
+//!
+//! The static table follows sofia-sip's `sdp_rtpmap_well_known` in `sdp_parse.c`, not RFC 3551
+//! alone: the switch names an `a=rtpmap`-less payload type from sofia's table, which also assigns
+//! 1 (`1016`), 2 (`G721`) and 19 (`CN`), numbers RFC 3551 reserves.
 //!
 //! Line numbers in this module index FreeSWITCH `v1.11.1`
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
-/// RFC 3551 static payload type descriptor.
+/// Static payload type descriptor.
 pub(crate) struct StaticPayloadType {
     pub encoding_name: &'static str,
     pub clock_rate: u32,
@@ -15,11 +18,9 @@ pub(crate) struct StaticPayloadType {
     pub channels: Option<u32>,
 }
 
-/// Returns the RFC 3551 static payload descriptor for the given payload type number.
-///
-/// Returns `None` for reserved, unassigned, and dynamic payload type numbers (>= 35).
-// qual:allow(complexity, max_cyclomatic=24) reason: "one arm per RFC 3551 table row"
-pub(crate) fn rfc3551_payload_type(pt: u8) -> Option<StaticPayloadType> {
+/// The static payload descriptor sofia names `pt` with, `None` where it names none.
+// qual:allow(complexity, max_cyclomatic=27) reason: "one arm per sdp_rtpmap_well_known row"
+pub(crate) fn static_payload_type(pt: u8) -> Option<StaticPayloadType> {
     macro_rules! pt {
         ($name:expr, $rate:expr, $ch:expr) => {
             Some(StaticPayloadType {
@@ -39,7 +40,8 @@ pub(crate) fn rfc3551_payload_type(pt: u8) -> Option<StaticPayloadType> {
     }
     match pt {
         0 => pt!("PCMU", 8000, 1),
-        // 1, 2: reserved
+        1 => pt!("1016", 8000, 1),
+        2 => pt!("G721", 8000, 1),
         3 => pt!("GSM", 8000, 1),
         4 => pt!("G723", 8000, 1),
         5 => pt!("DVI4", 8000, 1),
@@ -58,7 +60,8 @@ pub(crate) fn rfc3551_payload_type(pt: u8) -> Option<StaticPayloadType> {
         16 => pt!("DVI4", 11025, 1),
         17 => pt!("DVI4", 22050, 1),
         18 => pt!("G729", 8000, 1),
-        // 19: reserved; 20-24: unassigned
+        19 => pt!("CN", 8000, 1),
+        // 20-24: unassigned
         25 => pt!("CelB", 90000),
         26 => pt!("JPEG", 90000),
         // 27: unassigned
@@ -203,7 +206,7 @@ mod tests {
 
     #[test]
     fn pcmu_resolves() {
-        let pt = rfc3551_payload_type(0).unwrap();
+        let pt = static_payload_type(0).unwrap();
         assert_eq!(pt.encoding_name, "PCMU");
         assert_eq!(pt.clock_rate, 8000);
         assert_eq!(pt.channels, Some(1));
@@ -213,14 +216,14 @@ mod tests {
     fn g722_clock_rate_is_8000() {
         // RFC 3551 quirk: G.722 is advertised at 8000 Hz in SDP even though it runs at
         // 16 kHz. switch_core_media_set_r_sdp_codec_string emits @8000h for G.722.
-        let pt = rfc3551_payload_type(9).unwrap();
+        let pt = static_payload_type(9).unwrap();
         assert_eq!(pt.encoding_name, "G722");
         assert_eq!(pt.clock_rate, 8000);
     }
 
     #[test]
     fn g729_resolves() {
-        let pt = rfc3551_payload_type(18).unwrap();
+        let pt = static_payload_type(18).unwrap();
         assert_eq!(pt.encoding_name, "G729");
         assert_eq!(pt.clock_rate, 8000);
         assert_eq!(pt.channels, Some(1));
@@ -229,19 +232,19 @@ mod tests {
     #[test]
     fn video_type_channels_is_none() {
         // Video types have no channel count in the RFC 3551 table.
-        let h261 = rfc3551_payload_type(31).unwrap();
+        let h261 = static_payload_type(31).unwrap();
         assert_eq!(h261.encoding_name, "H261");
         assert!(h261
             .channels
             .is_none());
 
-        let h263 = rfc3551_payload_type(34).unwrap();
+        let h263 = static_payload_type(34).unwrap();
         assert_eq!(h263.encoding_name, "H263");
         assert!(h263
             .channels
             .is_none());
 
-        let jpeg = rfc3551_payload_type(26).unwrap();
+        let jpeg = static_payload_type(26).unwrap();
         assert_eq!(jpeg.encoding_name, "JPEG");
         assert!(jpeg
             .channels
@@ -251,7 +254,7 @@ mod tests {
     #[test]
     fn mp2t_channels_is_none() {
         // MP2T is audio+video; no meaningful channel count.
-        let mp2t = rfc3551_payload_type(33).unwrap();
+        let mp2t = static_payload_type(33).unwrap();
         assert_eq!(mp2t.encoding_name, "MP2T");
         assert!(mp2t
             .channels
@@ -261,7 +264,7 @@ mod tests {
     #[test]
     fn mpa_channels_none() {
         // MPA channel count is stream-defined by the MPEG bitstream, not the m= line.
-        let mpa = rfc3551_payload_type(14).unwrap();
+        let mpa = static_payload_type(14).unwrap();
         assert_eq!(mpa.encoding_name, "MPA");
         assert!(mpa
             .channels
@@ -269,24 +272,14 @@ mod tests {
     }
 
     #[test]
-    fn reserved_pt1_is_none() {
-        assert!(rfc3551_payload_type(1).is_none());
-    }
-
-    #[test]
-    fn reserved_pt19_is_none() {
-        assert!(rfc3551_payload_type(19).is_none());
-    }
-
-    #[test]
     fn unassigned_pt21_is_none() {
-        assert!(rfc3551_payload_type(21).is_none());
+        assert!(static_payload_type(21).is_none());
     }
 
     #[test]
     fn dynamic_range_is_none() {
-        assert!(rfc3551_payload_type(96).is_none());
-        assert!(rfc3551_payload_type(255).is_none());
+        assert!(static_payload_type(96).is_none());
+        assert!(static_payload_type(255).is_none());
     }
 
     #[test]

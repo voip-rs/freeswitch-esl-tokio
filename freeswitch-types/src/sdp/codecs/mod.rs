@@ -43,7 +43,7 @@ use crate::sdp::{
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum SdpCodecEntry {
-    /// An RTP codec negotiated via `a=rtpmap` or the RFC 3551 static table.
+    /// An RTP codec negotiated via `a=rtpmap` or the switch's static payload table.
     Rtp(SdpCodec),
     /// T.38 fax relay, derived from any `m=image` section.
     ///
@@ -719,7 +719,7 @@ mod tests {
             .is_none());
         assert!(
             !cn[0].has_rtpmap,
-            "PT 13 resolved from the RFC 3551 table, not declared by the peer"
+            "PT 13 resolved from the static table, not declared by the peer"
         );
 
         let rtp = rtp_codec(codecs.entries());

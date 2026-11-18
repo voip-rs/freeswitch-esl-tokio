@@ -2,7 +2,7 @@
 //!
 //! The codec-string grammar is documented in `docs/codec-string-format.md`. This module
 //! provides the building blocks needed to derive a codec string from an SDP session
-//! description: RFC 3551 static payload type resolution, canonical FreeSWITCH encoding
+//! description: static payload type resolution, canonical FreeSWITCH encoding
 //! name normalization, and static bitrate lookup.
 //!
 //! Line numbers in this module index FreeSWITCH `v1.11.1`

@@ -254,7 +254,7 @@ impl std::error::Error for CodecStringError {}
 /// A payload type present in an `m=` format list that cannot be named.
 ///
 /// This occurs when a payload type has no `a=rtpmap` and is not one of the
-/// RFC 3551 static types (PT 0–34). Dropping it silently would be
+/// static payload types sofia names. Dropping it silently would be
 /// indistinguishable from the peer never having offered it, so it is surfaced
 /// as data rather than an error.
 #[derive(Debug, Clone, PartialEq, Eq)]

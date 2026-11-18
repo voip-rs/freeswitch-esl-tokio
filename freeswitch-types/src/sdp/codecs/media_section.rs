@@ -73,13 +73,13 @@ pub(super) fn parse_media_section(
     let tables = attribute_tables(media)?;
 
     for &pt in &media.payloads {
-        // Name, clock rate, and channel count from rtpmap or RFC 3551 static table.
+        // Name, clock rate, and channel count from rtpmap or the static table.
         let (name, clock_rate, rtpmap_channels, has_rtpmap) = if let Some((n, r, c)) = tables
             .rtpmap
             .get(&pt)
         {
             (n.as_str(), *r, *c, true)
-        } else if let Some(st) = crate::sdp::static_payload::rfc3551_payload_type(pt) {
+        } else if let Some(st) = crate::sdp::static_payload::static_payload_type(pt) {
             (st.encoding_name, st.clock_rate, st.channels, false)
         } else {
             section

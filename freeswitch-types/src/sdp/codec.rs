@@ -136,7 +136,7 @@ impl SdpCodec {
     /// The direction defaults to [`SdpDirection::SendRecv`], which is what a
     /// section carrying no direction attribute means, and `has_rtpmap` to
     /// `false` — set it with [`with_rtpmap`](Self::with_rtpmap) when the name
-    /// and clock rate came off an `a=rtpmap` line rather than the RFC 3551
+    /// and clock rate came off an `a=rtpmap` line rather than the switch's
     /// static table.
     pub fn new(
         media: SdpMediaType,
@@ -261,7 +261,7 @@ impl SdpCodec {
 
     /// Whether the encoding name and clock rate came from an `a=rtpmap` line.
     ///
-    /// `false` means they were filled in from the RFC 3551 static table.
+    /// `false` means they were filled in from the switch's static payload table.
     pub fn has_rtpmap(&self) -> bool {
         self.has_rtpmap
     }
@@ -330,7 +330,7 @@ pub struct NonCodecPayload {
     pub payload_type: u8,
     /// The media type of the section where this payload appeared.
     pub media_type: SdpMediaType,
-    /// Clock rate in Hz, from `a=rtpmap` or the RFC 3551 static table.
+    /// Clock rate in Hz, from `a=rtpmap` or the switch's static payload table.
     pub clock_rate: u32,
     /// Format parameters from `a=fmtp`, verbatim.
     ///
@@ -340,7 +340,7 @@ pub struct NonCodecPayload {
     /// `NDLB_line_flash_16` instead (`:10653-10659`). A disagreement between two offers
     /// is therefore real but is not something the switch acted on.
     pub fmtp: Option<String>,
-    /// `false` when the payload type was resolved from the RFC 3551 static table
+    /// `false` when the payload type was resolved from the switch's static table
     /// rather than declared by the peer with an `a=rtpmap` line.
     pub has_rtpmap: bool,
 }

@@ -373,7 +373,9 @@ therefore never emits both. The consuming grammar accepts both fine.
 
 `m=audio 5004 RTP/AVP 0 8 18` with no `a=rtpmap` is common. sofia-sip
 auto-populates rtpmaps for well-known static payload types, and FreeSWITCH
-relies on that, so a converter needs the RFC 3551 table (PT 0–34) to name them.
+relies on that, so a converter needs sofia's table, `sdp_rtpmap_well_known` in
+`sdp_parse.c`, to name them. It is RFC 3551's PT 0–34 plus three numbers RFC 3551
+reserves: 1 (`1016`), 2 (`G721`) and 19 (`CN`, comfort noise like 13).
 
 ### telephone-event and CN are not codecs
 
