@@ -116,4 +116,12 @@ mod tests {
         let cmd = AppCommand::transfer("1000", None, Some("myctx"));
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
+
+    #[test]
+    fn set_var_refuses_a_control_character_in_a_header_bound_value() {
+        assert!(AppCommand::set_var("sip_h_X-Tag", "a\u{1}b").is_err());
+        for (name, value) in [("sip_h_X-Tag", "a\tb"), ("probe", "a\u{1}b"), ("probe", "")] {
+            assert!(AppCommand::set_var(name, value).is_ok(), "{name}={value:?}");
+        }
+    }
 }

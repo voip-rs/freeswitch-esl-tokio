@@ -399,4 +399,33 @@ mod tests {
         let cmd = UuidSendDtmf::new(UUID, "1234#");
         assert_eq!(cmd.to_string(), format!("uuid_send_dtmf {} 1234#", UUID));
     }
+
+    /// sofia copies a header-bound variable into the outgoing message verbatim, and its parser
+    /// ends a field only at CR/LF, so any other control character ships.
+    #[test]
+    fn uuid_setvar_refuses_a_control_character_in_a_header_bound_value() {
+        use crate::commands::variables::{VariableFault, VariablePart};
+        for key in ["sip_h_X-Tag", "SIP_RH_X-Tag", "sip_bye_h_X-Tag"] {
+            let err = UuidSetVar::new(UUID, key, "a\u{1}b").expect_err(key);
+            assert_eq!(
+                (err.part, err.fault),
+                (VariablePart::Value, VariableFault::HeaderControl),
+                "{key}"
+            );
+        }
+    }
+
+    /// Only the header rule is established for `uuid_setvar`: an empty value, a tab or a
+    /// control character outside a header name pass.
+    #[test]
+    fn uuid_setvar_passes_what_no_header_rule_refuses() {
+        for (key, value) in [
+            ("sip_h_X-Tag", "a\tb"),
+            ("probe", "a\u{1}b"),
+            ("sip_i_x_tag", "a\u{1}b"),
+            ("probe", ""),
+        ] {
+            assert!(UuidSetVar::new(UUID, key, value).is_ok(), "{key}={value:?}");
+        }
+    }
 }
