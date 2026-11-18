@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f2f02f44eddcb759dea6fccc53246ed9b8542a0b08a16bd14bcad2cf79e076ae # shrinks to "v=0\r\no=- 0 0 IN IP4 192.0.2.1\r\nc=IN IP4 192.0.2.1\r\nt=0 0\r\nm=audio 5004 RTP/AVP 1\r\n"

@@ -339,3 +339,22 @@ fn a_repeated_session_field_is_not_refused() {
         codecs.warnings()
     );
 }
+
+// parse_payload names a static payload type from sdp_rtpmap_well_known, which RFC 3551 does not
+// cover alone: 1, 2 and 19 are assigned there.
+#[test]
+fn static_payload_types_carry_sofias_well_known_names() {
+    let codecs = parse("m=audio 5004 RTP/AVP 1 2 19\r\n");
+    assert_eq!(names(&codecs), ["1016", "G721"]);
+    assert_eq!(
+        codecs
+            .unmapped()
+            .count(),
+        0
+    );
+    let cn: Vec<_> = codecs
+        .non_codec_payloads()
+        .map(|n| (n.kind, n.payload_type, n.clock_rate))
+        .collect();
+    assert_eq!(cn, [(crate::sdp::NonCodecKind::ComfortNoise, 19, 8000)]);
+}

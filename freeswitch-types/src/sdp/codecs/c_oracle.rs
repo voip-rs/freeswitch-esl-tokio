@@ -23,7 +23,7 @@ const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
 const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = true;
-const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = true;
+const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = false;
 
 const PAYLOAD_TYPES: &[&str] = &[
     "0", "3", "8", "9", "13", "18", "34", "96", "97", "101", "127",
