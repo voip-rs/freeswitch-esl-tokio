@@ -6,7 +6,7 @@ proptest! {
     #![proptest_config(config())]
 
     #[test]
-    fn variables_arrive_as_built_or_are_refused(
+    fn variables_arrive_as_built(
         scope in scope(),
         sep in block_separator(),
         values in entries(1..4),
@@ -17,7 +17,6 @@ proptest! {
         if left_to_the_switch(&vars) {
             return Ok(());
         }
-        let refused = config_refuses_vars(&vars);
         let want = pairs(&vars);
         for target in targets() {
             let block = vars.display_for(target).to_string();
@@ -27,13 +26,11 @@ proptest! {
                 *installed == want && endpoint == "null/drift"
             });
             prop_assert!(
-                delivered || refused,
+                delivered,
                 "{scope:?} ^^{sep:?} at {target:?}: rendered {dial:?}, port read {got:?}, want {want:?}"
             );
-            if delivered && !refused {
-                let parsed = Variables::parse_for(&block, target).map(|vars| pairs(&vars));
-                prop_assert_eq!(parsed, Ok(want.clone()), "parse of {:?} at {:?}", block, target);
-            }
+            let parsed = Variables::parse_for(&block, target).map(|vars| pairs(&vars));
+            prop_assert_eq!(parsed, Ok(want.clone()), "parse of {:?} at {:?}", block, target);
         }
     }
 

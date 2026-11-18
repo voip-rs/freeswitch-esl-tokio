@@ -138,11 +138,6 @@ fn pairs(vars: &Variables) -> Vec<(String, String)> {
         .collect()
 }
 
-fn config_refuses_vars(vars: &Variables) -> bool {
-    let json = serde_json::to_value(vars).expect("Variables serializes");
-    serde_json::from_value::<Variables>(json).is_err()
-}
-
 /// Left to the switch, as the `Variables` rustdoc and dial-string-format.md's *A value naming a
 /// variable* say, so no escaping delivers it verbatim.
 fn left_to_the_switch(vars: &Variables) -> bool {
@@ -348,7 +343,7 @@ fn render_list(spec: &ListSpec, target: DialStringTarget) -> Option<RenderedList
         if vars.is_empty() {
             return Some(Vec::new());
         }
-        if config_refuses_vars(&vars) || left_to_the_switch(&vars) {
+        if left_to_the_switch(&vars) {
             return None;
         }
         text.push_str(

@@ -184,6 +184,20 @@ fn check_separator_free(key: &str, value: &str, sep: char) -> Result<(), Undeliv
     }
 }
 
+/// Reject a pair joining a block of `vars_type` that holds `others` and splits on `sep`, if not
+/// the comma: everything a block cannot carry.
+fn check_pair<'a>(
+    key: &str,
+    value: &str,
+    vars_type: VariablesType,
+    others: impl IntoIterator<Item = &'a String>,
+    sep: Option<char>,
+) -> Result<(), UndeliverableVariable> {
+    check_representable(key, value, vars_type)?;
+    check_case_collision(others, key)?;
+    sep.map_or(Ok(()), |sep| check_separator_free(key, value, sep))
+}
+
 impl Variables {
     /// Create an empty variable set with the given scope.
     pub fn new(vars_type: VariablesType) -> Self {
@@ -217,9 +231,7 @@ impl Variables {
     /// renders the same way whatever its values happen to be that call.
     ///
     /// Fails if `sep` cannot delimit this block, or if a key or value already
-    /// present contains it. A pair inserted afterwards is not checked: one carrying
-    /// `sep` splits into a pair nobody wrote, silently, until
-    /// [`insert`](Self::insert) becomes fallible (`docs/next-major.md`).
+    /// present contains it; [`insert`](Self::insert) refuses one carrying it afterwards.
     ///
     /// Refused: space, controls, non-ASCII, `\`, `'` and lowercase `n r t s`, which break the
     /// switch's split or its escapes; either of the block's brackets, `=` and `^`; `$` and `{`,
@@ -258,14 +270,35 @@ impl Variables {
         self.separator
     }
 
-    /// Insert or overwrite a variable.
+    /// Insert a variable, or replace the value of one already named in place.
+    ///
+    /// Refuses, leaving the set unchanged, what parsing a block refuses and a pair carrying the
+    /// separator [`with_separator`](Self::with_separator) chose. The error's index is the
+    /// position the pair would take.
     pub fn insert(
         &mut self,
         key: impl Into<String>,
         value: impl Into<String>,
     ) -> Result<(), OriginateError> {
+        let (key, value) = (key.into(), value.into());
+        let index = self
+            .inner
+            .get_index_of(&key)
+            .unwrap_or(
+                self.inner
+                    .len(),
+            );
+        check_pair(
+            &key,
+            &value,
+            self.vars_type,
+            self.inner
+                .keys(),
+            self.separator,
+        )
+        .map_err(|variable| variable.at(index))?;
         self.inner
-            .insert(key.into(), value.into());
+            .insert(key, value);
         Ok(())
     }
 
@@ -299,8 +332,20 @@ impl Variables {
         self.vars_type
     }
 
-    /// Change the variable scope.
+    /// Change the variable scope, which picks the brackets, the channel-scope quote rule and the
+    /// separators that delimit the block. Refuses, keeping the old scope, when a held pair or
+    /// the chosen separator cannot be written in the new one.
     pub fn set_scope(&mut self, scope: VariablesType) -> Result<(), OriginateError> {
+        if let Some(sep) = self.separator {
+            check_separator(sep, scope)?;
+        }
+        for (index, (key, value)) in self
+            .inner
+            .iter()
+            .enumerate()
+        {
+            check_representable(key, value, scope).map_err(|variable| variable.at(index))?;
+        }
         self.vars_type = scope;
         Ok(())
     }
@@ -365,26 +410,7 @@ impl<'de> serde::Deserialize<'de> for Variables {
         };
         // A config naming a value the wire cannot carry fails at load rather
         // than on the call it was loaded for.
-        for (at, (key, value)) in inner
-            .iter()
-            .enumerate()
-        {
-            check_representable(key, value, vars_type)
-                .and_then(|()| {
-                    check_case_collision(
-                        inner
-                            .keys()
-                            .take(at),
-                        key,
-                    )
-                })
-                .map_err(|variable| serde::de::Error::custom(variable.at(at)))?;
-        }
-        let vars = Self {
-            vars_type,
-            inner,
-            separator: None,
-        };
+        let vars = Self::with_vars(vars_type, inner).map_err(serde::de::Error::custom)?;
         match separator {
             Some(sep) => vars
                 .with_separator(sep)
@@ -548,13 +574,14 @@ impl Variables {
             let key = pair
                 .key
                 .as_str();
-            check_representable(key, value, vars_type)
-                .and_then(|()| check_case_collision(inner.keys(), key))
-                .and_then(|()| match block.separator {
-                    ',' => Ok(()),
-                    sep => check_separator_free(key, value, sep),
-                })
-                .map_err(|variable| variable.at(i))?;
+            check_pair(
+                key,
+                value,
+                vars_type,
+                inner.keys(),
+                (block.separator != ',').then_some(block.separator),
+            )
+            .map_err(|variable| variable.at(i))?;
             inner.insert(key.to_owned(), value.to_owned());
         }
         Ok(Self {

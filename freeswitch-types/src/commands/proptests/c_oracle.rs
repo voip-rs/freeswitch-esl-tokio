@@ -82,7 +82,7 @@ fn variables_arrive_through_the_c_passes() {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
             };
-            if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
+            if left_to_the_switch(&vars) {
                 return Ok(());
             }
             let want = Ok((pairs(&vars), "null/drift".to_owned()));
@@ -120,7 +120,7 @@ fn endpoints_arrive_through_the_c_passes() {
                 let Some(vars) = build_vars(scope, "v", &values, sep) else {
                     return Ok(());
                 };
-                if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
+                if left_to_the_switch(&vars) {
                     return Ok(());
                 }
                 endpoint.set_variables(Some(vars));

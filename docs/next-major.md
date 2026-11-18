@@ -26,33 +26,12 @@ endpoint. Its own rustdoc warns against calling it. Either drop the `Display`
 bound from `DialString`, or drop the impl and let the three `Endpoint` variants
 be the only way to render an audio endpoint.
 
-### `Variables::insert` and `with_vars` need to be fallible
+### `UuidSetVar::new` and `set_var` need to be fallible
 
-Some values cannot be represented in a bracket block at all: an empty value is
-discarded by the switch under every encoding, and a value carrying an unbalanced
-closing bracket truncates the block. A value carrying the block's own `^^`
-separator is the third: `with_separator` checks the values present when it is
-called, and an `insert` after it splits into a pair nobody wrote. A single quote
-in a channel-scope value is the fourth: the switch pairs it with the next quote
-before it parses the block, at any escaping depth. A value carrying `:_:` is the
-fifth: any occurrence in a dial string sends the originate down the enterprise
-split, whatever the quoting. A key is the sixth: an empty one is installed
-nowhere, and one carrying `:_:`, an unbalanced bracket, a quote in channel
-scope or the block's `^^` separator is split or paired before the switch
-installs it. One carrying `[` is read as an array index and installed under the
-text before it, and two differing only in case install as one.
 A value carrying a control character but tab under a prefix mod_sofia sends
-as an outgoing header is the seventh: it ships in a header field that cannot
-hold it. `UuidSetVar::new` and `set_var` carry the same values with no
+as an outgoing header ships in a header field that cannot hold it.
+`Variables` refuses it; `UuidSetVar::new` and `set_var` carry it with no
 fallible step at all.
-Refusing them is the only correct handling,
-and it cannot live at render time — `Display` is infallible and `ToString`
-panics on a `fmt::Error`, which would put a panic in a library. Until these
-return `Result`, such a value is built silently and lost on the wire.
-
-`Deserialize` and `FromStr` already return `Result`, so they can reject at the
-boundary without waiting for the major — that covers config-driven construction
-but not the programmatic path.
 
 ### Endpoint fields need to refuse what the module misreads
 
@@ -160,10 +139,11 @@ rejects input it accepts today.
 `name_mut`/`args_mut`, five `set_*` for `Option` fields, and
 `endpoint_mut`/`target_mut` on one builder; readers `dialplan_type`,
 `context_str`, `caller_id_name` do not match builders `dialplan`, `context`,
-`cid_name`. Pick `_mut()` pairs and one field vocabulary; add `Variables::get_mut`
-with it. The `set_*` methods take `Option<impl Into<String>>`, so clearing a field
-needs a turbofish (`set_context(None::<String>)`); the replacement takes a
-concrete `Option` or offers `clear_*`.
+`cid_name`. Pick one field vocabulary; `Variables` has no `get_mut`, since a
+value changes only through `insert`. The `set_*` methods take
+`Option<impl Into<String>>`, so clearing a field needs a turbofish
+(`set_context(None::<String>)`); the replacement takes a concrete `Option`
+or offers `clear_*`.
 
 ### `EventSubscription::custom_subclass_list` should be `custom_subclasses`
 

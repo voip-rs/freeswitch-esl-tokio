@@ -129,6 +129,11 @@ fn variables_corpus(records: &mut Vec<String>) {
         .map(|(i, (_, v))| (format!("v{i}"), (*v).to_string()))
         .collect();
     for scope in scopes {
+        // Channel scope refuses a quote, so the block keeps every other entry, under its name.
+        let entries = entries
+            .iter()
+            .filter(|(_, v)| scope != VariablesType::Channel || !v.contains('\''))
+            .cloned();
         for sep in seps {
             let sep_label = sep.map_or("comma".to_string(), |c| c.to_string());
             let Ok(mut vars) = Variables::with_vars(scope, entries.clone()) else {
