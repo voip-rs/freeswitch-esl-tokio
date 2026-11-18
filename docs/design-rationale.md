@@ -360,8 +360,8 @@ an error. A user string carrying either runs a command the caller never wrote â€
 `api("status\n\nevent plain ALL")` subscribes to every event â€” or a truncated
 one. `to_wire_format()` refuses CR, LF and NUL in every user-supplied field,
 command-builder headers and bodies included. The check sits at the wire
-boundary rather than at construction because builders are `Display` types with
-infallible formatting, and the wire is the only place these bytes are dangerous.
+boundary rather than at construction because builders render infallibly,
+and the wire is the only place these bytes are dangerous.
 
 A value that cannot be represented at all is refused earlier than that. An empty
 variable value and one closing a bracket it never opened have no working
