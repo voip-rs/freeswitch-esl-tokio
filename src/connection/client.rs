@@ -967,18 +967,6 @@ impl EslEventStream {
     }
 }
 
-impl futures_util::Stream for EslEventStream {
-    type Item = Result<EslEvent, EslError>;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        self.rx
-            .poll_recv(cx)
-    }
-}
-
 /// Event-type names a raw `event` or `nixevent` list placed after `CUSTOM`,
 /// which the switch read as subclass names while answering `+OK`.
 ///

@@ -19,8 +19,3 @@ The types above are re-exported from the crate root, so any change to their
 public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
-
-### `impl futures_util::Stream for EslEventStream` puts futures-util in the public API
-
-A futures-util major becomes a semver break for this crate. Move behind a
-feature, or wait for `Stream` in std.
