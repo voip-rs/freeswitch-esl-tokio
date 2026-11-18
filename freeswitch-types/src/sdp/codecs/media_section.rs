@@ -72,11 +72,18 @@ pub(super) fn parse_media_section(
 
     let tables = attribute_tables(media)?;
 
-    for &pt in &media.payloads {
+    for (at, &pt) in media
+        .payloads
+        .iter()
+        .enumerate()
+    {
+        // parse_rtpmap and parse_fmtp bind to the first entry carrying the payload type.
+        let first = !media.payloads[..at].contains(&pt);
         // Name, clock rate, and channel count from rtpmap or the static table.
         let (name, clock_rate, rtpmap_channels, has_rtpmap) = if let Some((n, r, c)) = tables
             .rtpmap
             .get(&pt)
+            .filter(|_| first)
         {
             (n.as_str(), *r, *c, true)
         } else if let Some(st) = crate::sdp::static_payload::static_payload_type(pt) {
@@ -93,6 +100,7 @@ pub(super) fn parse_media_section(
         let fmtp = tables
             .fmtp
             .get(&pt)
+            .filter(|_| first)
             .cloned();
 
         // Leaves the walk here, where FreeSWITCH does (switch_core_media.c:5447/:5456),
