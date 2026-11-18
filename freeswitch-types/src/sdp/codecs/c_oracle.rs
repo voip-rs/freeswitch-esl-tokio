@@ -17,14 +17,6 @@ use super::{SdpCodecEntry, SdpCodecs, SdpMediaSection};
 use crate::sdp::static_payload::canonical_iananame;
 use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
 
-/// Lines whose handling waits on a fix still to land; each fix flips its own.
-const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = false;
-const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = false;
-const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = false;
-const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = false;
-const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = false;
-const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = false;
-
 const PAYLOAD_TYPES: &[&str] = &[
     "0", "3", "8", "9", "13", "18", "34", "96", "97", "101", "127",
 ];
@@ -32,29 +24,25 @@ const PAYLOAD_TYPES: &[&str] = &[
 const SOFIA_ONLY_STATIC: &[&str] = &["1", "2", "19"];
 const ODD_FORMATS: &[&str] = &["128", "*", "abc", "96x"];
 
-fn payload_type() -> BoxedStrategy<String> {
-    let known = select(PAYLOAD_TYPES).prop_map(str::to_owned);
-    let odd = select(ODD_FORMATS).prop_map(str::to_owned);
-    if EXCLUDE_SOFIA_ONLY_STATIC_NAMES {
-        prop_oneof![8 => known, 1 => odd].boxed()
-    } else {
-        let sofia_only = select(SOFIA_ONLY_STATIC).prop_map(str::to_owned);
-        prop_oneof![8 => known, 1 => odd, 1 => sofia_only].boxed()
-    }
+fn payload_type() -> impl Strategy<Value = String> {
+    prop_oneof![
+        8 => select(PAYLOAD_TYPES),
+        1 => select(ODD_FORMATS),
+        1 => select(SOFIA_ONLY_STATIC),
+    ]
+    .prop_map(str::to_owned)
 }
 
 /// Payload types `parse_ul` cannot read below 128.
 const UNREADABLE_PAYLOAD_TYPES: &[&str] = &["128", "*", "abc", "-1", ""];
 
 /// The payload type an `a=rtpmap` or `a=fmtp` names.
-fn attribute_payload_type() -> BoxedStrategy<String> {
-    let known = select(PAYLOAD_TYPES).prop_map(str::to_owned);
-    if EXCLUDE_UNREADABLE_PAYLOAD_TYPE {
-        known.boxed()
-    } else {
-        let unreadable = select(UNREADABLE_PAYLOAD_TYPES).prop_map(str::to_owned);
-        prop_oneof![8 => known, 1 => unreadable].boxed()
-    }
+fn attribute_payload_type() -> impl Strategy<Value = String> {
+    prop_oneof![
+        8 => select(PAYLOAD_TYPES),
+        1 => select(UNREADABLE_PAYLOAD_TYPES),
+    ]
+    .prop_map(str::to_owned)
 }
 
 fn rtpmap() -> impl Strategy<Value = String> {
@@ -86,7 +74,7 @@ fn direction() -> impl Strategy<Value = String> {
 
 /// Lines that are not well-formed attributes or fields, at either level.
 fn noise() -> impl Strategy<Value = String> {
-    let mut lines = vec![
+    const LINES: &[&str] = &[
         "junk line",
         "ab=x",
         "x=y",
@@ -100,43 +88,34 @@ fn noise() -> impl Strategy<Value = String> {
         "a=rtpmap 96 PCMU/8000",
         "a=ptime:20",
         "\0",
+        "a=rtpmap:x opus/48000",
+        "a=fmtp:y foo",
+        "a=rtpmap:96 opus",
+        "a=rtpmap:96 bad,name/8000",
+        "a=rtpmap:96 opus/abc",
+        "a=rtpmap:0 opus/48000/2 extra",
+        "a=rtpmap:96 opus/48000/",
+        "a=rtpmap:96x opus/8000",
+        "a=rtpmap:96 +8000",
+        "a=SENDONLY",
+        "a=RecvOnly",
+        "a=RTPMAP:96 opus/48000/2",
     ];
-    if !EXCLUDE_UNREADABLE_PAYLOAD_TYPE {
-        lines.extend(["a=rtpmap:x opus/48000", "a=fmtp:y foo"]);
-    }
-    if !EXCLUDE_RTPMAP_WITHOUT_RATE {
-        lines.extend([
-            "a=rtpmap:96 opus",
-            "a=rtpmap:96 bad,name/8000",
-            "a=rtpmap:96 opus/abc",
-            "a=rtpmap:0 opus/48000/2 extra",
-            "a=rtpmap:96 opus/48000/",
-            "a=rtpmap:96x opus/8000",
-            "a=rtpmap:96 +8000",
-        ]);
-    }
-    if !EXCLUDE_ATTRIBUTE_NAME_CASE {
-        lines.extend(["a=SENDONLY", "a=RecvOnly", "a=RTPMAP:96 opus/48000/2"]);
-    }
-    select(lines).prop_map(str::to_owned)
+    select(LINES).prop_map(str::to_owned)
 }
 
 fn media_line() -> impl Strategy<Value = String> {
-    let attribute = prop_oneof![
+    prop_oneof![
         4 => rtpmap(),
         2 => fmtp(),
+        1 => direction(),
         1 => Just("c=IN IP4 192.0.2.2".to_owned()),
         1 => Just("b=AS:64".to_owned()),
         1 => Just("i=info".to_owned()),
         1 => Just("k=prompt".to_owned()),
         1 => Just("r=7d 1h 0 25h".to_owned()),
         2 => noise(),
-    ];
-    if EXCLUDE_ATTRIBUTE_NAME_CASE {
-        attribute.boxed()
-    } else {
-        prop_oneof![4 => attribute, 1 => direction()].boxed()
-    }
+    ]
 }
 
 fn m_line() -> impl Strategy<Value = String> {
@@ -164,15 +143,7 @@ fn m_line() -> impl Strategy<Value = String> {
             "RTP/AVP/TCP",
         ][..],
     );
-    (media, port, proto, vec(payload_type(), 0..4)).prop_map(|(media, port, proto, mut formats)| {
-        if EXCLUDE_REPEATED_PAYLOAD_TYPE {
-            let mut seen = Vec::new();
-            formats.retain(|pt| {
-                let first = !seen.contains(pt);
-                seen.push(pt.clone());
-                first
-            });
-        }
+    (media, port, proto, vec(payload_type(), 0..4)).prop_map(|(media, port, proto, formats)| {
         format!("m={media} {port} {proto} {}", formats.join(" "))
             .trim_end()
             .to_owned()
@@ -296,7 +267,6 @@ fn direction_of(mode: u8) -> SdpDirection {
 }
 
 fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
-    let held = c.port == 0;
     // sofia spells a type it knows in lowercase, one it does not verbatim; Other keeps the
     // spelling of a type sofia knows and SdpMediaType has no variant for.
     let ours_type = ours
@@ -344,9 +314,6 @@ fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
             .map(Vec::as_slice)
             .collect();
         prop_assert_eq!(ours_formats, c_pts);
-    }
-    if held && EXCLUDE_PORT_ZERO_ATTRIBUTES {
-        return Ok(());
     }
     prop_assert_eq!(ours.direction(), direction_of(c.mode), "direction");
     // m=image is T.38 whatever its proto, as the switch reads it.
