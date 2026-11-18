@@ -12,12 +12,12 @@ publish = false
 proptest = { version = "1.11", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 tree-sitter-c = "0.24"
 
 [build-dependencies]
 cc = "1.4"
 serde = { version = "1.0", features = ["derive"] }
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 tree-sitter-c = "0.24"
 yaml_serde = "0.10"
