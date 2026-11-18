@@ -25,18 +25,90 @@ impl WireTokenFault {
     }
 }
 
+/// How mod_event_socket would misread a `filter` or `filter delete` header.
+///
+/// Its `filter` handler skips leading spaces and cuts the header at the first
+/// one; `filter` alone reads `add` and `delete` there as keywords, in any case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FilterHeaderFault {
+    /// The switch reads the value in its place.
+    Empty,
+    /// The switch cuts the header at it.
+    Space,
+    /// `add` or `delete`, which `filter` takes as a keyword.
+    Keyword,
+}
+
+/// Words `filter` reads in the header position as an action.
+const FILTER_KEYWORDS: [&str; 2] = ["add", "delete"];
+
+impl FilterHeaderFault {
+    /// The fault in a header for `filter <header> <value>`.
+    pub fn of_filter(header: &str) -> Option<Self> {
+        Self::classify(header, &FILTER_KEYWORDS)
+    }
+
+    /// The fault in a header for `filter delete <header> [<value>]`, where
+    /// `add` and `delete` are plain names.
+    pub fn of_filter_delete(header: &str) -> Option<Self> {
+        Self::classify(header, &[])
+    }
+
+    fn classify(header: &str, keywords: &[&str]) -> Option<Self> {
+        if header.is_empty() {
+            Some(Self::Empty)
+        } else if header.contains(' ') {
+            Some(Self::Space)
+        } else if keywords
+            .iter()
+            .any(|k| header.eq_ignore_ascii_case(k))
+        {
+            Some(Self::Keyword)
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for FilterHeaderFault {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            FilterHeaderFault::Empty => "is empty",
+            FilterHeaderFault::Space => "holds a space",
+            FilterHeaderFault::Keyword => "is a filter keyword",
+        })
+    }
+}
+
 /// Error returned when an [`EventSubscription`] builder method receives invalid input.
 ///
-/// Custom subclasses and filter values are validated against ESL wire-safety
-/// constraints: no line breaks, NULs, or (for subclasses) spaces.
-/// `Display` names the character class that made the value unusable and the
-/// value's size; the value itself is subscriber data and stays on the field.
+/// `Display` names what made the value unusable and the value's size; the value
+/// itself is subscriber data and stays on the variant.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventSubscriptionError(pub String);
+#[non_exhaustive]
+pub enum EventSubscriptionError {
+    /// A token or filter field holding a line break or NUL, or (for an event
+    /// name or subclass) a space or nothing at all.
+    Token(String),
+    /// A filter header the switch would read as another header or a keyword.
+    FilterHeader {
+        /// The header as given.
+        header: String,
+        /// How the switch would misread it.
+        fault: FilterHeaderFault,
+    },
+}
 
 impl fmt::Display for EventSubscriptionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let class = match WireTokenFault::classify(&self.0) {
+        let token = match self {
+            Self::Token(token) => token,
+            Self::FilterHeader { header, fault } => {
+                return write!(f, "filter header {fault} ({} bytes)", header.len());
+            }
+        };
+        let class = match WireTokenFault::classify(token) {
             Some(WireTokenFault::Empty) => return f.write_str("event subscription token is empty"),
             Some(WireTokenFault::Terminator) => "a line break or NUL",
             Some(WireTokenFault::Space) => "a space",
@@ -45,8 +117,7 @@ impl fmt::Display for EventSubscriptionError {
         write!(
             f,
             "event subscription token contains {class} ({} bytes)",
-            self.0
-                .len()
+            token.len()
         )
     }
 }
@@ -64,7 +135,8 @@ impl std::error::Error for EventSubscriptionError {}
 ///
 /// Builder methods validate inputs against ESL wire injection risks.
 /// Custom subclasses reject `\n`, `\r`, spaces, and empty strings.
-/// Filter headers and values reject `\n` and `\r`.
+/// Filter headers and values reject `\n` and `\r`, and a filter header any
+/// [`FilterHeaderFault`].
 ///
 /// # Example
 ///
@@ -119,7 +191,7 @@ fn validate_wire_token(s: &str, rules: WireTokenRules) -> Result<(), EventSubscr
         None => false,
     };
     if rejected {
-        return Err(EventSubscriptionError(s.to_string()));
+        return Err(EventSubscriptionError::Token(s.to_string()));
     }
     Ok(())
 }
@@ -134,6 +206,17 @@ fn validate_custom_subclass(s: &str) -> Result<(), EventSubscriptionError> {
 
 fn validate_filter_field(s: &str) -> Result<(), EventSubscriptionError> {
     validate_wire_token(s, WireTokenRules::TEXT)
+}
+
+fn validate_filter_header(header: &str) -> Result<(), EventSubscriptionError> {
+    validate_filter_field(header)?;
+    match FilterHeaderFault::of_filter(header) {
+        Some(fault) => Err(EventSubscriptionError::FilterHeader {
+            header: header.to_string(),
+            fault,
+        }),
+        None => Ok(()),
+    }
 }
 
 const CUSTOM_TOKEN: &str = "CUSTOM";
@@ -376,7 +459,8 @@ impl EventSubscription {
 
     /// Add a filter with raw header and value strings.
     ///
-    /// Both header and value are validated against line breaks and NUL.
+    /// Both are refused a line break or NUL, and the header any
+    /// [`FilterHeaderFault`]; config load runs the same check.
     pub fn filter_raw(
         self,
         header: impl Into<String>,
@@ -384,7 +468,7 @@ impl EventSubscription {
     ) -> Result<Self, EventSubscriptionError> {
         let h = header.into();
         let v = value.into();
-        validate_filter_field(&h)?;
+        validate_filter_header(&h)?;
         validate_filter_field(&v)?;
         let mut s = self;
         s.filters
@@ -520,7 +604,7 @@ mod event_subscription_serde {
                 validate_custom_subclass(sc)?;
             }
             for (h, v) in &raw.filters {
-                validate_filter_field(h)?;
+                validate_filter_header(h)?;
                 validate_filter_field(v)?;
             }
             Ok(EventSubscription {
@@ -947,7 +1031,7 @@ mod tests {
             err.to_string(),
             "event subscription token contains a space (12 bytes)"
         );
-        assert_eq!(err.0, "bad subclass");
+        assert_eq!(err, EventSubscriptionError::Token("bad subclass".into()));
 
         let err = EventSubscription::new(EventFormat::Plain)
             .custom_subclass("")
@@ -961,7 +1045,7 @@ mod tests {
             err.to_string(),
             "event subscription token contains a line break or NUL (4 bytes)"
         );
-        assert_eq!(err.0, "val\n");
+        assert_eq!(err, EventSubscriptionError::Token("val\n".into()));
     }
 
     #[test]
@@ -1003,6 +1087,13 @@ mod tests {
                 EventSubscription::new(EventFormat::Plain)
                     .filter_raw(header, "x")
                     .is_err(),
+                "{header:?}"
+            );
+            assert!(
+                matches!(
+                    EventSubscription::new(EventFormat::Plain).filter_raw(header, "x"),
+                    Err(EventSubscriptionError::FilterHeader { .. })
+                ),
                 "{header:?}"
             );
             let json = format!(r#"{{"format":"Plain","filters":[[{header:?},"x"]]}}"#);

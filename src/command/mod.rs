@@ -3,7 +3,8 @@
 // qual:allow(coupling, sdp) reason: "channel dumps reuse the protocol decoder"
 use crate::{
     constants::{FILTER_DELETE_ALL, HEADER_TERMINATOR, LINE_TERMINATOR},
-    error::{EslError, EslResult, FilterHeaderFault},
+    error::{EslError, EslResult},
+    event::FilterHeaderFault,
     event::{EslEvent, EventFormat},
     headers::EventHeader,
     LogLevel,
@@ -50,22 +51,9 @@ fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
     Ok(())
 }
 
-/// Words `filter` reads in the header position as an action, in any case.
-const FILTER_KEYWORDS: &[&str] = &["add", "delete"];
-
-/// Refuse a filter header mod_event_socket would cut at a space, skip as
-/// empty, or read as one of `keywords`.
-fn check_filter_header(header: &str, keywords: &[&str]) -> EslResult<()> {
-    let fault = if header.is_empty() {
-        FilterHeaderFault::Empty
-    } else if header.contains(' ') {
-        FilterHeaderFault::Space
-    } else if keywords
-        .iter()
-        .any(|k| header.eq_ignore_ascii_case(k))
-    {
-        FilterHeaderFault::Keyword
-    } else {
+/// Refuse a filter header carrying the `fault` that [`FilterHeaderFault`] found.
+fn refuse_filter_header(header: &str, fault: Option<FilterHeaderFault>) -> EslResult<()> {
+    let Some(fault) = fault else {
         return Ok(());
     };
     Err(EslError::UnsplittableFilterHeader {
@@ -410,7 +398,7 @@ impl EslCommand {
             EslCommand::Filter { header, value } => {
                 validate_wire_text(header, "filter header")?;
                 validate_wire_text(value, "filter value")?;
-                check_filter_header(header, FILTER_KEYWORDS)
+                refuse_filter_header(header, FilterHeaderFault::of_filter(header))
             }
             EslCommand::SendMsg { uuid, .. } => match uuid {
                 Some(u) => validate_wire_text(u, "sendmsg uuid"),
@@ -438,7 +426,7 @@ impl EslCommand {
             EslCommand::NixEvent { events } => validate_wire_text(events, "nixevent list"),
             EslCommand::FilterDelete { header, value } => {
                 validate_wire_text(header, "filter delete header")?;
-                check_filter_header(header, &[])?;
+                refuse_filter_header(header, FilterHeaderFault::of_filter_delete(header))?;
                 if header.eq_ignore_ascii_case(FILTER_DELETE_ALL) {
                     return Err(EslError::FilterDeleteAllHeader {
                         header: header.clone(),

@@ -169,22 +169,23 @@ pub use freeswitch_types::{
     ChannelVariable, CoreMediaVariable, DialString, DialStringCarrier, DialStringTarget,
     DialplanType, Endpoint, EndpointFieldFault, EslArray, EslArrayError, EslEvent,
     EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader, EventSubscription,
-    EventSubscriptionError, ExecuteOn, ExecuteOnFault, FreeswitchVersion, GatewayPingStatus,
-    GatewayRegState, GroupCallOrder, HangupCause, HeaderLookup, InvalidArgvSeparator,
-    InvalidHeaderNameError, LogLevel, LossyValue, LossyValues, MultipartBody, MultipartBodyError,
-    MultipartItem, Originate, OriginateError, OriginateTarget, ParseAnswerStateError,
-    ParseBlockParseError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
-    ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
-    ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
-    ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
-    ParseHangupCauseError, ParseHeaderError, ParseHoldActionError, ParseLogLevelError,
-    ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError, ParseSipStatusCodeError,
-    ParseSipUserPingStatusError, ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit,
-    SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName, SofiaEventSubclass,
-    TimetableField, TimetablePrefix, UndeliverableVariable, UnvouchedVersion, UuidAnswer,
-    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidHoldAction, UuidKill, UuidSendDtmf,
-    UuidSetVar, UuidTransfer, VariableFault, VariableName, VariablePart, Variables, VariablesType,
-    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT, MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
+    EventSubscriptionError, ExecuteOn, ExecuteOnFault, FilterHeaderFault, FreeswitchVersion,
+    GatewayPingStatus, GatewayRegState, GroupCallOrder, HangupCause, HeaderLookup,
+    InvalidArgvSeparator, InvalidHeaderNameError, LogLevel, LossyValue, LossyValues, MultipartBody,
+    MultipartBodyError, MultipartItem, Originate, OriginateError, OriginateTarget,
+    ParseAnswerStateError, ParseBlockParseError, ParseCallDirectionError, ParseCallStateError,
+    ParseChannelStateError, ParseChannelVariableError, ParseCoreMediaVariableError,
+    ParseDialplanTypeError, ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError,
+    ParseFreeswitchVersionError, ParseGatewayPingStatusError, ParseGatewayRegStateError,
+    ParseGroupCallOrderError, ParseHangupCauseError, ParseHeaderError, ParseHoldActionError,
+    ParseLogLevelError, ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,
+    ParseSipStatusCodeError, ParseSipUserPingStatusError, ParseSofiaEventSubclassError,
+    ParseTimetableError, RtpStatUnit, SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus,
+    SofiaChannelName, SofiaEventSubclass, TimetableField, TimetablePrefix, UndeliverableVariable,
+    UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidHoldAction,
+    UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableFault, VariableName, VariablePart,
+    Variables, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT, MAX_ARRAY_ITEMS,
+    VARIABLE_PREFIX,
 };
 
 #[cfg(doctest)]
@@ -224,4 +225,4 @@ pub use connection::{
     EslEventStream, EventOverflow, SwallowedEventTypes,
 };
 pub use constants::UNDEF_VALUE;
-pub use error::{CommandFailure, EslError, EslResult, FilterHeaderFault};
+pub use error::{CommandFailure, EslError, EslResult};

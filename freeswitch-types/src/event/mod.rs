@@ -8,6 +8,7 @@ pub use event_type::{EslEventType, ParseEventTypeError};
 pub use format::{EventFormat, ParseEventFormatError};
 pub use subscription::{
     order_event_tokens, swallowed_event_types, EventSubscription, EventSubscriptionError,
+    FilterHeaderFault,
 };
 
 use crate::headers::EventHeader;

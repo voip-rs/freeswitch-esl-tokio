@@ -11,6 +11,7 @@
 use crate::app::dptools::TransferArgumentError;
 use crate::commands::OriginateError;
 use crate::constants::{REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
+use freeswitch_types::event::FilterHeaderFault;
 use freeswitch_types::variables::ParseLoopbackLegError;
 use freeswitch_types::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
@@ -239,28 +240,6 @@ pub enum EslError {
         /// Which field.
         field: &'static str,
     },
-}
-
-/// How mod_event_socket would misread a filter header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FilterHeaderFault {
-    /// The switch skips it and reads the value as the header.
-    Empty,
-    /// The switch cuts the header at it.
-    Space,
-    /// `add` or `delete`, which `filter` reads as a keyword in any case.
-    Keyword,
-}
-
-impl std::fmt::Display for FilterHeaderFault {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            FilterHeaderFault::Empty => "is empty",
-            FilterHeaderFault::Space => "holds a space",
-            FilterHeaderFault::Keyword => "is a filter keyword",
-        })
-    }
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader

@@ -82,7 +82,8 @@ pub use commands::{
 #[cfg(feature = "esl")]
 pub use event::{
     EslEvent, EslEventPriority, EslEventType, EventFormat, EventSubscription,
-    EventSubscriptionError, ParseEventFormatError, ParseEventTypeError, ParsePriorityError,
+    EventSubscriptionError, FilterHeaderFault, ParseEventFormatError, ParseEventTypeError,
+    ParsePriorityError,
 };
 pub use headers::{case_alias_key, normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use log_level::{LogLevel, ParseLogLevelError};
