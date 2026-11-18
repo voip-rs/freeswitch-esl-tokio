@@ -209,20 +209,6 @@ pub enum FlattenedDialStringError {
     SplitSeparatorUnreadable,
 }
 
-/// Renders a [`FlattenedDialString`]. Returned by
-/// [`FlattenedDialString::display_raw`] and [`FlattenedDialString::display_for`].
-#[derive(Debug, Clone, Copy)]
-pub struct FlattenedDialStringDisplay<'a> {
-    list: &'a FlattenedDialString,
-    render: Render,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Render {
-    Raw,
-    For(DialStringTarget),
-}
-
 impl FlattenedDialString {
     /// Read `input` through every pass `target` applies.
     pub fn parse_for(
@@ -441,37 +427,28 @@ impl FlattenedDialString {
 
     /// The input text of the kept legs, joined by the separators that stood
     /// before each of them in the input; byte-identical when nothing was removed.
-    pub fn display_raw(&self) -> FlattenedDialStringDisplay<'_> {
-        FlattenedDialStringDisplay {
-            list: self,
-            render: Render::Raw,
-        }
+    pub fn display_raw(&self) -> impl fmt::Display + Copy + '_ {
+        Raw(self)
     }
 
     /// The list rendered by this crate for `target`, carrying only the pairs
     /// that set a value.
-    pub fn display_for(
-        &self,
-        target: impl Into<DialStringTarget>,
-    ) -> FlattenedDialStringDisplay<'_> {
-        FlattenedDialStringDisplay {
-            list: self,
-            render: Render::For(target.into()),
-        }
+    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
+        target
+            .into()
+            .argument(|f, target| self.write_for(f, target))
+            .to_string()
     }
 }
 
-impl fmt::Display for FlattenedDialStringDisplay<'_> {
+/// The kept legs as they stood in the input.
+#[derive(Clone, Copy)]
+struct Raw<'a>(&'a FlattenedDialString);
+
+impl fmt::Display for Raw<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.render {
-            Render::Raw => self
-                .list
-                .write_raw(f),
-            Render::For(target) => target.write_argument(f, |f, target| {
-                self.list
-                    .write_for(f, target)
-            }),
-        }
+        self.0
+            .write_raw(f)
     }
 }
 

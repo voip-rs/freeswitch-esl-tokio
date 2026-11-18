@@ -37,9 +37,8 @@ pub use endpoint::{
 };
 pub use execute_on::{ExecuteOn, ExecuteOnFault};
 pub use flattened::{
-    CauseReading, ErrorLeg, FlattenedDialString, FlattenedDialStringDisplay,
-    FlattenedDialStringError, FlattenedGroup, FlattenedLeg, FlattenedThread, LegTarget, LegWarning,
-    ListWarning, UnparsedLeg,
+    CauseReading, ErrorLeg, FlattenedDialString, FlattenedDialStringError, FlattenedGroup,
+    FlattenedLeg, FlattenedThread, LegTarget, LegWarning, ListWarning, UnparsedLeg,
 };
 pub use originate::{
     Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,

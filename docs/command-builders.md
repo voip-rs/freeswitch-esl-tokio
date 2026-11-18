@@ -210,7 +210,7 @@ a module this crate does not model) and per-pair warnings. A module outside the
 typed set fails no parse: the block, the leg splits and the argv pass are core
 behaviour, so the leg keeps its text and the rest of the list reads as usual.
 `retain()` drops legs; `display_raw()` forwards the kept legs as written,
-`display_for()` renders them canonically.
+`render()` renders them canonically.
 
 **DialStringTarget::with_argv_separator** — the target for a line that splits
 `originate`'s arguments on a `^^X` separator. The dial string is one argument of

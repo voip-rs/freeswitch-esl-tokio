@@ -62,12 +62,7 @@ fn plain_fixtures_render_back_to_the_input() {
         fixture!("g-fp-reg.A"),
         fixture!("pbx-calltakers.A"),
     ] {
-        assert_eq!(
-            parse(input, API)
-                .display_for(API)
-                .to_string(),
-            input
-        );
+        assert_eq!(parse(input, API).render(API), input);
     }
 }
 
@@ -78,8 +73,7 @@ fn head_blocks_render_ahead_and_only_set_pairs_are_carried() {
         API,
     );
     assert_eq!(
-        list.display_for(API)
-            .to_string(),
+        list.render(API),
         "<e=1>{g=2}[a=1]loopback/9199/test:_:{h=3}loopback/9199/x|[b=2]null/a"
     );
 }
@@ -192,11 +186,7 @@ fn a_non_ascii_block_separator_warns_and_carries_nothing() {
         leg.warnings(),
         [LegWarning::BlockSeparatorUnreadable { block: 1 }]
     );
-    assert_eq!(
-        list.display_for(API)
-            .to_string(),
-        "[a=1]loopback/9199/test"
-    );
+    assert_eq!(list.render(API), "[a=1]loopback/9199/test");
     let shown = leg.warnings()[0].to_string();
     assert!(shown.contains('1') && !shown.contains("secret") && !shown.contains('é'));
     assert_eq!(
@@ -372,9 +362,7 @@ fn argv_separator_captures_read_as_their_channel_received_them() {
                 escaped,
                 "{context}"
             );
-            let rendered = list
-                .display_for(target)
-                .to_string();
+            let rendered = list.render(target);
             let reread = FlattenedDialString::parse_for(&rendered, target)
                 .unwrap_or_else(|e| panic!("{context} rendered {rendered}: {e:?}"));
             for list in [&list, &reread] {
@@ -621,11 +609,7 @@ fn a_non_ascii_separator_ahead_of_the_legs_warns_and_carries_nothing() {
                 [ListWarning::BlockSeparatorUnreadable { block }],
                 "{input:?} at {carrier:?}"
             );
-            assert_eq!(
-                list.display_for(carrier)
-                    .to_string(),
-                carried
-            );
+            assert_eq!(list.render(carrier), carried);
             let shown = list.warnings()[0].to_string();
             assert!(
                 shown.contains(&block.to_string())
@@ -776,11 +760,7 @@ fn removing_every_leg_leaves_nothing_to_render() {
             .to_string(),
         ""
     );
-    assert_eq!(
-        list.display_for(API)
-            .to_string(),
-        ""
-    );
+    assert_eq!(list.render(API), "");
 }
 
 #[test]
@@ -1179,9 +1159,7 @@ fn the_direct_carrier_neither_splits_arguments_nor_expands() {
             .to_string(),
         input
     );
-    let rendered = list
-        .display_for(DialStringCarrier::Direct)
-        .to_string();
+    let rendered = list.render(DialStringCarrier::Direct);
     let back = parse(&rendered, DialStringCarrier::Direct);
     assert_eq!(
         back.legs()

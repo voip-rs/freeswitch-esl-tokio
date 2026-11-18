@@ -168,7 +168,7 @@ proptest! {
             prop_assert_eq!(views(&list, &rendered.legs), rendered.legs.clone(), "{:?} at {:?}", rendered.text, target);
             prop_assert!(list.warnings().is_empty(), "{:?}: {:?}", rendered.text, list.warnings());
 
-            let canonical = list.display_for(target).to_string();
+            let canonical = list.render(target);
             let reread = FlattenedDialString::parse_for(&canonical, target)
                 .map_err(|e| TestCaseError::fail(format!("{canonical:?} at {target:?}: {e:?}")))?;
             prop_assert_eq!(views(&reread, &rendered.legs), rendered.legs.clone(), "display_for {:?} at {:?}", canonical, target);

@@ -637,14 +637,7 @@ fn flattened_case(input: &str, target: DialStringTarget, detailed: bool) -> Vec<
                     .to_string()
             ),
         ),
-        (
-            "for".to_string(),
-            format!(
-                "{:?}",
-                list.display_for(target)
-                    .to_string()
-            ),
-        ),
+        ("for".to_string(), format!("{:?}", list.render(target))),
     ];
     if detailed {
         for (i, leg) in list
