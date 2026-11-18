@@ -219,7 +219,7 @@ pub use command::{
 };
 pub use connection::{
     AuthMethod, ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
-    EslEventStream, EventOverflow,
+    EslEventStream, EventOverflow, SwallowedEventTypes,
 };
 pub use constants::UNDEF_VALUE;
 pub use error::{CommandFailure, EslError, EslResult};

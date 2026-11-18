@@ -49,7 +49,7 @@ async fn test_sendevent_command() {
 ///
 /// The call is a closure driven alongside the mock: it does not return until
 /// the reply arrives, and the reply cannot be sent before the command is read.
-async fn wire_round_trip<T, F, Fut>(expected: &str, call: F)
+async fn wire_round_trip<T, F, Fut>(expected: &str, call: F) -> T
 where
     T: std::fmt::Debug,
     F: FnOnce(EslClient) -> Fut,
@@ -69,9 +69,7 @@ where
     });
 
     assert_eq!(sent, expected);
-    if let Err(e) = result {
-        panic!("{expected:?} was rejected: {e}");
-    }
+    result.unwrap_or_else(|e| panic!("{expected:?} was rejected: {e}"))
 }
 
 #[tokio::test]
@@ -157,6 +155,67 @@ async fn test_nixevent_custom_orders_last() {
             .await
     })
     .await;
+}
+
+/// The switch answers `+OK` and reads `CHANNEL_CREATE` as a subclass name, so
+/// the returned report is the only sign it was not subscribed.
+#[tokio::test]
+async fn subscribe_events_raw_reports_a_type_after_custom() {
+    let swallowed = wire_round_trip(
+        "event plain CUSTOM sofia::register CHANNEL_CREATE\n\n",
+        |client| async move {
+            client
+                .subscribe_events_raw(EventFormat::Plain, "CUSTOM sofia::register CHANNEL_CREATE")
+                .await
+        },
+    )
+    .await;
+    assert_eq!(
+        swallowed
+            .iter()
+            .collect::<Vec<_>>(),
+        ["CHANNEL_CREATE"]
+    );
+    assert_eq!(swallowed.events(), "CUSTOM sofia::register CHANNEL_CREATE");
+    assert!(swallowed
+        .to_string()
+        .contains("CHANNEL_CREATE"));
+    assert!(swallowed
+        .into_result()
+        .is_err());
+}
+
+#[tokio::test]
+async fn subscribe_events_raw_well_ordered_swallows_nothing() {
+    let swallowed = wire_round_trip(
+        "event plain HEARTBEAT CUSTOM sofia::register\n\n",
+        |client| async move {
+            client
+                .subscribe_events_raw(EventFormat::Plain, "HEARTBEAT CUSTOM sofia::register")
+                .await
+        },
+    )
+    .await;
+    assert!(swallowed.is_empty());
+    assert!(swallowed
+        .into_result()
+        .is_ok());
+}
+
+#[tokio::test]
+async fn nixevent_raw_reports_a_type_after_custom() {
+    let swallowed = wire_round_trip("nixevent CUSTOM HEARTBEAT\n\n", |client| async move {
+        client
+            .nixevent_raw("CUSTOM HEARTBEAT")
+            .await
+    })
+    .await;
+    assert_eq!(
+        swallowed
+            .iter()
+            .collect::<Vec<_>>(),
+        ["HEARTBEAT"]
+    );
 }
 
 #[tokio::test]

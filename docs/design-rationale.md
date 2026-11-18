@@ -835,8 +835,9 @@ Every path that puts an event-name list on the wire goes through
 The raw-string pair is the exception it cannot cover: it holds one flat token
 list with the event-type/subclass distinction already gone, so a check there
 would guess at intent, and guess wrong on the subclass lists this crate builds
-for `nixevent` itself. It stays permissive, and `swallowed_event_types` offers
-the one detectable case as a value instead.
+for `nixevent` itself. It stays permissive, and both raw methods return the
+one detectable case as a `#[must_use]` `SwallowedEventTypes`, filled by
+`swallowed_event_types`.
 
 ## HangupCause::from_sip_response mapping
 

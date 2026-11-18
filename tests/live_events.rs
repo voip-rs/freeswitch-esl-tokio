@@ -251,6 +251,8 @@ async fn live_noevents_stops_delivery() {
     client
         .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {}", subclass))
         .await
+        .unwrap()
+        .into_result()
         .unwrap();
 
     // Fire event and confirm delivery
@@ -322,6 +324,8 @@ async fn live_nixevent_selective_unsubscribe() {
             &format!("HEARTBEAT CUSTOM {}", subclass),
         )
         .await
+        .unwrap()
+        .into_result()
         .unwrap();
 
     // Unsubscribe only HEARTBEAT

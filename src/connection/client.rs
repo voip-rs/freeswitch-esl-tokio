@@ -290,7 +290,7 @@ impl EslClient {
             .collect();
         if !removed.is_empty() {
             let nixevent_str = format!("{}{}", prefix, removed.join(" "));
-            self.nixevent_raw(&nixevent_str)
+            self.send_nixevent(nixevent_str)
                 .await?;
         }
         Ok(())
@@ -307,17 +307,23 @@ impl EslClient {
     /// subclass name, so an event type placed after it is never subscribed and
     /// the command still returns `+OK`. Nothing here checks that — the
     /// event-type/subclass distinction is gone once the list is one flat
-    /// string. [`swallowed_event_types`](freeswitch_types::event::swallowed_event_types)
-    /// reports the detectable case.
+    /// string, so the detectable case comes back as a [`SwallowedEventTypes`].
     ///
     /// ```rust,no_run
-    /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {
+    /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), Box<dyn std::error::Error>> {
     /// use freeswitch_esl_tokio::EventFormat;
-    /// client.subscribe_events_raw(EventFormat::Plain, "HEARTBEAT CUSTOM sofia::register").await?;
+    /// client
+    ///     .subscribe_events_raw(EventFormat::Plain, "HEARTBEAT CUSTOM sofia::register")
+    ///     .await?
+    ///     .into_result()?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe_events_raw(&self, format: EventFormat, events: &str) -> EslResult<()> {
+    pub async fn subscribe_events_raw(
+        &self,
+        format: EventFormat,
+        events: &str,
+    ) -> EslResult<SwallowedEventTypes> {
         let cmd = EslCommand::Events {
             format: format.to_string(),
             events: events.to_string(),
@@ -329,7 +335,7 @@ impl EslClient {
             "Subscribed to raw events '{}' with format {:?}",
             events, format
         );
-        Ok(())
+        Ok(SwallowedEventTypes::of(events))
     }
 
     /// Set event filter using a typed [`EventHeader`].
@@ -621,7 +627,7 @@ impl EslClient {
             })
             .collect();
         let s = freeswitch_types::event::order_event_tokens(names, []).join(" ");
-        self.nixevent_raw(&s)
+        self.send_nixevent(s)
             .await
     }
 
@@ -632,12 +638,18 @@ impl EslClient {
     /// event types not yet covered by the typed enum.
     ///
     /// Carries the same terminal-`CUSTOM` rule and the same absence of a check
-    /// as [`subscribe_events_raw`](Self::subscribe_events_raw).
-    pub async fn nixevent_raw(&self, events: &str) -> EslResult<()> {
-        let cmd = EslCommand::NixEvent {
-            events: events.to_string(),
-        };
-        self.send_command_ok(cmd)
+    /// as [`subscribe_events_raw`](Self::subscribe_events_raw), and reports the
+    /// same [`SwallowedEventTypes`].
+    pub async fn nixevent_raw(&self, events: &str) -> EslResult<SwallowedEventTypes> {
+        self.send_nixevent(events.to_string())
+            .await?;
+        Ok(SwallowedEventTypes::of(events))
+    }
+
+    /// `nixevent` for a list built here, whose subclass tokens are subclasses
+    /// whatever they are named.
+    async fn send_nixevent(&self, events: String) -> EslResult<()> {
+        self.send_command_ok(EslCommand::NixEvent { events })
             .await
     }
 
@@ -963,6 +975,80 @@ impl futures_util::Stream for EslEventStream {
             .poll_recv(cx)
     }
 }
+
+/// Event-type names a raw `event` or `nixevent` list placed after `CUSTOM`,
+/// which the switch read as subclass names while answering `+OK`.
+///
+/// Empty for a well-ordered list. Filled by
+/// [`swallowed_event_types`](freeswitch_types::event::swallowed_event_types),
+/// which cannot tell a subclass genuinely named like an event type from the
+/// mistake; a caller who means one reads past it, anyone else checks
+/// [`is_empty`](Self::is_empty) or `?`s [`into_result`](Self::into_result).
+#[must_use = "an event type after CUSTOM is read as a subclass name; check is_empty() or into_result()"]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwallowedEventTypes {
+    events: String,
+    swallowed: Vec<String>,
+}
+
+impl SwallowedEventTypes {
+    fn of(events: &str) -> Self {
+        Self {
+            swallowed: freeswitch_types::event::swallowed_event_types(events)
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            events: events.to_string(),
+        }
+    }
+
+    /// Whether every event type in the list was taken as one.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.swallowed
+            .is_empty()
+    }
+
+    /// The swallowed event-type names, in list order.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.swallowed
+            .iter()
+            .map(String::as_str)
+    }
+
+    /// The token list as sent.
+    pub fn events(&self) -> &str {
+        &self.events
+    }
+
+    /// `Ok` when nothing was swallowed, else this report as the error.
+    pub fn into_result(self) -> Result<(), Self> {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl std::fmt::Display for SwallowedEventTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_empty() {
+            return write!(f, "no event type follows CUSTOM in {:?}", self.events);
+        }
+        write!(
+            f,
+            "{} event type(s) after CUSTOM in {:?} read as subclass names: {}",
+            self.swallowed
+                .len(),
+            self.events,
+            self.swallowed
+                .join(", ")
+        )
+    }
+}
+
+impl std::error::Error for SwallowedEventTypes {}
 
 /// Whether a `getvar` reply means the variable is not set.
 fn getvar_is_unset(reply: &str) -> bool {

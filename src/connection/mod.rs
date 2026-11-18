@@ -23,6 +23,7 @@ mod reader;
 mod reexec;
 
 pub use auth::AuthMethod;
+pub use client::SwallowedEventTypes;
 
 use auth::{authenticate, Handshake};
 use reader::reader_loop;

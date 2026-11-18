@@ -45,8 +45,9 @@ types in does not affect which ones get subscribed.
 verbatim and guarantee nothing. Once the list is one flat string the
 event-type/subclass distinction is gone, so a check there would have to guess
 which tokens were meant as which — and would guess wrong on subclass lists this
-crate itself builds. `swallowed_event_types` reports the one detectable case (a
-token after `CUSTOM` that names a known event type) for callers that want it.
+crate itself builds. Both return the one detectable case (a token after
+`CUSTOM` that names a known event type) as a `#[must_use]` `SwallowedEventTypes`,
+filled by `swallowed_event_types`.
 
 ## A bare `CUSTOM` subscribes to nothing
 

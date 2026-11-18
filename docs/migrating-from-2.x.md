@@ -123,3 +123,9 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | static payload types 1, 2 and 19 were unmapped | named `1016`, `G721` and `CN` (comfort noise, beside the non-codec payloads) from sofia's well-known table |
 | an `m=` line repeating a payload type gave every repeat the type's `a=rtpmap` and `a=fmtp` | only the first entry takes them; a repeat keeps its static name or stays unmapped |
 | an `a=rtpmap` channel count had to be a number with nothing after it | everything after the rate's `/` is read with `atoi`, as the switch reads it: `opus/48000/2 x` has 2 channels, `L16/8000/` has 0 |
+
+## Client
+
+| 2.x | 3.0 |
+|---|---|
+| `EslClient::subscribe_events_raw(format, events)` and `nixevent_raw(events)` return `EslResult<()>` | return `EslResult<SwallowedEventTypes>`, `#[must_use]`: the event types placed after `CUSTOM`, which the switch read as subclass names while answering `+OK`. `.await?.into_result()?` refuses them, `is_empty()` and `iter()` read them; an existing `.await?;` keeps compiling and warns |

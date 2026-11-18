@@ -13,18 +13,6 @@ revisited when it is finally actionable.
 
 ## freeswitch-esl-tokio 3.0
 
-### `subscribe_events_raw` and `nixevent_raw` should return what they swallowed
-
-Both send their token list verbatim, and `CUSTOM` is terminal, so an event type
-placed after it is registered as a subclass name and never subscribed — with
-`+OK` on the wire and nothing in the reply to say so. `swallowed_event_types`
-detects that case today, but only for a caller who already knows to ask.
-
-Returning it instead of `()`, behind a `#[must_use]` carrier, puts the warning
-in front of a caller who does not: existing `.await?;` call sites keep
-compiling and start warning. It waits for the major because changing the `Ok`
-type is a break, not because the diagnostic is optional.
-
 ### It inherits whatever `freeswitch-types` 3.0 breaks
 
 The types above are re-exported from the crate root, so any change to their

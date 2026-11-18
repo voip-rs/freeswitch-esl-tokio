@@ -214,7 +214,9 @@ pub async fn custom_roundtrip_as(
     client
         .subscribe_events_raw(format, &format!("CUSTOM {subclass}"))
         .await
-        .expect("subscribe to the test subclass");
+        .expect("subscribe to the test subclass")
+        .into_result()
+        .expect("subclass read as an event type");
 
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name", "CUSTOM");
