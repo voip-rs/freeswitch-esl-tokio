@@ -260,33 +260,3 @@ async fn live_inline_argument_keeps_two_quotes() {
         );
     }
 }
-
-/// An argument rewritten after construction still renders correctly, which is
-/// the property that separator selection could not offer.
-#[tokio::test]
-#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
-async fn live_inline_argument_rewritten_after_construction() {
-    use freeswitch_esl_tokio::commands::originate::OriginateTarget;
-
-    let rendered = "{absolute_codec_string=G722,PCMU}";
-    let cmd = |endpoint: Endpoint| {
-        let mut cmd = Originate::inline(
-            endpoint,
-            [
-                Application::new("set", Some("probe_late=${placeholder}")),
-                Application::park(),
-            ],
-        )
-        .expect("inline builder rejected a valid list");
-        let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
-            panic!("expected InlineApplications");
-        };
-        *apps[0].args_mut() = Some(format!("probe_late={rendered}"));
-        cmd
-    };
-
-    assert_eq!(
-        run_and_read_back(cmd, "probe_late").await,
-        Some(rendered.to_string())
-    );
-}

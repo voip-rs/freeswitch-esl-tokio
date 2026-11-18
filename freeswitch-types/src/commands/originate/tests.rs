@@ -163,7 +163,7 @@ fn application_inline_no_args() {
 fn originate_xml_display() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("conference", Some("1")))
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap();
     assert_eq!(
         orig.render(BlockParse::MEASURED),
@@ -176,7 +176,7 @@ fn originate_inline_display() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::inline(ep, vec![Application::new("conference", Some("1"))])
         .unwrap()
-        .dialplan(DialplanType::INLINE)
+        .with_dialplan(DialplanType::INLINE)
         .unwrap();
     assert_eq!(
         orig.render(BlockParse::MEASURED),
@@ -188,9 +188,9 @@ fn originate_inline_display() {
 fn originate_extension_display() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("default");
+        .with_context("default");
     assert_eq!(
         orig.render(BlockParse::MEASURED),
         "originate sofia/internal/123@example.com 1000 XML default"
@@ -216,7 +216,7 @@ fn originate_extension_no_dialplan() {
 #[test]
 fn originate_extension_with_inline_errors() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
-    let result = Originate::extension(ep, "1000").dialplan(DialplanType::INLINE);
+    let result = Originate::extension(ep, "1000").with_dialplan(DialplanType::INLINE);
     assert!(result.is_err());
 }
 
@@ -269,7 +269,7 @@ fn originate_socket_round_trip() {
 fn originate_display_round_trip() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("conference", Some("1")))
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap();
     let s = orig.render(BlockParse::MEASURED);
     let parsed: Originate = Originate::parse_for(&s, BlockParse::MEASURED).unwrap();
@@ -454,12 +454,12 @@ fn serde_application_skips_none_args() {
 fn serde_originate_application_round_trip() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::new("park", None::<&str>))
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("default")
-        .cid_name("Test")
-        .cid_num("5551234")
-        .timeout(Duration::from_secs(30));
+        .with_context("default")
+        .with_cid_name("Test")
+        .with_cid_num("5551234")
+        .with_timeout(Duration::from_secs(30));
     let json = serde_json::to_string(&orig).unwrap();
     assert!(json.contains("\"application\""));
     let parsed: Originate = serde_json::from_str(&json).unwrap();
@@ -637,8 +637,8 @@ fn originate_timeout_only_fills_positional_gaps() {
             .with_context("test")
             .unwrap(),
     );
-    let cmd =
-        Originate::application(ep, Application::simple("park")).timeout(Duration::from_secs(30));
+    let cmd = Originate::application(ep, Application::simple("park"))
+        .with_timeout(Duration::from_secs(30));
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/test &park() undef undef undef undef 30"
@@ -653,7 +653,7 @@ fn originate_cid_num_only_fills_preceding_gaps() {
             .with_context("test")
             .unwrap(),
     );
-    let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
+    let cmd = Originate::application(ep, Application::simple("park")).with_cid_num("5551234");
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/test &park() undef undef undef 5551234"
@@ -668,7 +668,7 @@ fn originate_context_only_fills_dialplan() {
             .with_context("test")
             .unwrap(),
     );
-    let cmd = Originate::extension(ep, "1000").context("myctx");
+    let cmd = Originate::extension(ep, "1000").with_context("myctx");
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/test 1000 undef myctx"
@@ -684,7 +684,7 @@ fn originate_gap_filler_round_trips() {
             .with_context("test")
             .unwrap(),
     );
-    let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
+    let cmd = Originate::application(ep, Application::simple("park")).with_cid_name("Alice");
     let wire = cmd.render(BlockParse::MEASURED);
     let parsed: Originate = Originate::parse_for(&wire, BlockParse::MEASURED).unwrap();
     assert_eq!(parsed, cmd);
@@ -708,12 +708,12 @@ fn serde_originate_full_round_trip_with_variables() {
             .with_variables(ep_vars),
     );
     let orig = Originate::application(ep, Application::new("park", None::<&str>))
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("public")
-        .cid_name("Test Caller")
-        .cid_num("5551234")
-        .timeout(Duration::from_secs(60));
+        .with_context("public")
+        .with_cid_name("Test Caller")
+        .with_cid_num("5551234")
+        .with_timeout(Duration::from_secs(60));
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
@@ -739,12 +739,12 @@ fn serde_originate_inline_round_trip_with_all_fields() {
         ],
     )
     .unwrap()
-    .dialplan(DialplanType::INLINE)
+    .with_dialplan(DialplanType::INLINE)
     .unwrap()
-    .context("default")
-    .cid_name("IVR")
-    .cid_num("0000")
-    .timeout(Duration::from_secs(45));
+    .with_context("default")
+    .with_cid_name("IVR")
+    .with_cid_num("0000")
+    .with_timeout(Duration::from_secs(45));
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
@@ -758,9 +758,9 @@ fn serde_originate_inline_round_trip_with_all_fields() {
 fn originate_context_named_inline() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("inline");
+        .with_context("inline");
     let wire = orig.render(BlockParse::MEASURED);
     assert!(wire.contains("XML inline"), "wire: {}", wire);
     let parsed: Originate = Originate::parse_for(&wire, BlockParse::MEASURED).unwrap();
@@ -773,9 +773,9 @@ fn originate_context_named_inline() {
 fn originate_context_named_xml() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::extension(ep, "1000")
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("XML");
+        .with_context("XML");
     let wire = orig.render(BlockParse::MEASURED);
     // "XML XML" - first is dialplan, second is context
     assert!(wire.contains("XML XML"), "wire: {}", wire);
@@ -842,8 +842,8 @@ fn quoted_caller_id_round_trips_without_gaining_quotes() {
             .unwrap(),
     );
     let cmd = Originate::application(ep, Application::simple("park"))
-        .cid_name("Outbound Call")
-        .cid_num("555 1234");
+        .with_cid_name("Outbound Call")
+        .with_cid_num("555 1234");
     let wire = cmd.render(BlockParse::MEASURED);
     assert_eq!(
         wire,
@@ -851,63 +851,42 @@ fn quoted_caller_id_round_trips_without_gaining_quotes() {
     );
 
     let parsed: Originate = Originate::parse_for(&wire, BlockParse::MEASURED).unwrap();
-    assert_eq!(parsed.caller_id_name(), Some("Outbound Call"));
-    assert_eq!(parsed.caller_id_number(), Some("555 1234"));
+    assert_eq!(parsed.cid_name(), Some("Outbound Call"));
+    assert_eq!(parsed.cid_num(), Some("555 1234"));
     assert_eq!(parsed.render(BlockParse::MEASURED), wire);
 }
 
-/// The mutators are the config-driven path: deserialize a template, then
-/// override per call. Clearing a field is half of that and had no coverage.
+/// The builders are the config-driven path: deserialize a template, then
+/// override per call, which takes clearing a field as well as setting it.
 #[test]
-fn originate_mutators_set_and_clear_every_optional_field() {
+fn originate_builders_set_and_clear_every_optional_field() {
     let ep = Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
             .unwrap()
             .with_context("default")
             .unwrap(),
     );
-    let mut cmd = Originate::extension(ep, "1000");
-
-    cmd.set_dialplan(Some(DialplanType::XML));
-    cmd.set_context(Some("public"));
-    cmd.set_cid_name(Some("Alice"));
-    cmd.set_cid_num(Some("5551234"));
-    cmd.set_timeout(Some(Duration::from_secs(30)));
+    let cmd = Originate::extension(ep, "1000")
+        .with_dialplan(DialplanType::XML)
+        .unwrap()
+        .with_context("public")
+        .with_cid_name("Alice")
+        .with_cid_num("5551234")
+        .with_timeout(Duration::from_secs(30));
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/default 1000 XML public Alice 5551234 30"
     );
-    assert_eq!(cmd.timeout_duration(), Some(Duration::from_secs(30)));
 
-    // The turbofish is not decoration: `Option<impl Into<String>>` leaves a
-    // bare `None` with no type to infer, so clearing a field needs one.
-    cmd.set_dialplan(None);
-    cmd.set_context(None::<String>);
-    cmd.set_cid_name(None::<String>);
-    cmd.set_cid_num(None::<String>);
-    cmd.set_timeout(None);
+    let cmd = cmd
+        .without_dialplan()
+        .without_context()
+        .without_cid_name()
+        .without_cid_num()
+        .without_timeout();
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/default 1000"
-    );
-}
-
-#[test]
-fn originate_mut_accessors_reach_the_endpoint_and_the_target() {
-    let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
-    let mut cmd = Originate::application(ep, Application::new("socket", Some("old")));
-
-    *cmd.endpoint_mut() = Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap());
-    if let OriginateTarget::Application(app) = cmd.target_mut() {
-        *app.name_mut() = "playback".into();
-        *app.args_mut() = Some("/tmp/test.wav".into());
-    } else {
-        panic!("expected Application target");
-    }
-
-    assert_eq!(
-        cmd.render(BlockParse::MEASURED),
-        "originate loopback/9199 &playback(/tmp/test.wav)"
     );
 }
 
@@ -920,19 +899,19 @@ fn originate_accessors() {
             .unwrap(),
     );
     let cmd = Originate::extension(ep, "1000")
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("default")
-        .cid_name("Alice")
-        .cid_num("5551234")
-        .timeout(Duration::from_secs(30));
+        .with_context("default")
+        .with_cid_name("Alice")
+        .with_cid_num("5551234")
+        .with_timeout(Duration::from_secs(30));
 
     assert!(matches!(cmd.target(), OriginateTarget::Extension(ref e) if e == "1000"));
-    assert_eq!(cmd.dialplan_type(), Some(&DialplanType::XML));
-    assert_eq!(cmd.context_str(), Some("default"));
-    assert_eq!(cmd.caller_id_name(), Some("Alice"));
-    assert_eq!(cmd.caller_id_number(), Some("5551234"));
-    assert_eq!(cmd.timeout_seconds(), Some(30));
+    assert_eq!(cmd.dialplan(), Some(&DialplanType::XML));
+    assert_eq!(cmd.context(), Some("default"));
+    assert_eq!(cmd.cid_name(), Some("Alice"));
+    assert_eq!(cmd.cid_num(), Some("5551234"));
+    assert_eq!(cmd.timeout(), Some(Duration::from_secs(30)));
 }
 
 fn null_endpoint() -> Endpoint {
@@ -976,27 +955,6 @@ fn inline_escapes_a_separator_inside_an_argument() {
         cmd.render(BlockParse::MEASURED),
         r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800),park' inline"
     );
-}
-
-/// The whole point of escaping over separator juggling: an argument
-/// rewritten after construction cannot invalidate anything, because
-/// nothing was decided at construction.
-#[test]
-fn escaping_survives_arguments_rewritten_after_construction() {
-    let mut cmd = Originate::inline(
-        null_endpoint(),
-        [Application::new("bridge", Some("${codecs}sofia/gw/1"))],
-    )
-    .unwrap();
-
-    let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
-        panic!("expected InlineApplications");
-    };
-    *apps[0].args_mut() = Some("{absolute_codec_string=G722,PCMU}sofia/gw/1".to_string());
-
-    assert!(cmd
-        .render(BlockParse::MEASURED)
-        .contains(r"G722\\,PCMU"));
 }
 
 #[test]
@@ -1186,23 +1144,23 @@ fn separated_commands() -> Vec<(Originate, &'static str)> {
                 spaced_endpoint(),
                 Application::new("socket", Some("127.0.0.1:8040 async full")),
             )
-            .cid_name("it's ~ here")
+            .with_cid_name("it's ~ here")
             .with_argv_separator('~')
             .unwrap(),
             r"originate ^^~{k=\'a b\'}loopback/9199/test~&socket(127.0.0.1:8040 async full)~undef~undef~it\'s \~ here",
         ),
         (
             Originate::extension(test_endpoint(), "1000")
-                .context("")
-                .cid_name(" Lead ")
-                .cid_num("")
+                .with_context("")
+                .with_cid_name(" Lead ")
+                .with_cid_num("")
                 .with_argv_separator('~')
                 .unwrap(),
             r"originate ^^~loopback/9199/test~1000~undef~~\sLead\s~''",
         ),
         (
             Originate::application(test_endpoint(), Application::simple("park"))
-                .timeout(Duration::from_secs(30))
+                .with_timeout(Duration::from_secs(30))
                 .with_argv_separator('~')
                 .unwrap(),
             "originate ^^~loopback/9199/test~&park()~undef~undef~undef~undef~30",
@@ -1216,7 +1174,7 @@ fn separated_commands() -> Vec<(Originate, &'static str)> {
                 ],
             )
             .unwrap()
-            .dialplan(DialplanType::INLINE)
+            .with_dialplan(DialplanType::INLINE)
             .unwrap()
             .with_argv_separator('~')
             .unwrap(),
@@ -1224,10 +1182,10 @@ fn separated_commands() -> Vec<(Originate, &'static str)> {
         ),
         (
             Originate::extension(test_endpoint(), "1000")
-                .dialplan(DialplanType::XML)
+                .with_dialplan(DialplanType::XML)
                 .unwrap()
-                .context("ctx with space")
-                .cid_num("555 1234")
+                .with_context("ctx with space")
+                .with_cid_num("555 1234")
                 .with_argv_separator('!')
                 .unwrap(),
             "originate ^^!loopback/9199/test!1000!XML!ctx with space!undef!555 1234",
@@ -1279,20 +1237,20 @@ fn argv_separator_parse_reads_the_switch_spellings() {
     )
     .unwrap();
     assert_eq!(parsed.argv_separator(), Some('~'));
-    assert_eq!(parsed.dialplan_type(), Some(&DialplanType::XML));
-    assert_eq!(parsed.context_str(), Some(""));
-    assert_eq!(parsed.caller_id_name(), None);
-    assert_eq!(parsed.caller_id_number(), Some(r"\undef"));
+    assert_eq!(parsed.dialplan(), Some(&DialplanType::XML));
+    assert_eq!(parsed.context(), Some(""));
+    assert_eq!(parsed.cid_name(), None);
+    assert_eq!(parsed.cid_num(), Some(r"\undef"));
 
     let parsed = Originate::parse_for(
         r"originate ^^~loopback/9199/test~&park()~undef~undef~  Lead Trail  ~\s\sx",
         BlockParse::MEASURED,
     )
     .unwrap();
-    assert_eq!(parsed.dialplan_type(), None);
-    assert_eq!(parsed.context_str(), None);
-    assert_eq!(parsed.caller_id_name(), Some("Lead Trail"));
-    assert_eq!(parsed.caller_id_number(), Some("  x"));
+    assert_eq!(parsed.dialplan(), None);
+    assert_eq!(parsed.context(), None);
+    assert_eq!(parsed.cid_name(), Some("Lead Trail"));
+    assert_eq!(parsed.cid_num(), Some("  x"));
 }
 
 #[test]
@@ -1436,28 +1394,28 @@ fn blank_positionals_read_as_the_separator_split_does() {
     .unwrap();
     assert_eq!(
         parsed
-            .dialplan_type()
+            .dialplan()
             .map(DialplanType::name),
         Some("ctx")
     );
-    assert_eq!(parsed.context_str(), None);
+    assert_eq!(parsed.context(), None);
 
     let parsed: Originate = Originate::parse_for(
         "originate loopback/9199/test &park() undef UNDEF Alice",
         BlockParse::MEASURED,
     )
     .unwrap();
-    assert_eq!(parsed.dialplan_type(), None);
-    assert_eq!(parsed.context_str(), None);
-    assert_eq!(parsed.caller_id_name(), Some("Alice"));
+    assert_eq!(parsed.dialplan(), None);
+    assert_eq!(parsed.context(), None);
+    assert_eq!(parsed.cid_name(), Some("Alice"));
 
     let parsed: Originate = Originate::parse_for(
         "originate loopback/9199/test &park() undef ctx",
         BlockParse::MEASURED,
     )
     .unwrap();
-    assert_eq!(parsed.dialplan_type(), None);
-    assert_eq!(parsed.context_str(), Some("ctx"));
+    assert_eq!(parsed.dialplan(), None);
+    assert_eq!(parsed.context(), Some("ctx"));
 }
 
 /// The blank split collapses a run of spaces and splits a bare space, so an empty or
@@ -1467,21 +1425,21 @@ fn blank_split_quotes_empty_and_spaced_positionals() {
     let cases = [
         (
             Originate::extension(test_endpoint(), "1000")
-                .context("")
-                .cid_name("Alice"),
+                .with_context("")
+                .with_cid_name("Alice"),
             "originate loopback/9199/test 1000 undef '' Alice",
         ),
         (
             Originate::extension(test_endpoint(), "1000")
-                .context("ctx with space")
-                .cid_name("Alice"),
+                .with_context("ctx with space")
+                .with_cid_name("Alice"),
             "originate loopback/9199/test 1000 undef 'ctx with space' Alice",
         ),
         (
             Originate::extension(test_endpoint(), "1000")
-                .context("test")
-                .cid_name("Alice")
-                .cid_num(""),
+                .with_context("test")
+                .with_cid_name("Alice")
+                .with_cid_num(""),
             "originate loopback/9199/test 1000 undef test Alice ''",
         ),
     ];
@@ -1489,9 +1447,9 @@ fn blank_split_quotes_empty_and_spaced_positionals() {
         assert_eq!(cmd.render(BlockParse::MEASURED), wire);
         let parsed: Originate = Originate::parse_for(wire, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
-        assert_eq!(parsed.context_str(), cmd.context_str(), "{wire}");
-        assert_eq!(parsed.caller_id_name(), cmd.caller_id_name(), "{wire}");
-        assert_eq!(parsed.caller_id_number(), cmd.caller_id_number(), "{wire}");
+        assert_eq!(parsed.context(), cmd.context(), "{wire}");
+        assert_eq!(parsed.cid_name(), cmd.cid_name(), "{wire}");
+        assert_eq!(parsed.cid_num(), cmd.cid_num(), "{wire}");
         assert_eq!(parsed.render(BlockParse::MEASURED), wire);
     }
 }
@@ -1503,10 +1461,10 @@ fn blank_split_delivers_a_single_quote_in_any_argument() {
     let cases = [
         (
             Originate::application(test_endpoint(), Application::simple("park"))
-                .dialplan(DialplanType::XML)
+                .with_dialplan(DialplanType::XML)
                 .unwrap()
-                .context("default")
-                .cid_name("it's"),
+                .with_context("default")
+                .with_cid_name("it's"),
             r"originate loopback/9199/test &park() XML default 'it\'s'",
         ),
         (
@@ -1519,7 +1477,7 @@ fn blank_split_delivers_a_single_quote_in_any_argument() {
         (
             Originate::inline(null_endpoint(), [Application::new("set", Some("a=it's,b"))])
                 .unwrap()
-                .dialplan(DialplanType::INLINE)
+                .with_dialplan(DialplanType::INLINE)
                 .unwrap(),
             r"originate loopback/9199 'set:a=it\\\'s\\,b' inline",
         ),
@@ -1528,8 +1486,8 @@ fn blank_split_delivers_a_single_quote_in_any_argument() {
                 test_endpoint(),
                 Application::new("set", Some(r"lit=a\nb\\c\sd")),
             )
-            .cid_name(r"x\ny")
-            .cid_num(r"\t"),
+            .with_cid_name(r"x\ny")
+            .with_cid_num(r"\t"),
             r"originate loopback/9199/test '&set(lit=a\\nb\\\\c\\sd)' undef undef 'x\\ny' '\\t'",
         ),
     ];
@@ -1545,7 +1503,7 @@ fn blank_split_delivers_a_single_quote_in_any_argument() {
         BlockParse::MEASURED,
     )
     .unwrap();
-    assert_eq!(parsed.caller_id_name(), Some("it's"));
+    assert_eq!(parsed.cid_name(), Some("it's"));
 }
 
 /// The hunt's split cleans each action up, reading `\\`, `\'`, `\n`, `\s` and the rest and
@@ -1594,17 +1552,17 @@ fn an_inline_argument_escapes_for_the_hunt_split() {
 fn inline_applications_refuse_another_dialplan() {
     let inline = || Originate::inline(null_endpoint(), [Application::simple("park")]).unwrap();
     for refused in [
-        inline().dialplan(DialplanType::XML),
-        inline().dialplan(DialplanType::named("").unwrap()),
-        inline().dialplan(DialplanType::named("nosuchdp").unwrap()),
+        inline().with_dialplan(DialplanType::XML),
+        inline().with_dialplan(DialplanType::named("").unwrap()),
+        inline().with_dialplan(DialplanType::named("nosuchdp").unwrap()),
     ] {
         assert_eq!(refused, Err(OriginateError::InlineApplicationsWithDialplan));
     }
     assert!(inline()
-        .dialplan(DialplanType::INLINE)
+        .with_dialplan(DialplanType::INLINE)
         .is_ok());
     assert!(inline()
-        .dialplan(DialplanType::named("INLINE").unwrap())
+        .with_dialplan(DialplanType::named("INLINE").unwrap())
         .is_ok());
     let json = r#"{"endpoint": {"loopback": {"extension": "9199"}},
             "inline_applications": [{"name": "park"}], "dialplan": "xml"}"#;
@@ -1670,7 +1628,7 @@ fn an_application_under_the_inline_dialplan_and_a_lone_ampersand_round_trip() {
     let cases = [
         (
             Originate::application(test_endpoint(), Application::new("park", Some(":,")))
-                .dialplan(DialplanType::INLINE)
+                .with_dialplan(DialplanType::INLINE)
                 .unwrap(),
             "originate loopback/9199/test &park(:,) inline",
         ),
@@ -1693,16 +1651,16 @@ fn an_application_under_the_inline_dialplan_and_a_lone_ampersand_round_trip() {
 fn a_last_positional_ending_in_stripped_whitespace_arrives() {
     let cases = [
         (
-            Originate::extension(test_endpoint(), "1000").cid_num("\t"),
+            Originate::extension(test_endpoint(), "1000").with_cid_num("\t"),
             "originate loopback/9199/test 1000 undef undef undef '\t'",
         ),
         (
-            Originate::extension(test_endpoint(), "1000").cid_num("x\u{b}"),
+            Originate::extension(test_endpoint(), "1000").with_cid_num("x\u{b}"),
             "originate loopback/9199/test 1000 undef undef undef 'x\u{b}'",
         ),
         (
             Originate::extension(test_endpoint(), "1000")
-                .cid_num("\u{b}")
+                .with_cid_num("\u{b}")
                 .with_argv_separator('~')
                 .unwrap(),
             "originate ^^~loopback/9199/test~1000~undef~undef~undef~''\u{b}''",
@@ -1731,11 +1689,11 @@ fn any_dialplan_name_is_kept() {
         let parsed: Originate = Originate::parse_for(line, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{line}: {e}"));
         assert_eq!(
-            parsed.dialplan_type(),
+            parsed.dialplan(),
             Some(&DialplanType::named(name).unwrap()),
             "{line}"
         );
-        assert_eq!(parsed.context_str(), Some("ctx"), "{line}");
+        assert_eq!(parsed.context(), Some("ctx"), "{line}");
         assert_eq!(parsed.render(BlockParse::MEASURED), line);
     }
 
@@ -1744,11 +1702,11 @@ fn any_dialplan_name_is_kept() {
         BlockParse::MEASURED,
     )
     .unwrap();
-    assert_eq!(typed.dialplan_type(), Some(&DialplanType::XML));
+    assert_eq!(typed.dialplan(), Some(&DialplanType::XML));
     assert_eq!(DialplanType::XML.name(), "XML");
 
     let named = Originate::extension(test_endpoint(), "1000")
-        .dialplan(DialplanType::named("nosuchdp").unwrap())
+        .with_dialplan(DialplanType::named("nosuchdp").unwrap())
         .unwrap();
     assert_eq!(
         named.render(BlockParse::MEASURED),
@@ -1756,7 +1714,7 @@ fn any_dialplan_name_is_kept() {
     );
     assert_eq!(
         Originate::extension(test_endpoint(), "1000")
-            .dialplan(DialplanType::named("INLINE").unwrap()),
+            .with_dialplan(DialplanType::named("INLINE").unwrap()),
         Err(OriginateError::ExtensionWithInlineDialplan)
     );
     let json = serde_json::to_string(&named).unwrap();
@@ -1774,7 +1732,7 @@ fn serde_dialplan_keeps_existing_configs_and_refuses_undef() {
     };
     for (dialplan, typed) in [("xml", DialplanType::XML), ("XML", DialplanType::XML)] {
         let cmd: Originate = serde_json::from_str(&config(dialplan)).unwrap();
-        assert_eq!(cmd.dialplan_type(), Some(&typed));
+        assert_eq!(cmd.dialplan(), Some(&typed));
         assert!(serde_json::to_string(&cmd)
             .unwrap()
             .contains(r#""dialplan":"xml""#));
@@ -1795,7 +1753,7 @@ fn a_blank_argv_separator_picks_the_blank_split() {
     .unwrap();
     assert_eq!(parsed.argv_separator(), None);
     assert_eq!(parsed.endpoint(), &test_endpoint());
-    assert_eq!(parsed.context_str(), Some("ctx"));
+    assert_eq!(parsed.context(), Some("ctx"));
     assert_eq!(
         parsed.render(BlockParse::MEASURED),
         "originate loopback/9199/test &park() XML ctx"

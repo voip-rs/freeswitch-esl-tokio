@@ -83,9 +83,9 @@ async fn live_originate_application_target() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_extension_target() {
     let cmd = Originate::extension(test_9199(), "9199")
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
         .unwrap()
-        .context("test");
+        .with_context("test");
 
     originate_and_reap(&cmd).await;
 }
@@ -112,7 +112,7 @@ async fn live_originate_inline_target() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_timeout_fills_positional_gaps() {
     let cmd = Originate::application(test_9199(), Application::simple("park"))
-        .timeout(Duration::from_secs(5));
+        .with_timeout(Duration::from_secs(5));
 
     originate_and_reap(&cmd).await;
 }
@@ -202,17 +202,17 @@ async fn originate_positionals(separator: Option<char>) {
         test_9199(),
         Application::new("socket", Some("127.0.0.1:1 async full")),
     )
-    .dialplan(DialplanType::XML)
+    .with_dialplan(DialplanType::XML)
     .expect("an application target takes XML")
-    .context("test")
-    .cid_name("  Front  Desk  ")
-    .cid_num("5551234")
-    .timeout(Duration::from_secs(6));
+    .with_context("test")
+    .with_cid_name("  Front  Desk  ")
+    .with_cid_num("5551234")
+    .with_timeout(Duration::from_secs(6));
     let empty_last = separated(
         park()
-            .context("test")
-            .cid_name("Last Empty")
-            .cid_num(""),
+            .with_context("test")
+            .with_cid_name("Last Empty")
+            .with_cid_num(""),
     );
     assert!(
         empty_last
@@ -234,7 +234,7 @@ async fn originate_positionals(separator: Option<char>) {
         ),
         (
             "absent context forced by a later slot",
-            separated(park().cid_name("Ctx Undef")),
+            separated(park().with_cid_name("Ctx Undef")),
             "park",
             &[
                 (EventHeader::CallerContext, Some("default")),
@@ -246,8 +246,8 @@ async fn originate_positionals(separator: Option<char>) {
             "empty context",
             separated(
                 park()
-                    .context("")
-                    .cid_name("Ctx Empty"),
+                    .with_context("")
+                    .with_cid_name("Ctx Empty"),
             ),
             "park",
             &[(EventHeader::CallerContext, Some("test"))],
@@ -257,8 +257,8 @@ async fn originate_positionals(separator: Option<char>) {
             "spaced context",
             separated(
                 park()
-                    .context("ctx with space")
-                    .cid_name("Ctx Named"),
+                    .with_context("ctx with space")
+                    .with_cid_name("Ctx Named"),
             ),
             "park",
             &[(EventHeader::CallerContext, Some("ctx with space"))],
@@ -278,7 +278,7 @@ async fn originate_positionals(separator: Option<char>) {
             "single quote in an application argument and a caller id",
             separated(
                 Originate::application(test_9199(), Application::new("set", Some("quoted=it's")))
-                    .cid_name("it's"),
+                    .with_cid_name("it's"),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some("quoted=it's"))],
@@ -295,7 +295,7 @@ async fn originate_positionals(separator: Option<char>) {
                     ],
                 )
                 .expect("one quote is deliverable")
-                .cid_num("it's"),
+                .with_cid_num("it's"),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some("quoted=it's,b"))],
@@ -308,8 +308,8 @@ async fn originate_positionals(separator: Option<char>) {
                     unexpanded_9199(),
                     Application::new("set", Some(r"lit=a\nb\\c\sd")),
                 )
-                .cid_name(r"x\ny")
-                .cid_num(r"\t"),
+                .with_cid_name(r"x\ny")
+                .with_cid_num(r"\t"),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some(r"lit=a\nb\\c\sd"))],
@@ -377,7 +377,7 @@ async fn unanswered_originate_elapsed(
         ),
         Application::simple("park"),
     )
-    .timeout(Duration::from_secs(seconds))
+    .with_timeout(Duration::from_secs(seconds))
     .with_argv_separator('~')
     .expect("'~' separates originate's arguments");
     let line = cmd.render(block_parse_under_test());

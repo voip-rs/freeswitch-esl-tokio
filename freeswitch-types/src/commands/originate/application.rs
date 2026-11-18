@@ -2,8 +2,8 @@
 //! dialplan module a transfer names.
 //!
 //! [`DialplanType`] keeps its representation private so a known name always resolves to its
-//! typed value: `check_dialplan_fits` and equality compare the typed `inline`, and a public
-//! variant holding a name would let `"inline"` or `"XML"` past both.
+//! typed value: `Originate`'s dialplan check and equality compare the typed `inline`, and a
+//! public variant holding a name would let `"inline"` or `"XML"` past both.
 
 use std::fmt;
 use std::str::FromStr;
@@ -182,16 +182,6 @@ impl Application {
     pub fn args(&self) -> Option<&str> {
         self.args
             .as_deref()
-    }
-
-    /// Mutable reference to the application name.
-    pub fn name_mut(&mut self) -> &mut String {
-        &mut self.name
-    }
-
-    /// Mutable reference to the application arguments.
-    pub fn args_mut(&mut self) -> &mut Option<String> {
-        &mut self.args
     }
 
     /// Format as inline (`name:args`) syntax under the inline dialplan, else as an application

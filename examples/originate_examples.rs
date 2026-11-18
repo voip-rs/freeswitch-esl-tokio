@@ -47,9 +47,9 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@10.0.0.1")?),
         "1000",
     )
-    .cid_name("Alice")
-    .cid_num("5551234")
-    .timeout(Duration::from_secs(30));
+    .with_cid_name("Alice")
+    .with_cid_num("5551234")
+    .with_timeout(Duration::from_secs(30));
     // originate sofia/internal/1000@10.0.0.1 1000 undef undef Alice 5551234 30
     println!("{}", cmd.render(block_parse));
 
@@ -64,7 +64,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")?),
         Application::simple("park"),
     )
-    .timeout(Duration::from_secs(60));
+    .with_timeout(Duration::from_secs(60));
     // originate sofia/gateway/my_provider/18005551234 &park() undef undef undef undef 60
     println!("{}", cmd.render(block_parse));
 
@@ -222,9 +222,9 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         "1000",
     )
     // Safe unwrap: DialplanType::XML is a valid dialplan for extensions
-    .dialplan(DialplanType::XML)
+    .with_dialplan(DialplanType::XML)
     .unwrap()
-    .context("default");
+    .with_context("default");
     // originate sofia/gateway/gw1/18005551234 1000 XML default
     println!("{}", cmd.render(block_parse));
 
@@ -235,7 +235,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         "1000",
     )
     // Safe unwraps: only "undef" is refused as a name, and a named dialplan fits an extension
-    .dialplan(DialplanType::named("enum").unwrap())
+    .with_dialplan(DialplanType::named("enum").unwrap())
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 1000 enum
     println!("{}", cmd.render(block_parse));
@@ -267,7 +267,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     .unwrap()
     // DialplanType::INLINE is emitted as "inline" on the wire
     // Safe unwrap: DialplanType::INLINE is valid for inline applications
-    .dialplan(DialplanType::INLINE)
+    .with_dialplan(DialplanType::INLINE)
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 conference:test_room,hangup inline
     println!("{}", cmd.render(block_parse));
@@ -349,9 +349,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Endpoint::Loopback(LoopbackEndpoint::new("9196")?.with_context("default")?),
         Application::simple("park"),
     )
-    .cid_name("ESL Test")
-    .cid_num("0000000000")
-    .timeout(Duration::from_secs(10));
+    .with_cid_name("ESL Test")
+    .with_cid_num("0000000000")
+    .with_timeout(Duration::from_secs(10));
 
     println!("\n=== Live call via bgapi ===");
     // The wire form has to match the revision the switch runs.

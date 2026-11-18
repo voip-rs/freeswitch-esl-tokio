@@ -85,17 +85,6 @@ The value goes on the wire in `event <format> ...`, so under the FromStr casing
 rule it should be strict canonical like every other `wire_enum!`. Tightening
 rejects input it accepts today.
 
-### `Originate` uses three mutation vocabularies
-
-`name_mut`/`args_mut`, five `set_*` for `Option` fields, and
-`endpoint_mut`/`target_mut` on one builder; readers `dialplan_type`,
-`context_str`, `caller_id_name` do not match builders `dialplan`, `context`,
-`cid_name`. Pick one field vocabulary; `Variables` has no `get_mut`, since a
-value changes only through `insert`. The `set_*` methods take
-`Option<impl Into<String>>`, so clearing a field needs a turbofish
-(`set_context(None::<String>)`); the replacement takes a concrete `Option`
-or offers `clear_*`.
-
 ### `EventSubscription::custom_subclass_list` should be `custom_subclasses`
 
 Every other pair on the type is `x()`/`x_mut()`; this reader is the odd one.

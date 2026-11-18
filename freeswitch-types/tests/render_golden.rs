@@ -433,52 +433,45 @@ fn o_inline_with_delim() -> Result<Originate, OriginateError> {
 }
 fn o_inline_xml_conflict() -> Result<Originate, OriginateError> {
     Originate::inline(base_endpoint(), vec![Application::simple("park")])?
-        .dialplan(DialplanType::XML)
+        .with_dialplan(DialplanType::XML)
 }
 fn o_dialplan_xml() -> Result<Originate, OriginateError> {
-    Originate::extension(base_endpoint(), "1000").dialplan(DialplanType::XML)
+    Originate::extension(base_endpoint(), "1000").with_dialplan(DialplanType::XML)
 }
 fn o_dialplan_named() -> Result<Originate, OriginateError> {
     Originate::extension(base_endpoint(), "1000")
-        .dialplan(DialplanType::named("custom_dialplan").expect("not undef"))
+        .with_dialplan(DialplanType::named("custom_dialplan").expect("not undef"))
 }
 fn o_positionals_none() -> Result<Originate, OriginateError> {
     Ok(Originate::extension(base_endpoint(), "1000"))
 }
 fn o_positionals_empty_context() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_context(Some(""));
+    let o = Originate::extension(base_endpoint(), "1000").with_context("");
     Ok(o)
 }
 fn o_positionals_spaced() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_cid_name(Some("Jane Doe"));
-    o.set_cid_num(Some("5551234567"));
+    let o = Originate::extension(base_endpoint(), "1000").with_cid_name("Jane Doe");
+    let o = o.with_cid_num("5551234567");
     Ok(o)
 }
 fn o_positionals_quoted() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_cid_name(Some("it's \"quoted\""));
+    let o = Originate::extension(base_endpoint(), "1000").with_cid_name("it's \"quoted\"");
     Ok(o)
 }
 fn o_positionals_backslash() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_cid_name(Some("a\\b"));
+    let o = Originate::extension(base_endpoint(), "1000").with_cid_name("a\\b");
     Ok(o)
 }
 fn o_positionals_literal_undef() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_context(Some("undef"));
+    let o = Originate::extension(base_endpoint(), "1000").with_context("undef");
     Ok(o)
 }
 fn o_positionals_gap_undef() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_cid_num(Some("5551234567"));
+    let o = Originate::extension(base_endpoint(), "1000").with_cid_num("5551234567");
     Ok(o)
 }
 fn o_timeout() -> Result<Originate, OriginateError> {
-    let mut o = Originate::extension(base_endpoint(), "1000");
-    o.set_timeout(Some(Duration::from_secs(45)));
+    let o = Originate::extension(base_endpoint(), "1000").with_timeout(Duration::from_secs(45));
     Ok(o)
 }
 

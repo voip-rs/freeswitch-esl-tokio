@@ -64,8 +64,8 @@ let cmd = Originate::inline(gw(), vec![
 
 // Extension target with dialplan and context
 let ext_cmd = Originate::extension(gw(), "1000")
-    .dialplan(DialplanType::XML).unwrap()
-    .context("default");
+    .with_dialplan(DialplanType::XML).unwrap()
+    .with_context("default");
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
 let line = cmd.render(block_parse);
 client.bgapi(&line).await?;
@@ -91,7 +91,7 @@ let cmd = Originate::application(
     Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap().with_context("default").unwrap()),
     Application::new("socket", Some("127.0.0.1:8040 async full")),
 )
-.cid_name("Front Desk")
+.with_cid_name("Front Desk")
 .with_argv_separator('~')
 .unwrap(); // '~' is a usable separator
 

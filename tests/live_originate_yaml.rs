@@ -65,11 +65,11 @@ fn yaml_loopback_originate_parses() {
         cmd.target(),
         OriginateTarget::Application(app) if app.name() == "park" && app.args().is_none()
     ));
-    assert_eq!(cmd.dialplan_type(), Some(&DialplanType::XML));
-    assert_eq!(cmd.context_str(), Some("test"));
-    assert_eq!(cmd.caller_id_name(), Some("Fallback CID"));
-    assert_eq!(cmd.caller_id_number(), Some("5550199"));
-    assert_eq!(cmd.timeout_seconds(), Some(30));
+    assert_eq!(cmd.dialplan(), Some(&DialplanType::XML));
+    assert_eq!(cmd.context(), Some("test"));
+    assert_eq!(cmd.cid_name(), Some("Fallback CID"));
+    assert_eq!(cmd.cid_num(), Some("5550199"));
+    assert_eq!(cmd.timeout(), Some(Duration::from_secs(30)));
 
     assert_eq!(
         cmd.render(block_parse_under_test()),

@@ -1,5 +1,4 @@
 use super::*;
-use crate::switch_passes::originate_function::check_target_readable;
 
 /// Intermediate type for serde, mirroring the old public-field layout.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -25,31 +24,10 @@ impl TryFrom<OriginateRaw> for Originate {
     type Error = OriginateError;
 
     fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
-        let dialplan = raw.dialplan;
-        raw.endpoint
-            .check_expanded(DialStringCarrier::EslApi)?;
-        check_dialplan_fits(&raw.target, dialplan.as_ref())?;
-        if let OriginateTarget::InlineApplications(ref apps) = raw.target {
-            if apps.is_empty() {
-                return Err(OriginateError::EmptyInlineApplications);
-            }
-        }
-        for (field, value) in [
-            ("context", &raw.context),
-            ("cid_name", &raw.cid_name),
-            ("cid_num", &raw.cid_num),
-        ] {
-            if value
-                .as_deref()
-                .is_some_and(|v| v.eq_ignore_ascii_case(UNDEF))
-            {
-                return Err(OriginateError::UndefPositional(field));
-            }
-        }
         let originate = Self {
             endpoint: raw.endpoint,
             target: raw.target,
-            dialplan,
+            dialplan: raw.dialplan,
             context: raw.context,
             cid_name: raw.cid_name,
             cid_num: raw.cid_num,
@@ -59,14 +37,8 @@ impl TryFrom<OriginateRaw> for Originate {
             // A config file names applications, not a wire separator.
             inline_delimiter: None,
             argv_separator: None,
-        };
-        if originate
-            .target_text()
-            .eq_ignore_ascii_case(UNDEF)
-        {
-            return Err(OriginateError::UndefPositional("target"));
         }
-        check_target_readable(&originate.target)?;
+        .checked()?;
         match raw.argv_separator {
             Some(sep) => originate.with_argv_separator(sep),
             None => Ok(originate),

@@ -118,28 +118,24 @@ pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
     let mut originate = match &spec.dialplan {
         DialplanSpec::Unset => originate,
         DialplanSpec::Typed(dialplan) => originate
-            .dialplan(dialplan.clone())
+            .with_dialplan(dialplan.clone())
             .ok()?,
         DialplanSpec::Raw(name) => originate
-            .dialplan(DialplanType::named(name.as_str()).ok()?)
+            .with_dialplan(DialplanType::named(name.as_str()).ok()?)
             .ok()?,
     };
-    originate.set_context(
-        spec.context
-            .clone(),
-    );
-    originate.set_cid_name(
-        spec.cid_name
-            .clone(),
-    );
-    originate.set_cid_num(
-        spec.cid_num
-            .clone(),
-    );
-    originate.set_timeout(
-        spec.timeout
-            .map(Duration::from_secs),
-    );
+    if let Some(context) = &spec.context {
+        originate = originate.with_context(context);
+    }
+    if let Some(cid_name) = &spec.cid_name {
+        originate = originate.with_cid_name(cid_name);
+    }
+    if let Some(cid_num) = &spec.cid_num {
+        originate = originate.with_cid_num(cid_num);
+    }
+    if let Some(timeout) = spec.timeout {
+        originate = originate.with_timeout(Duration::from_secs(timeout));
+    }
     match spec.argv_separator {
         Some(sep) => originate
             .with_argv_separator(sep)
@@ -248,7 +244,7 @@ pub(crate) fn intended(
 ) -> (Vec<Option<String>>, SwitchTarget) {
     let inline = matches!(spec.target, TargetSpec::Inline(..));
     let dialplan = originate
-        .dialplan_type()
+        .dialplan()
         .map(DialplanType::to_string)
         .or_else(|| inline.then(|| "inline".to_owned()));
     let mut slots = vec![

@@ -46,8 +46,8 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 |---|---|
 | `commands::parse_originate_target(s, dialplan)` | parse the whole line with `Originate::parse_for(s, block_parse)`, whose target is read the way `originate_function` reads it |
 | `DialplanType::Xml`, `DialplanType::Inline`, matched as enum variants | `DialplanType::XML`, `DialplanType::INLINE`, compared with `==`; the type is no longer `Copy` |
-| `Originate::dialplan_raw(name)` | `.dialplan(DialplanType::named(name)?)`; `inline` and `xml` in any case resolve to the known two |
-| `Originate::dialplan_name()` | `dialplan_type().map(DialplanType::name)`; `dialplan_type()` now returns a named dialplan too, where it returned `None` |
+| `Originate::dialplan_raw(name)` | `.with_dialplan(DialplanType::named(name)?)?`; `inline` and `xml` in any case resolve to the known two |
+| `Originate::dialplan_name()` | `dialplan().map(DialplanType::name)`; `dialplan()` now returns a named dialplan too, where it returned `None` |
 | `"name".parse::<DialplanType>()` refuses any name but `inline` and `xml` | accepts any dialplan name but `undef`, which `ParseDialplanTypeError` now reports alone |
 | `Application::to_string_with_dialplan` | no public replacement; render the `Originate` |
 | `Variables::insert(k, v)` returns `()` | returns `Result<(), OriginateError>`, refusing what parsing a block refuses |
@@ -82,3 +82,8 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `BlockParse::default()`, `BlockParse: Default` | `BlockParse::for_version(&version)` for the release you target, or a named revision such as `BlockParse::PairSplitCleans` |
 | `DialStringTarget::new(carrier)` | `DialStringTarget::new(carrier, block_parse)` |
 | a bare `DialStringCarrier` passed where a `DialStringTarget` is taken (`render`, `parse_for`) | `DialStringTarget::new(carrier, block_parse)`; the `From<DialStringCarrier>` impl that filled in a revision is gone |
+| `Originate` builders `dialplan(dp)`, `context(s)`, `cid_name(s)`, `cid_num(s)`, `timeout(d)` | `with_dialplan(dp)`, `with_context(s)`, `with_cid_name(s)`, `with_cid_num(s)`, `with_timeout(d)` |
+| `Originate` readers `dialplan_type()`, `context_str()`, `caller_id_name()`, `caller_id_number()`, `timeout_duration()` | `dialplan()`, `context()`, `cid_name()`, `cid_num()`, `timeout()` |
+| `Originate::timeout_seconds()` | `timeout().map(\|t\| t.as_secs())` |
+| `Originate::set_dialplan(dp)`, `set_context(v)`, `set_cid_name(v)`, `set_cid_num(v)`, `set_timeout(v)` on a `&mut Originate` | the consuming `with_*` builder to set, `without_dialplan()`, `without_context()`, `without_cid_name()`, `without_cid_num()`, `without_timeout()` to clear; clearing needs no `None::<String>` |
+| `Originate::endpoint_mut()`, `target_mut()`, `Application::name_mut()`, `args_mut()` | removed; build a new `Originate` from the endpoint and target you want, reading the rest off the old one |

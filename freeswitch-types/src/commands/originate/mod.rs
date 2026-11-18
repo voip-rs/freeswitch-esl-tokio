@@ -11,7 +11,9 @@ use crate::switch_passes::api_argument::{
 use crate::switch_passes::inline_hunt::{
     check_inline_delimiter, render_inline, split_inline_prefix, DEFAULT_INLINE_DELIMITER,
 };
-use crate::switch_passes::originate_function::{parse_originate_target, Slots, UNDEF};
+use crate::switch_passes::originate_function::{
+    check_target_readable, parse_originate_target, Slots, UNDEF,
+};
 
 mod application;
 mod error;
@@ -27,43 +29,25 @@ pub use super::variables::{Variables, VariablesType};
 /// positional argument forces the slot to be present.
 pub(super) const DEFAULT_CONTEXT: &str = "default";
 
-/// Reject a dialplan `target` cannot run under: `originate_function` hands the target to the
-/// inline hunt only under `inline`, so an extension there and an action list elsewhere misfire.
-fn check_dialplan_fits(
-    target: &OriginateTarget,
-    dialplan: Option<&DialplanType>,
-) -> Result<(), OriginateError> {
-    let inline = dialplan.is_some_and(DialplanType::is_inline);
-    match target {
-        OriginateTarget::Extension(_) if inline => Err(OriginateError::ExtensionWithInlineDialplan),
-        OriginateTarget::InlineApplications(_) if dialplan.is_some() && !inline => {
-            Err(OriginateError::InlineApplicationsWithDialplan)
-        }
-        _ => Ok(()),
-    }
-}
-
 pub use super::endpoint::Endpoint;
 
 /// Originate command builder: `originate <endpoint> <target> [dialplan] [context] [cid_name] [cid_num] [timeout]`.
 ///
 /// Constructed via [`Originate::extension`], [`Originate::application`], or
-/// [`Originate::inline`]. Invalid states (Extension + Inline dialplan, inline
-/// apps under another dialplan, empty inline apps) are rejected at construction
-/// time rather than at render.
-///
-/// Optional fields are set via consuming-self chaining methods:
+/// [`Originate::inline`]; each field is read by its own name and changed only through its
+/// `with_*` or `without_*` builder.
 ///
 /// ```
 /// # use std::time::Duration;
 /// # use freeswitch_types::commands::*;
 /// let cmd = Originate::application(
-///     Endpoint::Loopback(LoopbackEndpoint::new("9196").unwrap().with_context("default").unwrap()),
+///     Endpoint::Loopback(LoopbackEndpoint::new("9196")?.with_context("default")?),
 ///     Application::simple("park"),
 /// )
-/// .cid_name("Alice")
-/// .cid_num("5551234")
-/// .timeout(Duration::from_secs(30));
+/// .with_cid_name("Alice")
+/// .with_cid_num("5551234")
+/// .with_timeout(Duration::from_secs(30));
+/// # Ok::<(), OriginateError>(())
 /// ```
 ///
 /// [`with_argv_separator`](Self::with_argv_separator) splits the arguments on a separator
@@ -87,14 +71,11 @@ pub struct Originate {
 }
 
 impl Originate {
-    /// Route through the dialplan engine to an extension.
-    ///
-    /// `undef` in any case aborts the switch, which asserts the target it reads as absent is
-    /// set; parse and config load refuse it, this does not.
-    pub fn extension(endpoint: Endpoint, extension: impl Into<String>) -> Self {
+    /// `endpoint` dialled into `target`, every optional slot unset, before any check.
+    fn unchecked(endpoint: Endpoint, target: OriginateTarget) -> Self {
         Self {
             endpoint,
-            target: OriginateTarget::Extension(extension.into()),
+            target,
             dialplan: None,
             context: None,
             cid_name: None,
@@ -105,22 +86,20 @@ impl Originate {
         }
     }
 
+    /// Route through the dialplan engine to an extension.
+    ///
+    /// `undef` in any case aborts the switch, which asserts the target it reads as absent is
+    /// set; parse and config load refuse it, this does not.
+    pub fn extension(endpoint: Endpoint, extension: impl Into<String>) -> Self {
+        Self::unchecked(endpoint, OriginateTarget::Extension(extension.into()))
+    }
+
     /// Execute a single XML-format application on the answered channel.
     ///
     /// `originate` ends the arguments at the first `)`, so an argument carrying one, such as a
     /// `tone_stream://%(500,0,800)` spec, goes through [`inline`](Self::inline).
     pub fn application(endpoint: Endpoint, app: Application) -> Self {
-        Self {
-            endpoint,
-            target: OriginateTarget::Application(app),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-            inline_delimiter: None,
-            argv_separator: None,
-        }
+        Self::unchecked(endpoint, OriginateTarget::Application(app))
     }
 
     /// Execute inline applications on the answered channel.
@@ -130,12 +109,6 @@ impl Originate {
     /// `{a=1,b=2}` block on a bridge target — would be read as an action
     /// boundary and silently become applications nobody wrote. Rendering
     /// escapes every occurrence, which the switch undoes when it splits.
-    ///
-    /// Escaping happens at render time, over the arguments as they stand then,
-    /// so rewriting one afterwards — through
-    /// [`args_mut`](Application::args_mut), through
-    /// [`target_mut`](Self::target_mut), or by substituting into a template —
-    /// cannot leave the command inconsistent.
     ///
     /// Each action is escaped for the hunt's split and again for the line's, so quotes,
     /// backslashes and edge spaces in an argument arrive as written.
@@ -151,17 +124,10 @@ impl Originate {
         if apps.is_empty() {
             return Err(OriginateError::EmptyInlineApplications);
         }
-        Ok(Self {
+        Ok(Self::unchecked(
             endpoint,
-            target: OriginateTarget::InlineApplications(apps),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-            inline_delimiter: None,
-            argv_separator: None,
-        })
+            OriginateTarget::InlineApplications(apps),
+        ))
     }
 
     /// Execute inline applications, naming the separator yourself.
@@ -190,16 +156,9 @@ impl Originate {
         }
         check_inline_delimiter(delimiter)?;
         Ok(Self {
-            endpoint,
-            target: OriginateTarget::InlineApplications(apps),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
             // The comma needs no prefix, so asking for it is asking for the default.
             inline_delimiter: (delimiter != ',').then_some(delimiter),
-            argv_separator: None,
+            ..Self::unchecked(endpoint, OriginateTarget::InlineApplications(apps))
         })
     }
 
@@ -227,7 +186,7 @@ impl Originate {
     ///     Endpoint::Loopback(LoopbackEndpoint::new("9199")?.with_context("default")?),
     ///     Application::new("socket", Some("127.0.0.1:8040 async full")),
     /// )
-    /// .cid_name("Front Desk")
+    /// .with_cid_name("Front Desk")
     /// .with_argv_separator('~')?;
     ///
     /// assert_eq!(
@@ -248,38 +207,65 @@ impl Originate {
         self.argv_separator
     }
 
-    /// Set the dialplan.
-    ///
-    /// Returns `Err` if setting `inline` on an `Extension` target, or anything but `inline` on
-    /// inline applications, which `originate` would transfer as an extension.
-    pub fn dialplan(mut self, dp: DialplanType) -> Result<Self, OriginateError> {
-        check_dialplan_fits(&self.target, Some(&dp))?;
-        self.dialplan = Some(dp);
-        Ok(self)
+    /// Set the dialplan, refusing `inline` on an extension and anything but `inline` on inline
+    /// applications, which `originate` would transfer as an extension.
+    pub fn with_dialplan(mut self, dialplan: DialplanType) -> Result<Self, OriginateError> {
+        self.dialplan = Some(dialplan);
+        self.checked()
+    }
+
+    /// Leave the dialplan to the switch: `inline` for inline applications, else its default.
+    pub fn without_dialplan(mut self) -> Self {
+        self.dialplan = None;
+        self
     }
 
     /// Set the dialplan context. `undef` in any case reads as absent on the switch.
-    pub fn context(mut self, ctx: impl Into<String>) -> Self {
-        self.context = Some(ctx.into());
+    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+        self.context = Some(context.into());
+        self
+    }
+
+    /// Leave the context to the switch.
+    pub fn without_context(mut self) -> Self {
+        self.context = None;
         self
     }
 
     /// Set the caller ID name. `undef` in any case reads as absent on the switch.
-    pub fn cid_name(mut self, name: impl Into<String>) -> Self {
-        self.cid_name = Some(name.into());
+    pub fn with_cid_name(mut self, cid_name: impl Into<String>) -> Self {
+        self.cid_name = Some(cid_name.into());
+        self
+    }
+
+    /// Leave the caller ID name to the switch.
+    pub fn without_cid_name(mut self) -> Self {
+        self.cid_name = None;
         self
     }
 
     /// Set the caller ID number. `undef` in any case reads as absent on the switch.
-    pub fn cid_num(mut self, num: impl Into<String>) -> Self {
-        self.cid_num = Some(num.into());
+    pub fn with_cid_num(mut self, cid_num: impl Into<String>) -> Self {
+        self.cid_num = Some(cid_num.into());
+        self
+    }
+
+    /// Leave the caller ID number to the switch.
+    pub fn without_cid_num(mut self) -> Self {
+        self.cid_num = None;
         self
     }
 
     /// Set the originate timeout. Sub-second precision is truncated to whole
     /// seconds on the wire and in serde round-trips.
-    pub fn timeout(mut self, duration: Duration) -> Self {
-        self.timeout = Some(duration);
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Leave the timeout to the switch.
+    pub fn without_timeout(mut self) -> Self {
+        self.timeout = None;
         self
     }
 
@@ -288,82 +274,91 @@ impl Originate {
         &self.endpoint
     }
 
-    /// Mutable reference to the dial endpoint.
-    pub fn endpoint_mut(&mut self) -> &mut Endpoint {
-        &mut self.endpoint
-    }
-
     /// The originate target (extension, application, or inline apps).
     pub fn target(&self) -> &OriginateTarget {
         &self.target
     }
 
-    /// Mutable reference to the originate target.
-    pub fn target_mut(&mut self) -> &mut OriginateTarget {
-        &mut self.target
-    }
-
     /// The dialplan, if explicitly set.
-    pub fn dialplan_type(&self) -> Option<&DialplanType> {
+    pub fn dialplan(&self) -> Option<&DialplanType> {
         self.dialplan
             .as_ref()
     }
 
     /// The dialplan context, if set.
-    pub fn context_str(&self) -> Option<&str> {
+    pub fn context(&self) -> Option<&str> {
         self.context
             .as_deref()
     }
 
     /// The caller ID name, if set.
-    pub fn caller_id_name(&self) -> Option<&str> {
+    pub fn cid_name(&self) -> Option<&str> {
         self.cid_name
             .as_deref()
     }
 
     /// The caller ID number, if set.
-    pub fn caller_id_number(&self) -> Option<&str> {
+    pub fn cid_num(&self) -> Option<&str> {
         self.cid_num
             .as_deref()
     }
 
-    /// The timeout as a `Duration`, if set.
-    pub fn timeout_duration(&self) -> Option<Duration> {
+    /// The timeout, if set.
+    pub fn timeout(&self) -> Option<Duration> {
         self.timeout
     }
 
-    /// The timeout in whole seconds, if set.
-    pub fn timeout_seconds(&self) -> Option<u64> {
-        self.timeout
-            .map(|d| d.as_secs())
+    /// Refuse what `originate_function` reads as another command than this one. Parse,
+    /// config load and the builders run it over the whole value.
+    fn check_deliverable(&self) -> Result<(), OriginateError> {
+        self.endpoint
+            .check_expanded(DialStringCarrier::EslApi)?;
+        let inline = self
+            .dialplan
+            .as_ref()
+            .is_some_and(DialplanType::is_inline);
+        match &self.target {
+            OriginateTarget::Extension(_) if inline => {
+                return Err(OriginateError::ExtensionWithInlineDialplan)
+            }
+            OriginateTarget::InlineApplications(_)
+                if self
+                    .dialplan
+                    .is_some()
+                    && !inline =>
+            {
+                return Err(OriginateError::InlineApplicationsWithDialplan)
+            }
+            OriginateTarget::InlineApplications(apps) if apps.is_empty() => {
+                return Err(OriginateError::EmptyInlineApplications)
+            }
+            _ => {}
+        }
+        for (field, value) in [
+            ("context", &self.context),
+            ("cid_name", &self.cid_name),
+            ("cid_num", &self.cid_num),
+        ] {
+            if value
+                .as_deref()
+                .is_some_and(|v| v.eq_ignore_ascii_case(UNDEF))
+            {
+                return Err(OriginateError::UndefPositional(field));
+            }
+        }
+        if self
+            .target_text()
+            .eq_ignore_ascii_case(UNDEF)
+        {
+            return Err(OriginateError::UndefPositional("target"));
+        }
+        check_target_readable(&self.target)
     }
 
-    /// Override the dialplan type after construction.
-    pub fn set_dialplan(&mut self, dp: Option<DialplanType>) {
-        self.dialplan = dp;
-    }
-
-    /// Override the dialplan context after construction. `undef` in any case reads as absent
-    /// on the switch.
-    pub fn set_context(&mut self, ctx: Option<impl Into<String>>) {
-        self.context = ctx.map(|c| c.into());
-    }
-
-    /// Override the caller ID name after construction. `undef` in any case reads as absent
-    /// on the switch.
-    pub fn set_cid_name(&mut self, name: Option<impl Into<String>>) {
-        self.cid_name = name.map(|n| n.into());
-    }
-
-    /// Override the caller ID number after construction. `undef` in any case reads as absent
-    /// on the switch.
-    pub fn set_cid_num(&mut self, num: Option<impl Into<String>>) {
-        self.cid_num = num.map(|n| n.into());
-    }
-
-    /// Override the timeout after construction.
-    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
-        self.timeout = timeout;
+    /// This value, or what [`check_deliverable`](Self::check_deliverable) refuses in it.
+    fn checked(self) -> Result<Self, OriginateError> {
+        self.check_deliverable()?;
+        Ok(self)
     }
 
     /// Dialplan, context, cid_name, cid_num and timeout through the last one set. FreeSWITCH
@@ -534,24 +529,23 @@ impl Originate {
             },
         };
 
-        // Validate via constructors then set parsed fields directly (same module)
-        let mut orig = match target {
-            OriginateTarget::Extension(ref ext) => Self::extension(endpoint, ext.clone()),
-            OriginateTarget::Application(ref app) => Self::application(endpoint, app.clone()),
-            OriginateTarget::InlineApplications(ref apps) => Self::inline(endpoint, apps.clone())?,
+        // Keep the delimiter that was on the wire, so a parsed command renders back byte for byte.
+        let inline_delimiter = match target {
+            OriginateTarget::InlineApplications(_) => split_inline_prefix(&target_str).0,
+            _ => None,
         };
-        // Keep what was on the wire rather than what the constructor would have
-        // chosen, so a parsed command renders back byte for byte.
-        if matches!(orig.target, OriginateTarget::InlineApplications(_)) {
-            orig.inline_delimiter = split_inline_prefix(&target_str).0;
+        Self {
+            endpoint,
+            target,
+            dialplan,
+            context,
+            cid_name,
+            cid_num,
+            timeout,
+            inline_delimiter,
+            argv_separator: sep,
         }
-        orig.dialplan = dialplan;
-        orig.context = context;
-        orig.cid_name = cid_name;
-        orig.cid_num = cid_num;
-        orig.timeout = timeout;
-        orig.argv_separator = sep;
-        Ok(orig)
+        .checked()
     }
 }
 
