@@ -29,7 +29,7 @@ pub use codec::{
     NonCodecKind, NonCodecPayload, ParseSdpDirectionError, SdpCodec, SdpDirection, SdpMediaType,
 };
 pub use codec_string::{CodecString, CodecStringEntry};
-pub use codecs::{SdpCodecEntry, SdpCodecs, SdpMediaSection};
+pub use codecs::{SdpCodecEntry, SdpCodecs, SdpMediaSection, SdpParseOptions};
 pub use error::{CodecStringError, SdpCodecError, SdpWarning, SwitchRejection, UnmappedPayload};
 pub use options::CodecStringOptions;
 pub use static_payload::{default_ptime, default_rate};

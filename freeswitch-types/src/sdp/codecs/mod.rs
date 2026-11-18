@@ -8,6 +8,14 @@
 //! offset into the input. The switch read exactly the input before a stop, so parsing that prefix
 //! gives the switch's view of the offer.
 //!
+//! Every `m=` line yields a section, whatever its port or media type, and a section carries what
+//! the switch read there. The switch reads none of a port-0 section's `a=` lines, so by default
+//! such a section names only the static payload types of its format list and is inactive.
+//! [`SdpParseOptions::with_port_zero_attributes`] reads those lines as a live section's are, for
+//! a reader of SDP captured outside the switch who wants what the peer wrote; it reaches only
+//! sections no codec string or format-parameter lookup can see, so it cannot widen what the
+//! switch negotiates.
+//!
 //! Only the lines extraction reads (`m=`, `a=`) are interpreted. The values of the others (`o=`,
 //! `c=`, `b=`, `t=`, `r=`, `z=`, `k=`) are not validated, so an offer the switch refuses for a
 //! malformed value on one of them alone carries no warning. Sections the codec string excludes
@@ -93,10 +101,10 @@ impl SdpMediaSection {
         &self.formats
     }
 
-    /// The direction the peer wrote, defaulting to the session's.
+    /// The direction the section's last direction attribute sets, defaulting to the session's.
     ///
-    /// Sofia forces a port-0 section to inactive regardless, so on a held section
-    /// this is what was offered, not what the switch acted on.
+    /// A port-0 section is inactive, as the switch reads it, unless
+    /// [`SdpParseOptions::with_port_zero_attributes`] asked for what the peer wrote.
     pub fn direction(&self) -> SdpDirection {
         self.direction
     }
@@ -126,6 +134,33 @@ impl SdpMediaSection {
     }
 }
 
+/// What [`SdpCodecs::parse_with_options`] reads beyond what the switch reads.
+///
+/// The default is the switch's view.
+#[derive(Debug, Clone, Default)]
+pub struct SdpParseOptions {
+    port_zero_attributes: bool,
+}
+
+impl SdpParseOptions {
+    /// Read the `a=` lines of a port-0 section as a live section's are read.
+    ///
+    /// The switch reads none of them, so by default a held or declined section names only its
+    /// static payload types and is inactive. With this set it carries what the peer wrote
+    /// there: dynamic names, fmtp, non-codec payloads, its own direction, and their warnings.
+    /// A port-0 section never reaches a codec string, [`SdpCodecs::entries`] or
+    /// [`SdpCodecs::fmtp_for`], so this cannot widen what the switch negotiates.
+    pub fn with_port_zero_attributes(mut self, read: bool) -> Self {
+        self.port_zero_attributes = read;
+        self
+    }
+
+    /// Whether port-0 sections read their `a=` lines.
+    pub fn port_zero_attributes(&self) -> bool {
+        self.port_zero_attributes
+    }
+}
+
 /// Codecs and ancillary data extracted from an SDP session description.
 ///
 /// Produced by [`SdpCodecs::parse`]. The accessors that feed a codec string reflect
@@ -140,7 +175,7 @@ pub struct SdpCodecs {
 }
 
 impl SdpCodecs {
-    /// Parse an SDP session description from a UTF-8 string.
+    /// Parse an SDP session description from a UTF-8 string, as the switch reads it.
     ///
     /// Fails only where extraction cannot proceed: the first line is not exactly `v=0`, an `m=`
     /// port is above 65535, or (from [`parse_bytes`](Self::parse_bytes)) an `m=` or `a=` line is
@@ -151,12 +186,26 @@ impl SdpCodecs {
 
     /// Parse an SDP session description from bytes; see [`parse`](Self::parse).
     pub fn parse_bytes(bytes: &[u8]) -> Result<Self, SdpCodecError> {
-        let session = session::parse(bytes)
-            .map_err(|e| SdpCodecError::parse_failure("failed to parse SDP", e))?;
-        Ok(Self::from_session(session))
+        Self::parse_bytes_with_options(bytes, &SdpParseOptions::default())
     }
 
-    fn from_session(session: session::Session) -> Self {
+    /// [`parse`](Self::parse), reading what the options name beyond what the switch reads.
+    pub fn parse_with_options(sdp: &str, options: &SdpParseOptions) -> Result<Self, SdpCodecError> {
+        Self::parse_bytes_with_options(sdp.as_bytes(), options)
+    }
+
+    /// [`parse_bytes`](Self::parse_bytes), reading what the options name beyond what the switch
+    /// reads.
+    pub fn parse_bytes_with_options(
+        bytes: &[u8],
+        options: &SdpParseOptions,
+    ) -> Result<Self, SdpCodecError> {
+        let session = session::parse(bytes)
+            .map_err(|e| SdpCodecError::parse_failure("failed to parse SDP", e))?;
+        Ok(Self::from_session(session, options))
+    }
+
+    fn from_session(session: session::Session, options: &SdpParseOptions) -> Self {
         let session::Session {
             attributes,
             medias,
@@ -182,6 +231,17 @@ impl SdpCodecs {
                 Err(e) => match e {},
             };
 
+            // parse_media_attr reads no attribute of a port-0 section, and post_session
+            // forces it inactive.
+            let switch_skips = media.port == 0 && !options.port_zero_attributes;
+            let attributes: &[session::Attribute] =
+                if switch_skips { &[] } else { &media.attributes };
+            let direction = if switch_skips {
+                SdpDirection::Inactive
+            } else {
+                direction_from_attrs(attributes).unwrap_or(session_direction)
+            };
+
             let mut section = SdpMediaSection {
                 media_type: media_type.clone(),
                 port: media.port,
@@ -191,7 +251,7 @@ impl SdpCodecs {
                 formats: media
                     .fmt
                     .clone(),
-                direction: direction_from_attrs(&media.attributes).unwrap_or(session_direction),
+                direction,
                 entries: Vec::new(),
                 unmapped: Vec::new(),
                 non_codec: Vec::new(),
@@ -208,7 +268,7 @@ impl SdpCodecs {
                     maxptime: session_maxptime,
                     direction: section.direction,
                 };
-                let parsed = parse_media_section(media, media_type.clone(), &defaults);
+                let parsed = parse_media_section(media, attributes, media_type.clone(), &defaults);
                 section.entries = parsed.entries;
                 section.unmapped = parsed.unmapped;
                 section.non_codec = parsed.non_codec;

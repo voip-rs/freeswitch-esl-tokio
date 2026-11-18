@@ -564,3 +564,31 @@ fn a_port_zero_section_carries_only_what_the_switch_reads_there() {
         codecs.warnings()
     );
 }
+
+// Opted into, a port-0 section's a= lines are read as a live section's are.
+#[test]
+fn a_port_zero_section_read_as_written_carries_what_the_peer_wrote() {
+    let sdp = format!(
+        "{HEADER}m=audio 0 RTP/AVP 0 96 101\r\na=rtpmap:96 opus/48000/2\r\na=fmtp:96 useinbandfec=1\r\na=rtpmap:101 telephone-event/8000\r\na=sendonly\r\n"
+    );
+    let options = crate::sdp::SdpParseOptions::default().with_port_zero_attributes(true);
+    let codecs = SdpCodecs::parse_with_options(&sdp, &options).unwrap();
+    let section = &codecs.sections()[0];
+    let rtp = rtp_codec(section.entries());
+    let named: Vec<_> = rtp
+        .iter()
+        .map(|c| (c.name(), c.fmtp()))
+        .collect();
+    assert_eq!(named, [("PCMU", None), ("opus", Some("useinbandfec=1"))]);
+    assert_eq!(
+        section
+            .non_codec_payloads()
+            .len(),
+        1
+    );
+    assert_eq!(section.direction(), SdpDirection::SendOnly);
+    assert!(
+        codecs.is_empty(),
+        "a port-0 section stays out of the switch's views"
+    );
+}

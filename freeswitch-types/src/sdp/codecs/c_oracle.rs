@@ -526,3 +526,39 @@ fn sdp_codecs_read_what_sofia_reads() {
         },
     );
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        source_file: Some(file!()),
+        ..freeswitch_c_oracle::config()
+    })]
+
+    // Reading port-0 attributes reaches only port-0 sections, which nothing the switch
+    // negotiates from can see.
+    #[test]
+    fn reading_port_zero_attributes_cannot_widen_the_switch_view(sdp in offer()) {
+        let as_written = crate::sdp::SdpParseOptions::default().with_port_zero_attributes(true);
+        let (Ok(switch), Ok(written)) =
+            (SdpCodecs::parse(&sdp), SdpCodecs::parse_with_options(&sdp, &as_written))
+        else {
+            return Ok(());
+        };
+        let debug = |c: &SdpCodecs| {
+            let options = crate::sdp::CodecStringOptions::default().with_fmtp(true);
+            format!(
+                "{:?}{:?}{:?}{:?}{:?}",
+                c.entries().collect::<Vec<_>>(),
+                c.unmapped().collect::<Vec<_>>(),
+                c.non_codec_payloads().collect::<Vec<_>>(),
+                c.audio_codec_string(&options, Some(&mut Vec::new())).map(|s| s.to_string()),
+                c.video_codec_string(&options, Some(&mut Vec::new())).map(|s| s.to_string()),
+            )
+        };
+        prop_assert_eq!(debug(&switch), debug(&written));
+        for (a, b) in switch.sections().iter().zip(written.sections()) {
+            if a.port() != 0 {
+                prop_assert_eq!(format!("{a:?}"), format!("{b:?}"));
+            }
+        }
+    }
+}

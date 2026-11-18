@@ -48,7 +48,7 @@ pub(super) struct AttrTables {
 /// `a=rtpmap` the switch keeps no name for is dropped too; where the switch refuses the offer
 /// over it, the session layer reports that.
 pub(super) fn attribute_tables(
-    media: &session::Media,
+    attributes: &[session::Attribute],
     warnings: &mut Vec<SdpWarning>,
 ) -> AttrTables {
     let mut tables = AttrTables {
@@ -56,7 +56,7 @@ pub(super) fn attribute_tables(
         fmtp: HashMap::new(),
     };
 
-    for attr in &media.attributes {
+    for attr in attributes {
         let name = attr
             .attribute
             .as_str();

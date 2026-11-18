@@ -50,9 +50,10 @@ fn non_codec_kind(canonical_name: &str) -> Option<NonCodecKind> {
     }
 }
 
-/// Walk one RTP `m=` section's format list into codec entries.
+/// Walk one RTP `m=` section's format list into codec entries, reading `attributes` as its own.
 pub(super) fn parse_media_section(
     media: &session::Media,
+    attributes: &[session::Attribute],
     media_type: SdpMediaType,
     defaults: &SessionDefaults,
 ) -> MediaSection {
@@ -60,11 +61,11 @@ pub(super) fn parse_media_section(
 
     // Media-level attributes override session-level.
     let media_ptime =
-        ptime_from_attrs(&media.attributes, "ptime", &mut section.warnings).or(defaults.ptime);
-    let media_maxptime = ptime_from_attrs(&media.attributes, "maxptime", &mut section.warnings)
-        .or(defaults.maxptime);
+        ptime_from_attrs(attributes, "ptime", &mut section.warnings).or(defaults.ptime);
+    let media_maxptime =
+        ptime_from_attrs(attributes, "maxptime", &mut section.warnings).or(defaults.maxptime);
 
-    let tables = attribute_tables(media, &mut section.warnings);
+    let tables = attribute_tables(attributes, &mut section.warnings);
 
     for (at, &pt) in media
         .payloads
@@ -263,14 +264,17 @@ fn resolve_ptime_bitrate(
 mod tests {
     use super::super::testutil::{codec_named, rtp_codec, sdp_header};
     use super::*;
-    use crate::sdp::{CodecStringOptions, SdpCodecs, SdpMediaType, SdpWarning};
+    use crate::sdp::{CodecStringOptions, SdpCodecs, SdpMediaType, SdpParseOptions, SdpWarning};
+
+    fn as_written() -> SdpParseOptions {
+        SdpParseOptions::default().with_port_zero_attributes(true)
+    }
 
     // --- retained sections ---
 
     #[test]
-    fn port_zero_section_contributes_nothing_but_is_retained_whole() {
-        // A held or declined stream: the offer still names its codecs, and that is
-        // what an operator reads when the complaint is "no audio".
+    fn port_zero_section_read_as_written_contributes_nothing_but_is_retained_whole() {
+        // Opted into, a held or declined stream carries what the peer wrote there.
         let sdp = format!(
             concat!(
                 "{}",
@@ -282,7 +286,7 @@ mod tests {
             ),
             sdp_header()
         );
-        let codecs = SdpCodecs::parse(&sdp).unwrap();
+        let codecs = SdpCodecs::parse_with_options(&sdp, &as_written()).unwrap();
 
         assert!(codecs.is_empty(), "port 0 contributes no codec entries");
         assert!(codecs
@@ -327,7 +331,7 @@ mod tests {
             ),
             sdp_header()
         );
-        let codecs = SdpCodecs::parse(&sdp).unwrap();
+        let codecs = SdpCodecs::parse_with_options(&sdp, &as_written()).unwrap();
         assert_eq!(
             codecs
                 .non_codec_payloads()
@@ -529,7 +533,7 @@ mod tests {
     fn a_non_negotiable_section_still_reports_its_parse_warnings() {
         // These sections are parsed rather than skipped, so they warn where the
         // switch, which never looks at them, has no occasion to.
-        let sdp = format!("{}m=audio 0 RTP/AVP 0\r\na=ptime:abc\r\n", sdp_header());
+        let sdp = format!("{}m=text 5004 RTP/AVP 0\r\na=ptime:abc\r\n", sdp_header());
         let codecs = SdpCodecs::parse(&sdp).unwrap();
         assert_eq!(
             codecs
