@@ -32,10 +32,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `EventSubscription::custom_subclass_list` should be `custom_subclasses`
-
-Every other pair on the type is `x()`/`x_mut()`; this reader is the odd one.
-
 ### `InvalidHeaderName` should follow the `Parse*Error` / `*Error` naming
 
 Its siblings `ParseSipPassthroughError` and `EslArrayError` set the two

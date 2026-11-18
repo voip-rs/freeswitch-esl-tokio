@@ -423,33 +423,14 @@ impl EventSubscription {
         &self.raw_events
     }
 
-    /// Mutable access to the raw event list.
-    ///
-    /// Direct push to this list bypasses [`event_raw`](Self::event_raw)'s
-    /// validation. Callers are responsible for ensuring entries contain no
-    /// line breaks, NULs, spaces, or empty strings.
-    pub fn event_types_raw_mut(&mut self) -> &mut Vec<String> {
-        &mut self.raw_events
-    }
-
     /// The subscribed custom subclasses.
     pub fn custom_subclass_list(&self) -> &[String] {
         &self.custom_subclasses
     }
 
-    /// Mutable access to the custom subclasses list.
-    pub fn custom_subclasses_mut(&mut self) -> &mut Vec<String> {
-        &mut self.custom_subclasses
-    }
-
     /// The event filters as (header, value) pairs.
     pub fn filters(&self) -> &[(String, String)] {
         &self.filters
-    }
-
-    /// Mutable access to the filters list.
-    pub fn filters_mut(&mut self) -> &mut Vec<(String, String)> {
-        &mut self.filters
     }
 
     /// Whether the subscription includes all events.
@@ -1113,14 +1094,6 @@ mod tests {
         let result =
             EventSubscription::new(EventFormat::Plain).events_raw(["GOOD", "bad event", "OTHER"]);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn event_types_raw_mut_mutable() {
-        let mut sub = EventSubscription::new(EventFormat::Plain);
-        sub.event_types_raw_mut()
-            .push("DIRECT_PUSH".to_string());
-        assert_eq!(sub.event_types_raw(), &["DIRECT_PUSH".to_string()]);
     }
 
     #[test]
