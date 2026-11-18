@@ -277,7 +277,7 @@ async fn test_getvar_command() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(value, "John Doe");
+    assert_eq!(value.as_deref(), Some("John Doe"));
 }
 
 #[tokio::test]

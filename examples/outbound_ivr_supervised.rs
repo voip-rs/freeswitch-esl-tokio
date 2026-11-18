@@ -381,7 +381,7 @@ async fn run_ivr(
     // the reply waited for the application.
     info!("play_and_get_digits returned");
     let choice = client
-        .getvar_opt("ivr_choice")
+        .getvar("ivr_choice")
         .await?;
 
     // The parent may have died while the prompt was playing. The call is still

@@ -716,8 +716,8 @@ impl EslClient {
     /// An unset variable produces an empty reply, which `mod_event_socket` then
     /// overwrites with its `-ERR`-prefixed filler for a reply nothing wrote to.
     /// It reads like a failure and is not one, so
-    /// [`getvar_opt`](Self::getvar_opt) is the accessor to prefer.
-    pub async fn getvar(&self, name: &str) -> EslResult<String> {
+    /// [`getvar`](Self::getvar) is the accessor to prefer.
+    pub async fn getvar_raw(&self, name: &str) -> EslResult<String> {
         let cmd = EslCommand::GetVar {
             name: name.to_string(),
         };
@@ -741,9 +741,9 @@ impl EslClient {
     /// it cannot be told apart from one -- `getvar` is only reachable on a
     /// session, so an inbound connection sending it gets the same answer as an
     /// outbound one reading an unset variable.
-    pub async fn getvar_opt(&self, name: &str) -> EslResult<Option<String>> {
+    pub async fn getvar(&self, name: &str) -> EslResult<Option<String>> {
         let value = self
-            .getvar(name)
+            .getvar_raw(name)
             .await?;
         Ok((!getvar_is_unset(&value)).then_some(value))
     }

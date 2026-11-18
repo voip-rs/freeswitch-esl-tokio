@@ -25,8 +25,8 @@ The line is not "no per-command reply handling", which the crate has never
 managed to hold. A reply whose shape misleads a caller who reads it generically
 is a protocol fact, and this crate is where it is known: `parse_channel_dump`
 reads a `uuid_dump` body as the `CHANNEL_DATA` event it is rather than a second
-line format, and `getvar_opt` collapses the three spellings of an unset variable
-that `getvar` otherwise hands back as values. Both exist because the generic
+line format, and `getvar` collapses the three spellings of an unset variable
+that `getvar_raw` hands back as values. Both exist because the generic
 accessor returns a plausible wrong answer, not because the command deserved a
 typed API.
 
