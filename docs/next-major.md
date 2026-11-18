@@ -11,42 +11,6 @@ revisited when it is finally actionable.
 
 ## freeswitch-types 3.0
 
-### `Originate` builders accept an expression endpoint
-
-`Originate::application`, `extension`, `inline` and `endpoint_mut` accept a
-`SofiaContact` or `GroupCall`, which `originate` over the API never expands;
-parse at the API carrier and `Originate` config load refuse it as
-`OriginateError::UnexpandedExpression`.
-`expand originate …` is an API carrier on which an expression endpoint does
-expand; `DialStringCarrier` does not model it.
-
-### `Originate` setters need to refuse `undef`
-
-`originate_function` reads every argument equal to `undef` as absent, so a
-positional set to it arrives as unset, and a target set to it trips the switch's
-assert on the missing extension. Parse and config load refuse both; `extension`,
-`context`, `cid_name` and `cid_num` cannot until they return `Result`.
-
-### `Originate::extension` and `application` need to refuse what `originate_function` misreads
-
-`originate_function` runs any target opening `&` and more as an application,
-and ends that application's arguments at the first `)`. An extension opening
-`&`, and an application whose name carries a parenthesis or whose arguments
-carry `)`, build and render, then run as something else. Parse and config load
-refuse them; the constructors, `target_mut`, `Application::new` and
-`Application::args_mut` cannot until they return `Result`.
-
-### `Originate::set_dialplan` and `target_mut` need to refuse a mismatched dialplan
-
-`originate_function` hands the target to the inline hunt only under the `inline`
-dialplan, so an extension under `inline` and inline applications under any other
-dialplan misfire: an inline action list set under `XML` is transferred as an
-extension, no application runs, and the originate still answers `+OK` on the
-wire. `dialplan` and config load refuse both;
-`set_dialplan` and a target swapped through `target_mut` cannot until they
-return `Result`.
-
-
 ## freeswitch-esl-tokio 3.0
 
 ### `subscribe_events_raw` and `nixevent_raw` should return what they swallowed

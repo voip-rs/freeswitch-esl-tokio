@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         hook.to_string(),
     )?;
     endpoint.set_variables(Some(vars))?;
-    let originate = Originate::application(endpoint, Application::simple("park"));
+    let originate = Originate::application(endpoint, Application::simple("park"))?;
     let line = originate.render(block_parse);
     println!("{line}");
 

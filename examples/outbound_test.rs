@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "socket",
             Some(format!("127.0.0.1:{outbound_port} async full")),
         ),
-    );
+    )?;
 
     // The loopback answers on its own, so this returns before the socket app on
     // the A leg has reached our listener.

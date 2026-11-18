@@ -46,9 +46,9 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::extension(
         Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@10.0.0.1")?),
         "1000",
-    )
-    .with_cid_name("Alice")
-    .with_cid_num("5551234")
+    )?
+    .with_cid_name("Alice")?
+    .with_cid_num("5551234")?
     .with_timeout(Duration::from_secs(30));
     // originate sofia/internal/1000@10.0.0.1 1000 undef undef Alice 5551234 30
     println!("{}", cmd.render(block_parse));
@@ -63,7 +63,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         // .with_profile("external") qualifies as profile::gateway
         Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")?),
         Application::simple("park"),
-    )
+    )?
     .with_timeout(Duration::from_secs(60));
     // originate sofia/gateway/my_provider/18005551234 &park() undef undef undef undef 60
     println!("{}", cmd.render(block_parse));
@@ -74,7 +74,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
             SofiaGateway::new("my_provider", "18005551234")?.with_profile("external")?,
         ),
         Application::simple("park"),
-    );
+    )?;
     // originate sofia/gateway/external::my_provider/18005551234 &park()
     println!("{}", cmd.render(block_parse));
 
@@ -87,7 +87,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::extension(
         Endpoint::User(UserEndpoint::new("1000")?.with_domain("pbx.example.com")?),
         "5000",
-    );
+    )?;
     // originate user/1000@pbx.example.com 5000
     println!("{}", cmd.render(block_parse));
 
@@ -129,7 +129,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new("9196")?.with_context("default")?),
         Application::simple("park"),
-    );
+    )?;
     // originate loopback/9196/default &park()
     println!("{}", cmd.render(block_parse));
 
@@ -144,7 +144,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
             freeswitch_esl_tokio::HangupCause::UserBusy,
         )),
         Application::simple("park"),
-    );
+    )?;
     // originate error/USER_BUSY &park()
     println!("{}", cmd.render(block_parse));
 
@@ -157,7 +157,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::application(
         Endpoint::PortAudio(AudioEndpoint::new().with_destination("auto_answer")?),
         Application::simple("park"),
-    );
+    )?;
     // originate portaudio/auto_answer &park()
     println!("{}", cmd.render(block_parse));
 
@@ -176,7 +176,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("carrier", "15551234567")?.with_variables(vars)),
         Application::simple("bridge"),
-    );
+    )?;
     // originate {hangup_after_bridge=true,continue_on_fail=true}sofia/gateway/carrier/15551234567 &bridge()
     println!("{}", cmd.render(block_parse));
 
@@ -192,7 +192,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
             SofiaEndpoint::new("external", "sip:alice@carrier.example.com")?.with_variables(vars),
         ),
         Application::simple("park"),
-    );
+    )?;
     // originate [originate_timeout=20,sip_h_X-Tenant=acme]sofia/external/sip:alice@carrier.example.com &park()
     println!("{}", cmd.render(block_parse));
 
@@ -204,7 +204,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "1234")?.with_variables(vars)),
         Application::simple("park"),
-    );
+    )?;
     // originate {absolute_codec_string=PCMU\,PCMA\,G722}sofia/gateway/gw1/1234 &park()
     println!("{}", cmd.render(block_parse));
 
@@ -220,11 +220,11 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::extension(
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")?),
         "1000",
-    )
+    )?
     // Safe unwrap: DialplanType::XML is a valid dialplan for extensions
     .with_dialplan(DialplanType::XML)
     .unwrap()
-    .with_context("default");
+    .with_context("default")?;
     // originate sofia/gateway/gw1/18005551234 1000 XML default
     println!("{}", cmd.render(block_parse));
 
@@ -233,7 +233,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::extension(
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")?),
         "1000",
-    )
+    )?
     // Safe unwraps: only "undef" is refused as a name, and a named dialplan fits an extension
     .with_dialplan(DialplanType::named("enum").unwrap())
     .unwrap();
@@ -248,7 +248,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     let cmd = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")?),
         Application::new("socket", Some("127.0.0.1:8040 async full")),
-    );
+    )?;
     // originate sofia/gateway/gw1/18005551234 '&socket(127.0.0.1:8040 async full)'
     println!("{}", cmd.render(block_parse));
 
@@ -348,9 +348,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new("9196")?.with_context("default")?),
         Application::simple("park"),
-    )
-    .with_cid_name("ESL Test")
-    .with_cid_num("0000000000")
+    )?
+    .with_cid_name("ESL Test")?
+    .with_cid_num("0000000000")?
     .with_timeout(Duration::from_secs(10));
 
     println!("\n=== Live call via bgapi ===");

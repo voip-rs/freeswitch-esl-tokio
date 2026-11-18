@@ -37,19 +37,21 @@ async fn wait_disconnected(client: &EslClient) {
 }
 
 /// `originate` over the API expands nothing, so the expression `GroupCall` renders dials as an
-/// unknown endpoint type, while `eval` expands the same text.
+/// unknown endpoint type, while `eval` expands the same text. `Originate` refuses to build it.
 #[tokio::test]
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_api_originate_leaves_an_expression_unexpanded() {
     let (client, _events, _permit) = connect().await;
     let group = GroupCall::new("nosuchgroup", "example.com").unwrap();
-    let originate = Originate::application(
+    assert!(Originate::application(
         group
             .clone()
             .into(),
         Application::simple("park"),
-    );
-    let line = originate.render(block_parse_under_test());
+    )
+    .is_err());
+    let rendered = group.render(target_under_test(DialStringCarrier::EslApi));
+    let line = format!("originate {rendered} &park()");
     assert_eq!(
         line,
         "originate ${group_call(nosuchgroup@example.com)} &park()"
@@ -67,10 +69,7 @@ async fn live_api_originate_leaves_an_expression_unexpanded() {
         esl_env().port
     );
     let expanded = client
-        .api(&format!(
-            "eval {}",
-            group.render(target_under_test(DialStringCarrier::EslApi))
-        ))
+        .api(&format!("eval {rendered}"))
         .await
         .unwrap();
     assert_eq!(
@@ -356,7 +355,8 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
     let cmd = Originate::application(
         Endpoint::Loopback(endpoint),
         Application::new("socket", Some(format!("127.0.0.1:{} async full", port))),
-    );
+    )
+    .unwrap();
 
     // bgapi returns immediately; the call proceeds asynchronously and
     // FS dials our listener.
@@ -530,7 +530,8 @@ async fn park_and_await(event_type: EslEventType) -> freeswitch_esl_tokio::EslEv
     let originate = Originate::application(
         Endpoint::from(LoopbackEndpoint::new("9199").unwrap()),
         Application::park(),
-    );
+    )
+    .unwrap();
     let uuid = client
         .api(&originate.render(block_parse_under_test()))
         .await

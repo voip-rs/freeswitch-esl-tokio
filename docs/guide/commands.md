@@ -63,9 +63,9 @@ let cmd = Originate::inline(gw(), vec![
 // -> "originate sofia/gateway/my_provider/18005551234 conference:room1 inline"
 
 // Extension target with dialplan and context
-let ext_cmd = Originate::extension(gw(), "1000")
+let ext_cmd = Originate::extension(gw(), "1000").unwrap()
     .with_dialplan(DialplanType::XML).unwrap()
-    .with_context("default");
+    .with_context("default").unwrap();
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
 let line = cmd.render(block_parse);
 client.bgapi(&line).await?;
@@ -90,8 +90,8 @@ let block_parse = BlockParse::for_version(&version).unwrap();
 let cmd = Originate::application(
     Endpoint::Loopback(LoopbackEndpoint::new("9199").unwrap().with_context("default").unwrap()),
     Application::new("socket", Some("127.0.0.1:8040 async full")),
-)
-.with_cid_name("Front Desk")
+).unwrap()
+.with_cid_name("Front Desk").unwrap()
 .with_argv_separator('~')
 .unwrap(); // '~' is a usable separator
 
@@ -145,7 +145,7 @@ use freeswitch_esl_tokio::FreeswitchVersion;
 let cmd = Originate::application(
     Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap()),
     Application::simple("park"),
-);
+).unwrap();
 
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
 let parse = BlockParse::for_version(&version).unwrap();

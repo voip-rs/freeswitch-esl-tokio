@@ -105,15 +105,14 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         .expect_err("an Originate config dials over the API")
         .to_string();
     assert!(refused.contains("group_call"), "{refused}");
-    let built = Originate::application(
-        GroupCall::new("support", "example.com")
-            .unwrap()
-            .into(),
-        Application::simple("park"),
-    );
     assert_eq!(
-        built.render(BlockParse::MEASURED),
-        "originate ${group_call(support@example.com)} &park()"
+        Originate::application(
+            GroupCall::new("support", "example.com")
+                .unwrap()
+                .into(),
+            Application::simple("park"),
+        ),
+        Err(unexpanded("group_call"))
     );
 }
 

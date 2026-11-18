@@ -17,7 +17,7 @@ each naming its target; the rest implement `Display`/`FromStr`.
 
 ```rust
 let block_parse = BlockParse::for_version(&"1.10.12".parse()?)?;
-let cmd = Originate::application(endpoint, app).with_timeout(Duration::from_secs(30));
+let cmd = Originate::application(endpoint, app)?.with_timeout(Duration::from_secs(30));
 let line = cmd.render(block_parse);
 client.bgapi(&line).await?;
 
@@ -172,9 +172,9 @@ the rest strictly by position: the third is the dialplan whatever it says, and
 past seven it answers usage. Both splits parse through one reader with those
 rules, refusing an eighth argument and an `undef` target, which the switch
 asserts is set and aborts on. A target of `&` and more is an application
-whatever the dialplan, its arguments ending at the first `)`: parse and config
-load refuse an application carrying a `)` there, and config load an extension
-opening `&`. Any other dialplan word is kept as `DialplanType::named()`,
+whatever the dialplan, its arguments ending at the first `)`: parse, config
+load and the constructors refuse an application carrying a `)` there, and an
+extension opening `&`. Any other dialplan word is kept as `DialplanType::named()`,
 `inline` and `xml` in any case resolving to the typed two; the transfer looks a
 dialplan module up by it, and a name no module registers hangs the channel up
 with `NO_ROUTE_DESTINATION` (measured). A positional left `None` but forced
@@ -315,8 +315,8 @@ Key design choices:
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.
 - **`Originate`** — manual `Serialize`/`Deserialize` via `OriginateRaw` intermediate
-  type. Validates invariants (no Extension+Inline, no InlineApplications under
-  another dialplan, no empty InlineApplications) on deserialize. `BridgeDialString` uses straightforward derives.
+  type, running on deserialize the one check parse, the constructors and the
+  builders run. `BridgeDialString` uses straightforward derives.
 
 ## Dependencies
 

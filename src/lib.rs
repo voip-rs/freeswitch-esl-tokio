@@ -84,9 +84,9 @@
 //! let cmd = Originate::application(
 //!     Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap()),
 //!     Application::simple("park"),
-//! )
-//! .with_cid_name("Outbound Call")
-//! .with_cid_num("5551234")
+//! ).unwrap()
+//! .with_cid_name("Outbound Call").unwrap()
+//! .with_cid_num("5551234").unwrap()
 //! .with_timeout(Duration::from_secs(30));
 //!
 //! // Escaping depends on the switch's parser revision, which the crate never

@@ -106,9 +106,9 @@ pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
             .collect::<Vec<_>>()
     };
     let originate = match &spec.target {
-        TargetSpec::Extension(extension) => Originate::extension(endpoint, extension),
+        TargetSpec::Extension(extension) => Originate::extension(endpoint, extension).ok()?,
         TargetSpec::Application(name, args) => {
-            Originate::application(endpoint, Application::new(*name, args.clone()))
+            Originate::application(endpoint, Application::new(*name, args.clone())).ok()?
         }
         TargetSpec::Inline(list, None) => Originate::inline(endpoint, apps(list)).ok()?,
         TargetSpec::Inline(list, Some(delimiter)) => {
@@ -125,13 +125,19 @@ pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
             .ok()?,
     };
     if let Some(context) = &spec.context {
-        originate = originate.with_context(context);
+        originate = originate
+            .with_context(context)
+            .ok()?;
     }
     if let Some(cid_name) = &spec.cid_name {
-        originate = originate.with_cid_name(cid_name);
+        originate = originate
+            .with_cid_name(cid_name)
+            .ok()?;
     }
     if let Some(cid_num) = &spec.cid_num {
-        originate = originate.with_cid_num(cid_num);
+        originate = originate
+            .with_cid_num(cid_num)
+            .ok()?;
     }
     if let Some(timeout) = spec.timeout {
         originate = originate.with_timeout(Duration::from_secs(timeout));

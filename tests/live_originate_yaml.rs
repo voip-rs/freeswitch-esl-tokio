@@ -538,7 +538,8 @@ async fn live_originate_loopback_bowout_on_execute() {
                 .with_variables(vars),
         ),
         Application::park(),
-    );
+    )
+    .unwrap();
 
     let resp = client
         .api(&cmd.render(block_parse_under_test()))

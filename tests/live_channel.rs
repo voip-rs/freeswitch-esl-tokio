@@ -71,11 +71,8 @@ async fn originate_and_reap(cmd: &Originate) {
 #[tokio::test]
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_application_target() {
-    originate_and_reap(&Originate::application(
-        test_9199(),
-        Application::simple("park"),
-    ))
-    .await;
+    originate_and_reap(&Originate::application(test_9199(), Application::simple("park")).unwrap())
+        .await;
 }
 
 /// Extension target: routed through the XML dialplan rather than an app.
@@ -83,9 +80,11 @@ async fn live_originate_application_target() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_extension_target() {
     let cmd = Originate::extension(test_9199(), "9199")
+        .unwrap()
         .with_dialplan(DialplanType::XML)
         .unwrap()
-        .with_context("test");
+        .with_context("test")
+        .unwrap();
 
     originate_and_reap(&cmd).await;
 }
@@ -112,6 +111,7 @@ async fn live_originate_inline_target() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_timeout_fills_positional_gaps() {
     let cmd = Originate::application(test_9199(), Application::simple("park"))
+        .unwrap()
         .with_timeout(Duration::from_secs(5));
 
     originate_and_reap(&cmd).await;
@@ -202,17 +202,24 @@ async fn originate_positionals(separator: Option<char>) {
         test_9199(),
         Application::new("socket", Some("127.0.0.1:1 async full")),
     )
+    .unwrap()
     .with_dialplan(DialplanType::XML)
     .expect("an application target takes XML")
     .with_context("test")
+    .unwrap()
     .with_cid_name("  Front  Desk  ")
+    .unwrap()
     .with_cid_num("5551234")
+    .unwrap()
     .with_timeout(Duration::from_secs(6));
     let empty_last = separated(
         park()
             .with_context("test")
+            .unwrap()
             .with_cid_name("Last Empty")
-            .with_cid_num(""),
+            .unwrap()
+            .with_cid_num("")
+            .unwrap(),
     );
     assert!(
         empty_last
@@ -234,7 +241,11 @@ async fn originate_positionals(separator: Option<char>) {
         ),
         (
             "absent context forced by a later slot",
-            separated(park().with_cid_name("Ctx Undef")),
+            separated(
+                park()
+                    .with_cid_name("Ctx Undef")
+                    .unwrap(),
+            ),
             "park",
             &[
                 (EventHeader::CallerContext, Some("default")),
@@ -247,7 +258,9 @@ async fn originate_positionals(separator: Option<char>) {
             separated(
                 park()
                     .with_context("")
-                    .with_cid_name("Ctx Empty"),
+                    .unwrap()
+                    .with_cid_name("Ctx Empty")
+                    .unwrap(),
             ),
             "park",
             &[(EventHeader::CallerContext, Some("test"))],
@@ -258,7 +271,9 @@ async fn originate_positionals(separator: Option<char>) {
             separated(
                 park()
                     .with_context("ctx with space")
-                    .with_cid_name("Ctx Named"),
+                    .unwrap()
+                    .with_cid_name("Ctx Named")
+                    .unwrap(),
             ),
             "park",
             &[(EventHeader::CallerContext, Some("ctx with space"))],
@@ -278,7 +293,9 @@ async fn originate_positionals(separator: Option<char>) {
             "single quote in an application argument and a caller id",
             separated(
                 Originate::application(test_9199(), Application::new("set", Some("quoted=it's")))
-                    .with_cid_name("it's"),
+                    .unwrap()
+                    .with_cid_name("it's")
+                    .unwrap(),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some("quoted=it's"))],
@@ -295,7 +312,8 @@ async fn originate_positionals(separator: Option<char>) {
                     ],
                 )
                 .expect("one quote is deliverable")
-                .with_cid_num("it's"),
+                .with_cid_num("it's")
+                .unwrap(),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some("quoted=it's,b"))],
@@ -308,8 +326,11 @@ async fn originate_positionals(separator: Option<char>) {
                     unexpanded_9199(),
                     Application::new("set", Some(r"lit=a\nb\\c\sd")),
                 )
+                .unwrap()
                 .with_cid_name(r"x\ny")
-                .with_cid_num(r"\t"),
+                .unwrap()
+                .with_cid_num(r"\t")
+                .unwrap(),
             ),
             "set",
             &[(EventHeader::ApplicationData, Some(r"lit=a\nb\\c\sd"))],
@@ -377,6 +398,7 @@ async fn unanswered_originate_elapsed(
         ),
         Application::simple("park"),
     )
+    .unwrap()
     .with_timeout(Duration::from_secs(seconds))
     .with_argv_separator('~')
     .expect("'~' separates originate's arguments");
@@ -508,7 +530,7 @@ async fn live_uuid_setvar_getvar_round_trip() {
         .unwrap();
 
     // Create a channel to work with
-    let cmd = Originate::application(test_9199(), Application::simple("park"));
+    let cmd = Originate::application(test_9199(), Application::simple("park")).unwrap();
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
 
     // Set a variable on the channel
@@ -552,7 +574,7 @@ async fn live_uuid_kill_with_cause() {
         .await
         .unwrap();
 
-    let cmd = Originate::application(test_9199(), Application::simple("park"));
+    let cmd = Originate::application(test_9199(), Application::simple("park")).unwrap();
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
 
     // Kill with a specific hangup cause
@@ -611,7 +633,7 @@ async fn live_sip_hangup_disposition_on_both_sides_of_a_bye() {
             .unwrap()
             .with_variables(uuid_block(&uuid, &[])),
     );
-    let cmd = Originate::application(endpoint, Application::simple("park"));
+    let cmd = Originate::application(endpoint, Application::simple("park")).unwrap();
 
     let mut reaper = ChannelReaper::new(&client);
     reaper.track(&uuid);
@@ -684,7 +706,9 @@ async fn dial_without_waiting(
 ) -> Option<String> {
     let block_parse = block_parse_under_test();
     if carrier == DialStringCarrier::EslApi {
-        let cmd = Originate::application(endpoint.clone(), Application::park()).render(block_parse);
+        let cmd = Originate::application(endpoint.clone(), Application::park())
+            .unwrap()
+            .render(block_parse);
         client
             .bgapi(&cmd)
             .await
@@ -1438,7 +1462,7 @@ async fn live_channel_dump_rebuild_loop() {
     let mut reaper = ChannelReaper::new(&client);
     let mut uuids = Vec::new();
     for _ in 0..2 {
-        let cmd = Originate::application(test_9199(), Application::simple("park"));
+        let cmd = Originate::application(test_9199(), Application::simple("park")).unwrap();
         let uuid = client
             .api(&cmd.render(block_parse_under_test()))
             .await
@@ -1560,7 +1584,7 @@ async fn live_channel_dump_of_reaped_uuid_is_skippable() {
         .await
         .unwrap();
 
-    let cmd = Originate::application(test_9199(), Application::simple("park"));
+    let cmd = Originate::application(test_9199(), Application::simple("park")).unwrap();
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;
 
@@ -1682,7 +1706,7 @@ async fn live_show_bootstrap_rebuilds_channel_create() {
     // `api`, not `bgapi_originate_ok`: waiting on a BACKGROUND_JOB drains the
     // stream this test reads its CHANNEL_CREATE off.
     let mut reaper = ChannelReaper::new(&client);
-    let cmd = Originate::application(test_9199(), Application::simple("park"));
+    let cmd = Originate::application(test_9199(), Application::simple("park")).unwrap();
     let uuid = client
         .api(&cmd.render(block_parse_under_test()))
         .await

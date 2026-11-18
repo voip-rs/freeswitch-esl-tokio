@@ -35,7 +35,16 @@ pub use super::endpoint::Endpoint;
 ///
 /// Constructed via [`Originate::extension`], [`Originate::application`], or
 /// [`Originate::inline`]; each field is read by its own name and changed only through its
-/// `with_*` or `without_*` builder.
+/// `with_*` or `without_*` builder. The constructors and every fallible builder run the check
+/// parse and config load run, so a value the switch reads as another command never builds:
+///
+/// - `undef` in any case as the target, context or caller id, which the switch reads as absent;
+/// - an extension opening `&` and more, which runs as an application, and an `&name(args)`
+///   application whose name carries a parenthesis or whose arguments carry `)`;
+/// - an extension under the `inline` dialplan, and inline applications under any other;
+/// - a [`SofiaContact`](super::endpoint::SofiaContact) or
+///   [`GroupCall`](super::endpoint::GroupCall) endpoint, which `originate` never expands
+///   (`expand originate …` does, a carrier this type does not model).
 ///
 /// ```
 /// # use std::time::Duration;
@@ -43,9 +52,9 @@ pub use super::endpoint::Endpoint;
 /// let cmd = Originate::application(
 ///     Endpoint::Loopback(LoopbackEndpoint::new("9196")?.with_context("default")?),
 ///     Application::simple("park"),
-/// )
-/// .with_cid_name("Alice")
-/// .with_cid_num("5551234")
+/// )?
+/// .with_cid_name("Alice")?
+/// .with_cid_num("5551234")?
 /// .with_timeout(Duration::from_secs(30));
 /// # Ok::<(), OriginateError>(())
 /// ```
@@ -88,18 +97,22 @@ impl Originate {
 
     /// Route through the dialplan engine to an extension.
     ///
-    /// `undef` in any case aborts the switch, which asserts the target it reads as absent is
-    /// set; parse and config load refuse it, this does not.
-    pub fn extension(endpoint: Endpoint, extension: impl Into<String>) -> Self {
-        Self::unchecked(endpoint, OriginateTarget::Extension(extension.into()))
+    /// Refuses `undef` in any case, which aborts the switch: it asserts the target it reads as
+    /// absent is set. Refuses `&` and more, which `originate` runs as an application.
+    pub fn extension(
+        endpoint: Endpoint,
+        extension: impl Into<String>,
+    ) -> Result<Self, OriginateError> {
+        Self::unchecked(endpoint, OriginateTarget::Extension(extension.into())).checked()
     }
 
     /// Execute a single XML-format application on the answered channel.
     ///
-    /// `originate` ends the arguments at the first `)`, so an argument carrying one, such as a
+    /// `originate` ends the arguments at the first `)`, so an application whose name carries a
+    /// parenthesis or whose arguments carry `)` is refused. An argument carrying one, such as a
     /// `tone_stream://%(500,0,800)` spec, goes through [`inline`](Self::inline).
-    pub fn application(endpoint: Endpoint, app: Application) -> Self {
-        Self::unchecked(endpoint, OriginateTarget::Application(app))
+    pub fn application(endpoint: Endpoint, app: Application) -> Result<Self, OriginateError> {
+        Self::unchecked(endpoint, OriginateTarget::Application(app)).checked()
     }
 
     /// Execute inline applications on the answered channel.
@@ -113,21 +126,15 @@ impl Originate {
     /// Each action is escaped for the hunt's split and again for the line's, so quotes,
     /// backslashes and edge spaces in an argument arrive as written.
     ///
-    /// Returns `Err` if the iterator yields no applications.
+    /// Returns `Err` if the iterator yields no applications, or a single one named `undef`.
     pub fn inline(
         endpoint: Endpoint,
         apps: impl IntoIterator<Item = Application>,
     ) -> Result<Self, OriginateError> {
-        let apps: Vec<Application> = apps
+        let apps = apps
             .into_iter()
             .collect();
-        if apps.is_empty() {
-            return Err(OriginateError::EmptyInlineApplications);
-        }
-        Ok(Self::unchecked(
-            endpoint,
-            OriginateTarget::InlineApplications(apps),
-        ))
+        Self::unchecked(endpoint, OriginateTarget::InlineApplications(apps)).checked()
     }
 
     /// Execute inline applications, naming the separator yourself.
@@ -148,18 +155,17 @@ impl Originate {
         apps: impl IntoIterator<Item = Application>,
         delimiter: char,
     ) -> Result<Self, OriginateError> {
-        let apps: Vec<Application> = apps
+        let apps = apps
             .into_iter()
             .collect();
-        if apps.is_empty() {
-            return Err(OriginateError::EmptyInlineApplications);
-        }
-        check_inline_delimiter(delimiter)?;
-        Ok(Self {
+        let originate = Self {
             // The comma needs no prefix, so asking for it is asking for the default.
             inline_delimiter: (delimiter != ',').then_some(delimiter),
             ..Self::unchecked(endpoint, OriginateTarget::InlineApplications(apps))
-        })
+        }
+        .checked()?;
+        check_inline_delimiter(delimiter)?;
+        Ok(originate)
     }
 
     /// The separator this command renders its inline action list with, or
@@ -185,8 +191,8 @@ impl Originate {
     /// let cmd = Originate::application(
     ///     Endpoint::Loopback(LoopbackEndpoint::new("9199")?.with_context("default")?),
     ///     Application::new("socket", Some("127.0.0.1:8040 async full")),
-    /// )
-    /// .with_cid_name("Front Desk")
+    /// )?
+    /// .with_cid_name("Front Desk")?
     /// .with_argv_separator('~')?;
     ///
     /// assert_eq!(
@@ -220,10 +226,10 @@ impl Originate {
         self
     }
 
-    /// Set the dialplan context. `undef` in any case reads as absent on the switch.
-    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+    /// Set the dialplan context, refusing `undef` in any case, which the switch reads as absent.
+    pub fn with_context(mut self, context: impl Into<String>) -> Result<Self, OriginateError> {
         self.context = Some(context.into());
-        self
+        self.checked()
     }
 
     /// Leave the context to the switch.
@@ -232,10 +238,10 @@ impl Originate {
         self
     }
 
-    /// Set the caller ID name. `undef` in any case reads as absent on the switch.
-    pub fn with_cid_name(mut self, cid_name: impl Into<String>) -> Self {
+    /// Set the caller ID name, refusing `undef` in any case, which the switch reads as absent.
+    pub fn with_cid_name(mut self, cid_name: impl Into<String>) -> Result<Self, OriginateError> {
         self.cid_name = Some(cid_name.into());
-        self
+        self.checked()
     }
 
     /// Leave the caller ID name to the switch.
@@ -244,10 +250,10 @@ impl Originate {
         self
     }
 
-    /// Set the caller ID number. `undef` in any case reads as absent on the switch.
-    pub fn with_cid_num(mut self, cid_num: impl Into<String>) -> Self {
+    /// Set the caller ID number, refusing `undef` in any case, which the switch reads as absent.
+    pub fn with_cid_num(mut self, cid_num: impl Into<String>) -> Result<Self, OriginateError> {
         self.cid_num = Some(cid_num.into());
-        self
+        self.checked()
     }
 
     /// Leave the caller ID number to the switch.

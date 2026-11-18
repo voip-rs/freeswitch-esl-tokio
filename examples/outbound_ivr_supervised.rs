@@ -166,7 +166,7 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
     let originate = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new(&endpoint)?.with_variables(vars)),
         Application::new("socket", Some(addr.as_str())),
-    );
+    )?;
     let line = originate.render(block_parse);
     info!("originate: {line}");
 
