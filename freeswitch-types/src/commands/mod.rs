@@ -46,7 +46,7 @@ pub use originate::{
 };
 pub use variables::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
-    UnvouchedVersion, VariablesDisplay,
+    UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart, VariablesDisplay,
 };
 
 use crate::switch_passes::api_argument::{self, clean_argument, split_line};

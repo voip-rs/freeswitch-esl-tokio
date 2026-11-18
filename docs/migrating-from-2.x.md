@@ -54,3 +54,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Variables::with_vars(scope, pairs)` returns `Variables` | returns `Result<Variables, OriginateError>` |
 | `Variables::set_scope(scope)` returns `()` | returns `Result<(), OriginateError>`, refusing a scope a held pair or the chosen separator cannot be written in |
 | `Variables::iter_mut()`, `values_mut()` | removed; `insert` the new value under the same name, which keeps its position |
+| a variable pair refused as `OriginateError::ParseError(String)` | `OriginateError::UndeliverableVariable { index, variable }`; `variable` is an `UndeliverableVariable` naming the `VariablePart` and the `VariableFault`, the same from parse, config load and the builder |

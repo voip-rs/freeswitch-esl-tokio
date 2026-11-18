@@ -5,13 +5,13 @@ use super::api_argument::breaks_a_split;
 use super::separate::{find_end_paren, CBuffer, Split};
 use super::{untrace, PipelineError, Traced};
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::{BlockParse, VariablesType};
+use crate::commands::variables::{BlockParse, VariableFault, VariablesType};
 
 #[cfg(test)]
 pub(super) mod c_oracle;
 
 /// Why `open` and `close` in `text` move the end the switch counts its way to.
-pub(crate) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<String> {
+pub(crate) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<VariableFault> {
     let mut depth = 0i32;
     for ch in text.chars() {
         if ch == open {
@@ -19,13 +19,11 @@ pub(crate) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<Stri
         } else if ch == close {
             depth -= 1;
             if depth < 0 {
-                return Some(format!(
-                    "closes a '{open}' it never opened, ending the block early"
-                ));
+                return Some(VariableFault::ClosesUnopenedBracket(open));
             }
         }
     }
-    (depth != 0).then(|| format!("opens a '{open}' it never closes, swallowing the block's end"))
+    (depth != 0).then_some(VariableFault::UnclosedBracket(open))
 }
 
 /// Reject a separator that cannot delimit the block it was chosen for.

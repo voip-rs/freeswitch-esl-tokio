@@ -184,10 +184,10 @@ pub use freeswitch_types::{
     ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,
     ParseSipUserPingStatusError, ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit,
     SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus, SofiaChannelName, SofiaEventSubclass,
-    TimetableField, TimetablePrefix, UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect,
-    UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName,
-    Variables, VariablesDisplay, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
-    MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
+    TimetableField, TimetablePrefix, UndeliverableVariable, UnvouchedVersion, UuidAnswer,
+    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
+    UuidTransfer, VariableFault, VariableName, VariablePart, Variables, VariablesDisplay,
+    VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT, MAX_ARRAY_ITEMS, VARIABLE_PREFIX,
 };
 
 #[cfg(doctest)]

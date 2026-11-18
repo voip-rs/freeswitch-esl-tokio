@@ -5,7 +5,7 @@ use std::num::ParseIntError;
 use crate::channel::ParseHangupCauseError;
 use crate::commands::endpoint::{EndpointFieldFault, ParseGroupCallOrderError};
 use crate::commands::execute_on::ExecuteOnFault;
-use crate::commands::variables::InvalidArgvSeparator;
+use crate::commands::variables::{InvalidArgvSeparator, UndeliverableVariable};
 
 /// Errors from originate command parsing or construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +101,13 @@ pub enum OriginateError {
         /// The most legs or groups the switch splits off.
         max: usize,
     },
+    /// A channel variable a block cannot carry as written.
+    UndeliverableVariable {
+        /// Position of the pair in its block.
+        index: usize,
+        /// The variable and its fault.
+        variable: UndeliverableVariable,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -185,6 +192,9 @@ impl std::fmt::Display for OriginateError {
                 "more groups than the {max} the switch splits off; \
                  it dials the rest as the last group"
             ),
+            Self::UndeliverableVariable { index, variable } => {
+                write!(f, "pair {index} of a variable block: {variable}")
+            }
         }
     }
 }
@@ -211,7 +221,8 @@ impl std::error::Error for OriginateError {
             | Self::BracketSpansLegs { .. }
             | Self::UnexpandedExpression { .. }
             | Self::UndeliverableExecuteOn { .. }
-            | Self::TooManyLegs { .. } => None,
+            | Self::TooManyLegs { .. }
+            | Self::UndeliverableVariable { .. } => None,
         }
     }
 }

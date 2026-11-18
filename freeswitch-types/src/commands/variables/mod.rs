@@ -7,15 +7,17 @@ use std::str::FromStr;
 use super::originate::OriginateError;
 use crate::switch_passes::brackets::{check_separator, same_header, unbalanced, Block, PairEffect};
 use crate::switch_passes::escape::{escape_text, escape_value, EscapedField};
-use crate::switch_passes::originate_legs::{splits_into_threads, ENTERPRISE_DELIM};
+use crate::switch_passes::originate_legs::splits_into_threads;
 use crate::switch_passes::{pipeline, PipelineError};
 use crate::variables::names_outgoing_header;
 use crate::wire_safety::contains_header_control;
 
+mod fault;
 mod target;
 #[cfg(test)]
 mod tests;
 
+pub use fault::{UndeliverableVariable, VariableFault, VariablePart};
 pub use target::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
     UnvouchedVersion,
@@ -94,97 +96,90 @@ pub struct Variables {
 }
 
 /// Reject a key no escaping carries: empty, `:_:`, `[`, a quote in channel scope or an unbalanced
-/// bracket. The key is the offending text, so no error quotes it.
-fn check_key(key: &str, vars_type: VariablesType) -> Result<(), OriginateError> {
+/// bracket.
+fn check_key(key: &str, vars_type: VariablesType) -> Result<(), UndeliverableVariable> {
     let fault = if key.is_empty() {
-        Some("is empty, which the switch installs under no name".to_owned())
+        Some(VariableFault::Empty)
     } else if key.contains('[') {
-        Some(
-            "carries '[', which the switch reads as an array index, installing the value \
-             under the text before it"
-                .to_owned(),
-        )
+        Some(VariableFault::ArrayIndex)
     } else if splits_into_threads(key) {
-        Some(format!(
-            "carries the enterprise separator {ENTERPRISE_DELIM}, on which the switch splits \
-             the dial string into threads whatever quoting or escaping surrounds it"
-        ))
+        Some(VariableFault::EnterpriseSeparator)
     } else if vars_type == VariablesType::Channel && key.contains('\'') {
-        Some(
-            "carries a single quote in channel scope, which the switch pairs with the next \
-             quote in the dial string before it parses the block"
-                .to_owned(),
-        )
+        Some(VariableFault::QuoteInChannelScope)
     } else {
         unbalanced(key, vars_type.delimiters())
     };
     fault.map_or(Ok(()), |fault| {
-        Err(OriginateError::ParseError(format!(
-            "a variable name {fault}"
-        )))
+        Err(UndeliverableVariable::in_name(key, fault))
     })
 }
 
 /// Reject a pair no escaping carries: a key [`check_key`] refuses, or a value carrying `:_:`, a
-/// quote in channel scope, nothing or an unbalanced bracket. Each error names why the switch loses it.
+/// quote in channel scope, a header control, nothing or an unbalanced bracket.
 fn check_representable(
     key: &str,
     value: &str,
     vars_type: VariablesType,
-) -> Result<(), OriginateError> {
+) -> Result<(), UndeliverableVariable> {
     check_key(key, vars_type)?;
-    if splits_into_threads(value) {
-        return Err(OriginateError::ParseError(format!(
-            "variable {key} carries the enterprise separator {ENTERPRISE_DELIM}, on which \
-             the switch splits the dial string into threads whatever quoting or escaping \
-             surrounds it"
-        )));
-    }
-    if vars_type == VariablesType::Channel && value.contains('\'') {
-        return Err(OriginateError::ParseError(format!(
-            "variable {key} carries a single quote in channel scope: the switch \
-             pairs it with the next quote in the dial string before it parses \
-             the block, whatever escaping precedes either. Use default scope, \
-             or keep the quote out of the value"
-        )));
-    }
-    if names_outgoing_header(key) && contains_header_control(value) {
-        return Err(OriginateError::ParseError(format!(
-            "variable {key} carries a control character: the switch copies it verbatim \
-             into an outgoing SIP header, whose field value cannot hold one"
-        )));
-    }
-    if value.is_empty() {
-        return Err(OriginateError::ParseError(format!(
-            "variable {key} has an empty value: the switch discards such a pair \
-             without logging it, so it cannot be told from an absent variable on \
-             the wire. Give it a value or remove it -- and if its presence was \
-             itself the signal, that signal needs a home outside the dial string"
-        )));
-    }
-
-    unbalanced(value, vars_type.delimiters()).map_or(Ok(()), |fault| {
-        Err(OriginateError::ParseError(format!(
-            "variable {key} {fault}"
-        )))
+    check_header_value(key, value)?;
+    let fault = if splits_into_threads(value) {
+        Some(VariableFault::EnterpriseSeparator)
+    } else if vars_type == VariablesType::Channel && value.contains('\'') {
+        Some(VariableFault::QuoteInChannelScope)
+    } else if value.is_empty() {
+        Some(VariableFault::Empty)
+    } else {
+        unbalanced(value, vars_type.delimiters())
+    };
+    fault.map_or(Ok(()), |fault| {
+        Err(UndeliverableVariable::in_value(key, fault))
     })
 }
 
-/// Reject a key naming, but for ASCII case, one of `earlier`: the block's event replaces a header
-/// by `strcasecmp`, so the two install as one variable. Position `at` names it, never its text.
+/// Reject a value the switch copies into an outgoing SIP header when it carries a control
+/// character but tab, which a header field value cannot hold.
+fn check_header_value(key: &str, value: &str) -> Result<(), UndeliverableVariable> {
+    match names_outgoing_header(key) && contains_header_control(value) {
+        true => Err(UndeliverableVariable::in_value(
+            key,
+            VariableFault::HeaderControl,
+        )),
+        false => Ok(()),
+    }
+}
+
+/// Reject a key naming, but for ASCII case, one of `others`: the block's event replaces a header
+/// by `strcasecmp`, so the two install as one variable.
 fn check_case_collision<'a>(
-    earlier: impl IntoIterator<Item = &'a String>,
+    others: impl IntoIterator<Item = &'a String>,
     key: &str,
-    at: usize,
-) -> Result<(), OriginateError> {
-    let collides = earlier
+) -> Result<(), UndeliverableVariable> {
+    let collides = others
         .into_iter()
         .any(|name| name != key && same_header(name, key));
     match collides {
-        true => Err(OriginateError::ParseError(format!(
-            "variable {at} differs only in case from an earlier name, which the switch \
-             installs as the same variable"
-        ))),
+        true => Err(UndeliverableVariable::in_name(
+            key,
+            VariableFault::CaseCollision,
+        )),
+        false => Ok(()),
+    }
+}
+
+/// Reject a pair carrying `sep`, which the switch splits the block on.
+fn check_separator_free(key: &str, value: &str, sep: char) -> Result<(), UndeliverableVariable> {
+    if key.contains(sep) {
+        return Err(UndeliverableVariable::in_name(
+            key,
+            VariableFault::BlockSeparator(sep),
+        ));
+    }
+    match value.contains(sep) {
+        true => Err(UndeliverableVariable::in_value(
+            key,
+            VariableFault::BlockSeparator(sep),
+        )),
         false => Ok(()),
     }
 }
@@ -231,23 +226,12 @@ impl Variables {
     /// which dialplan expansion reads as a reference across a pair boundary; `|` in a `[]` block.
     pub fn with_separator(mut self, sep: char) -> Result<Self, OriginateError> {
         check_separator(sep, self.vars_type)?;
-        if self
-            .inner
-            .keys()
-            .any(|k| k.contains(sep))
-        {
-            return Err(OriginateError::ParseError(format!(
-                "a variable name contains the chosen '{sep}' separator"
-            )));
-        }
-        if let Some((key, _)) = self
+        for (index, (key, value)) in self
             .inner
             .iter()
-            .find(|(_, v)| v.contains(sep))
+            .enumerate()
         {
-            return Err(OriginateError::ParseError(format!(
-                "variable {key} contains the chosen '{sep}' separator"
-            )));
+            check_separator_free(key, value, sep).map_err(|variable| variable.at(index))?;
         }
         self.separator = Some(sep);
         Ok(self)
@@ -392,10 +376,9 @@ impl<'de> serde::Deserialize<'de> for Variables {
                             .keys()
                             .take(at),
                         key,
-                        at,
                     )
                 })
-                .map_err(serde::de::Error::custom)?;
+                .map_err(|variable| serde::de::Error::custom(variable.at(at)))?;
         }
         let vars = Self {
             vars_type,
@@ -565,15 +548,13 @@ impl Variables {
             let key = pair
                 .key
                 .as_str();
-            check_representable(key, value, vars_type)?;
-            check_case_collision(inner.keys(), key, i)?;
-            if block.separator != ','
-                && (key.contains(block.separator) || value.contains(block.separator))
-            {
-                return Err(OriginateError::ParseError(format!(
-                    "variable {i} contains the block's ^^ separator"
-                )));
-            }
+            check_representable(key, value, vars_type)
+                .and_then(|()| check_case_collision(inner.keys(), key))
+                .and_then(|()| match block.separator {
+                    ',' => Ok(()),
+                    sep => check_separator_free(key, value, sep),
+                })
+                .map_err(|variable| variable.at(i))?;
             inner.insert(key.to_owned(), value.to_owned());
         }
         Ok(Self {

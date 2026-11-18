@@ -1497,3 +1497,70 @@ fn an_unvouched_version_names_the_vouched_range() {
         "does not name the vouched range: {msg}"
     );
 }
+
+fn undeliverable(err: OriginateError) -> (usize, VariablePart, VariableFault) {
+    match err {
+        OriginateError::UndeliverableVariable { index, variable } => {
+            (index, variable.part, variable.fault)
+        }
+        other => panic!("not an undeliverable variable: {other:?}"),
+    }
+}
+
+/// Parse and config load share the validator, so the same fault comes back as the same variant
+/// and, through serde, as its message.
+#[test]
+fn parse_and_config_load_refuse_a_pair_with_the_same_typed_fault() {
+    use VariableFault::*;
+    use VariablePart::*;
+    let cases = [
+        ("{a=1,k=}", r#"{"a":"1","k":""}"#, (1, Value, Empty)),
+        ("{=v}", r#"{"":"v"}"#, (0, Name, Empty)),
+        ("{k[1]=v}", r#"{"k[1]":"v"}"#, (0, Name, ArrayIndex)),
+        (
+            "{a=1,A=2}",
+            r#"{"a":"1","A":"2"}"#,
+            (1, Name, CaseCollision),
+        ),
+        (
+            "{sip_h_X=a\u{1}b}",
+            r#"{"sip_h_X":"a\u0001b"}"#,
+            (0, Value, HeaderControl),
+        ),
+    ];
+    for (block, json, want) in cases {
+        let parsed = Variables::parse_for(block, DialStringCarrier::Dialplan).expect_err(block);
+        let message = parsed.to_string();
+        assert_eq!(undeliverable(parsed), want, "{block}");
+        let loaded = serde_json::from_str::<Variables>(json)
+            .expect_err(json)
+            .to_string();
+        assert_eq!(loaded, message, "{json}");
+    }
+    // No block the switch reads back carries these, so config load alone reaches them.
+    for (json, (index, part, fault)) in [
+        (r#"{"k}":"v"}"#, (0, Name, ClosesUnopenedBracket('{'))),
+        (r#"{"k":"x:_:y"}"#, (0, Value, EnterpriseSeparator)),
+        (r#"{"k":"a}b"}"#, (0, Value, ClosesUnopenedBracket('{'))),
+        (r#"{"k":"a{b"}"#, (0, Value, UnclosedBracket('{'))),
+        (
+            r#"{"scope":"channel","vars":{"k":"it's"}}"#,
+            (0, Value, QuoteInChannelScope),
+        ),
+        (
+            r#"{"scope":"default","vars":{"a":"1","k":"x;y"},"separator":";"}"#,
+            (1, Value, BlockSeparator(';')),
+        ),
+    ] {
+        let message = serde_json::from_str::<Variables>(json)
+            .expect_err(json)
+            .to_string();
+        let want = UndeliverableVariable {
+            name: "k".to_owned(),
+            part,
+            fault,
+        }
+        .at(index);
+        assert_eq!(message, want.to_string(), "{json}");
+    }
+}
