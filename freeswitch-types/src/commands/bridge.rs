@@ -411,6 +411,37 @@ mod tests {
         ));
     }
 
+    /// The builder refuses what parse and config load refuse, rather than render a group the
+    /// switch dials as one leg.
+    #[test]
+    fn new_refuses_what_parse_refuses() {
+        let spanning: Vec<Endpoint> = vec![
+            crate::commands::endpoint::UserEndpoint::new("['").into(),
+            SofiaGateway::new("", "]")
+                .with_profile(" ")
+                .into(),
+        ];
+        assert_eq!(
+            BridgeDialString::new(vec![loopbacks(1), spanning]),
+            Err(OriginateError::BracketSpansLegs { group: 1 })
+        );
+        assert_eq!(
+            BridgeDialString::new(vec![loopbacks(MAX_PEERS + 1)]),
+            Err(OriginateError::TooManyLegs {
+                group: Some(0),
+                max: MAX_PEERS
+            })
+        );
+        assert_eq!(
+            BridgeDialString::new(vec![loopbacks(1); MAX_PEERS + 1]),
+            Err(OriginateError::TooManyLegs {
+                group: None,
+                max: MAX_PEERS
+            })
+        );
+        assert!(BridgeDialString::new(vec![loopbacks(MAX_PEERS)]).is_ok());
+    }
+
     // === Display ===
 
     /// `Display` and `FromStr` are the default revision, not a second render path.
