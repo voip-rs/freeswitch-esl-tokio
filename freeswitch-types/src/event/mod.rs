@@ -196,7 +196,7 @@ impl EslEvent {
 
     /// Append a value to a multi-value header (PUSH semantics).
     ///
-    /// If the header doesn't exist, sets it as a plain value.
+    /// If the header doesn't exist or is empty, sets it as a plain value.
     /// If it exists as a plain value, converts to `ARRAY::old|:new`.
     /// If it already has an `ARRAY::` prefix, appends the new value.
     ///
@@ -236,8 +236,10 @@ impl EslEvent {
         value: &str,
         op: fn(&mut EslArray, String) -> Result<(), EslArrayError>,
     ) -> Result<(), EslArrayError> {
+        // The switch deletes a header set to "", so it holds nothing to stack onto.
         match self
             .header_str(name)
+            .filter(|existing| !existing.is_empty())
             .map(str::to_string)
         {
             None => {
