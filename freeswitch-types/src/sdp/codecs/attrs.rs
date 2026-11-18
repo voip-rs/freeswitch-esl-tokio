@@ -5,146 +5,28 @@
 
 use std::collections::HashMap;
 
-use crate::sdp::error::{SdpCodecError, SdpWarning};
+use crate::sdp::error::SdpWarning;
 use crate::sdp::num::atoi_prefix;
-use crate::sdp::session;
-use crate::sdp::session::scan::parse_ul;
+use crate::sdp::session::{self, payload_type, rtpmap};
 use crate::sdp::SdpDirection;
 
-/// Cursor over an `a=rtpmap`/`a=fmtp` attribute value.
+/// An `a=rtpmap` value past its payload type as `(name, clock_rate, channels)`, `None` where the
+/// switch keeps no name for it: `parse_rtpmap` refused the offer or stored no encoding.
 ///
-/// Whitespace is decided once, while consuming a field, mirroring `parse_ul` and
-/// `token` in sofia-sip's `sdp_parse.c` — never per-field after a split.
-struct AttrCursor<'a> {
-    rest: &'a str,
-}
-
-impl<'a> AttrCursor<'a> {
-    fn new(value: &'a str) -> Self {
-        Self { rest: value }
-    }
-
-    /// Skip a run of SP/HTAB.
-    fn skip_ws(&mut self) {
-        self.rest = self
-            .rest
-            .trim_start_matches([' ', '\t']);
-    }
-
-    /// Skip whitespace, take the run of ASCII digits, skip trailing whitespace —
-    /// mirrors `parse_ul`'s `strspn` on both sides of the number. The cursor does
-    /// not advance when there is no number to take.
-    fn number<T: TryFrom<u32>>(&mut self) -> Option<T> {
-        self.skip_ws();
-        let (value, rest) = atoi_prefix(self.rest);
-        let value = value?;
-        self.rest = rest;
-        self.skip_ws();
-        T::try_from(value).ok()
-    }
-
-    /// Skip whitespace, then take the maximal run of chars that are neither
-    /// whitespace nor one of `stop`.
-    fn field(&mut self, stop: &[char]) -> &'a str {
-        self.skip_ws();
-        let end = self
-            .rest
-            .find(|c: char| c == ' ' || c == '\t' || stop.contains(&c))
-            .unwrap_or(
-                self.rest
-                    .len(),
-            );
-        let (field, rest) = self
-            .rest
-            .split_at(end);
-        self.rest = rest;
-        field
-    }
-
-    /// Consume an expected delimiter char if present.
-    fn eat(&mut self, ch: char) -> bool {
-        match self
-            .rest
-            .strip_prefix(ch)
-        {
-            Some(rest) => {
-                self.rest = rest;
-                true
-            }
-            None => false,
-        }
-    }
-
-    /// The unconsumed remainder, verbatim (no whitespace stripped).
-    fn remaining(&self) -> &'a str {
-        self.rest
-    }
-}
-
-/// The payload type opening an `a=rtpmap` or `a=fmtp` value and what follows it, as
-/// `parse_rtpmap` and `parse_fmtp` read it with `parse_ul` below 128; `None` drops the attribute.
-fn payload_type(value: &str) -> Option<(u8, &str)> {
-    let (pt, rest) = parse_ul(value.as_bytes(), 128)?;
-    let pt = u8::try_from(pt).ok()?;
-    // parse_ul consumed ASCII only, so the remainder starts on a char boundary.
-    value
-        .get(value.len() - rest.len()..)
-        .map(|rest| (pt, rest))
-}
-
-/// Parse an `a=rtpmap` value past its payload type into `(name, clock_rate, channels)`.
-///
-/// Grammar: field stopping at `/` (name) / required `/` / number (clock rate) /
-/// optionally `/` then number (channels). The name has no charset restriction
-/// beyond "not whitespace, not `/`" — sofia's stricter `TOKEN` charset is
-/// enforced later, in `audio_codec_string`, on a path that warns and drops one
-/// codec rather than the whole media section.
-///
-/// Returns `Err(MalformedRtpmap)` for any structural violation (missing
-/// separator, non-numeric clock rate, non-numeric channel count).
-fn parse_rtpmap(value: &str) -> Result<(String, u32, Option<u32>), SdpCodecError> {
-    let mut cursor = AttrCursor::new(value);
-
-    let name = cursor.field(&['/']);
-    if name.is_empty() {
-        return Err(SdpCodecError::MalformedRtpmap(value.to_string()));
-    }
-    let name = name.to_string();
-
-    if !cursor.eat('/') {
-        return Err(SdpCodecError::MalformedRtpmap(value.to_string()));
-    }
-
-    let clock_rate = cursor
-        .number()
-        .ok_or_else(|| SdpCodecError::MalformedRtpmap(value.to_string()))?;
-
-    let channels = if cursor.eat('/') {
-        cursor.skip_ws();
-        if cursor
-            .remaining()
-            .is_empty()
-        {
-            None
-        } else {
-            Some(
-                cursor
-                    .number()
-                    .ok_or_else(|| SdpCodecError::MalformedRtpmap(value.to_string()))?,
-            )
-        }
-    } else {
-        None
-    };
-
-    if !cursor
-        .remaining()
-        .is_empty()
-    {
-        return Err(SdpCodecError::MalformedRtpmap(value.to_string()));
-    }
-
-    Ok((name, clock_rate, channels))
+/// The name is `parse_rtpmap`'s token run, so a byte outside sofia's `TOKEN` set ends it. The
+/// channels are the switch's `atoi` of `rm_params`.
+fn rtpmap_entry(rest: &str) -> Option<(String, u32, Option<u32>)> {
+    let rtpmap = rtpmap(rest)?;
+    // No implementation runs above u32::MAX Hz, so a saturated rate matches nothing either.
+    let rate = u32::try_from(rtpmap.rate).unwrap_or(u32::MAX);
+    let channels = rtpmap
+        .params
+        .map(|params| {
+            atoi_prefix(params.trim_start_matches([' ', '\t']))
+                .0
+                .unwrap_or(0)
+        });
+    Some((rtpmap.encoding?, rate, channels))
 }
 
 /// One section's `a=rtpmap` and `a=fmtp` values, keyed by payload type.
@@ -159,11 +41,13 @@ pub(super) struct AttrTables {
 /// Collect a section's rtpmap and fmtp attributes into payload-type lookup tables.
 ///
 /// An attribute whose payload type is unreadable is dropped with a
-/// [`SdpWarning::PayloadAttributeIgnored`], the rest of the section kept, as sofia drops it.
+/// [`SdpWarning::PayloadAttributeIgnored`], the rest of the section kept, as sofia drops it. An
+/// `a=rtpmap` the switch keeps no name for is dropped too; where the switch refuses the offer
+/// over it, the session layer reports that.
 pub(super) fn attribute_tables(
     media: &session::Media,
     warnings: &mut Vec<SdpWarning>,
-) -> Result<AttrTables, SdpCodecError> {
+) -> AttrTables {
     let mut tables = AttrTables {
         rtpmap: HashMap::new(),
         fmtp: HashMap::new(),
@@ -191,18 +75,18 @@ pub(super) fn attribute_tables(
             });
             continue;
         };
-        if name == "rtpmap" {
-            tables
-                .rtpmap
-                .insert(pt, parse_rtpmap(rest)?);
-        } else {
+        if name == "fmtp" {
             tables
                 .fmtp
                 .insert(pt, rest.to_string());
+        } else if let Some(entry) = rtpmap_entry(rest) {
+            tables
+                .rtpmap
+                .insert(pt, entry);
         }
     }
 
-    Ok(tables)
+    tables
 }
 
 /// Return ptime from the first matching attribute, recording a warning if unparseable.
@@ -544,25 +428,22 @@ mod tests {
     }
 
     #[test]
-    fn rtpmap_interior_whitespace_in_name_is_malformed() {
-        // Whitespace inside what would be the encoding name is not a separator
-        // sofia recognises either — it still rejects this shape, via a failed
-        // clock-rate parse once the name is truncated at the first space.
+    fn rtpmap_interior_whitespace_in_name_is_refused_and_the_rtpmap_ignored() {
+        // The name ends at the space and parse_rtpmap reads no rate after it, refusing the
+        // offer; extraction ignores the rtpmap and keeps the static name.
         let sdp = format!(
             "{}m=audio 5004 RTP/AVP 0\r\na=rtpmap:0 foo bar/8000\r\n",
             sdp_header()
         );
         let codecs = SdpCodecs::parse(&sdp).unwrap();
+        let rtp = rtp_codec(codecs.entries());
+        assert!(codec_named(&rtp, "PCMU").is_some());
         assert_eq!(
-            codecs
-                .entries()
-                .count(),
-            0,
-            "malformed rtpmap must still drop the whole section"
+            codecs.warnings(),
+            [SdpWarning::SwitchRejects {
+                reason: crate::sdp::SwitchRejection::InvalidRtpmap,
+                offset: sdp.find("a=rtpmap"),
+            }]
         );
-        assert!(matches!(
-            codecs.warnings()[0],
-            SdpWarning::MalformedMediaSection { .. }
-        ));
     }
 }

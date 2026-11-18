@@ -326,11 +326,52 @@ enum End {
     Stopped { at: usize, sanity: bool },
 }
 
-/// One section as `sdp_sanity_check` sees it.
+/// One section as `sdp_sanity_check` and `parse_media_attr` see it.
 struct SwitchSection {
     offset: usize,
     live: bool,
     connection: bool,
+    /// The payload types `parse_rtpmap` binds to, on a live RTP section only.
+    rtp_payloads: Option<Vec<u8>>,
+}
+
+/// The payload type opening an `a=rtpmap` or `a=fmtp` value, read with `parse_ul` below 128 as
+/// `parse_rtpmap` and `parse_fmtp` read it, and what follows it; `None` where sofia drops the
+/// attribute.
+pub(crate) fn payload_type(value: &str) -> Option<(u8, &str)> {
+    let (pt, rest) = parse_ul(value.as_bytes(), 128)?;
+    let pt = u8::try_from(pt).ok()?;
+    // parse_ul consumed ASCII only, so the remainder starts on a char boundary.
+    value
+        .get(value.len() - rest.len()..)
+        .map(|rest| (pt, rest))
+}
+
+/// An `a=rtpmap` value past its payload type, as `parse_rtpmap` stores it.
+pub(crate) struct Rtpmap {
+    /// `rm_encoding`, the token run before the first byte that is not a token byte.
+    pub(crate) encoding: Option<String>,
+    /// `rm_rate`.
+    pub(crate) rate: u64,
+    /// `rm_params`, everything after a `/` that directly follows the rate.
+    pub(crate) params: Option<String>,
+}
+
+/// `parse_rtpmap` past the payload type; `None` where it refuses the offer for want of a rate.
+pub(crate) fn rtpmap(rest: &str) -> Option<Rtpmap> {
+    let bytes = rest.as_bytes();
+    let (encoding, r) = match token(bytes, b"/", Some(is_token), &[]) {
+        Some((encoding, r)) => (Some(ascii(encoding)), r),
+        None => (None, bytes),
+    };
+    let (rate, r) = parse_ul(r, 0)?;
+    Some(Rtpmap {
+        encoding,
+        rate,
+        params: r
+            .strip_prefix(b"/")
+            .map(ascii),
+    })
 }
 
 /// sofia's parse of the same lines, held to the point where it ends.
@@ -386,16 +427,28 @@ impl Switch {
                 refusal: Some(reason),
                 ..
             } => self.refuse(*reason, at),
-            Read::Media { section, .. } => self
-                .sections
-                .push(SwitchSection {
-                    offset: line.offset,
-                    live: section
-                        .as_ref()
-                        .is_some_and(|media| media.port != 0),
-                    connection: false,
-                }),
+            Read::Media { section, .. } => {
+                let live = section
+                    .as_ref()
+                    .is_some_and(|media| media.port != 0);
+                let rtp_payloads = section
+                    .as_ref()
+                    .filter(|media| live && proto_has_rtp(&media.proto))
+                    .map(|media| {
+                        media
+                            .payloads
+                            .clone()
+                    });
+                self.sections
+                    .push(SwitchSection {
+                        offset: line.offset,
+                        live,
+                        connection: false,
+                        rtp_payloads,
+                    });
+            }
             Read::Attribute(None) => self.refuse(SwitchRejection::InvalidAttributeName, at),
+            Read::Attribute(Some(attribute)) if in_media => self.media_attribute(attribute, at),
             Read::Attribute(Some(_)) => {}
             Read::Other(b'c') if in_media => {
                 if let Some(section) = self
@@ -407,6 +460,37 @@ impl Switch {
             }
             Read::Other(_) if in_media => {}
             Read::Other(key) => self.session_field(*key, at),
+        }
+    }
+
+    /// `parse_media_attr` on a live RTP section: an `a=rtpmap` binding to a listed payload type
+    /// refuses the offer when `parse_rtpmap` reads no rate.
+    fn media_attribute(&mut self, attribute: &Attribute, at: Option<usize>) {
+        let Some(listed) = self
+            .sections
+            .last()
+            .and_then(|section| {
+                section
+                    .rtp_payloads
+                    .as_deref()
+            })
+        else {
+            return;
+        };
+        if !attribute
+            .attribute
+            .eq_ignore_ascii_case("rtpmap")
+        {
+            return;
+        }
+        let value = attribute
+            .value
+            .as_deref()
+            .unwrap_or_default();
+        if let Some((pt, rest)) = payload_type(value) {
+            if listed.contains(&pt) && rtpmap(rest).is_none() {
+                self.refuse(SwitchRejection::InvalidRtpmap, at);
+            }
         }
     }
 

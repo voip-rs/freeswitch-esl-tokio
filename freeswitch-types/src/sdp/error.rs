@@ -497,17 +497,6 @@ impl SdpWarning {
     pub(crate) fn codec_string_truncated(entries: usize, limit: usize) -> Self {
         Self::CodecStringTruncated { entries, limit }
     }
-
-    /// Construct a [`MalformedMediaSection`](SdpWarning::MalformedMediaSection) warning.
-    pub(crate) fn malformed_media_section(
-        media_type: impl Into<String>,
-        reason: impl Into<String>,
-    ) -> Self {
-        Self::MalformedMediaSection {
-            media_type: media_type.into(),
-            reason: reason.into(),
-        }
-    }
 }
 
 impl fmt::Display for SdpWarning {

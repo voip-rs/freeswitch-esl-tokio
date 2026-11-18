@@ -205,31 +205,18 @@ impl SdpCodecs {
                     .entries
                     .push(SdpCodecEntry::T38);
             } else if session::proto_has_rtp(&media.proto) {
-                // Staged locally: one structurally broken section must not discard
-                // what every other section already parsed.
                 let defaults = SessionDefaults {
                     ptime: session_ptime,
                     maxptime: session_maxptime,
                     direction: section.direction,
                 };
-                match parse_media_section(media, media_type.clone(), &defaults) {
-                    Ok(parsed) => {
-                        section.entries = parsed.entries;
-                        section.unmapped = parsed.unmapped;
-                        section.non_codec = parsed.non_codec;
-                        result
-                            .warnings
-                            .extend(parsed.warnings);
-                    }
-                    Err(e) => {
-                        result
-                            .warnings
-                            .push(SdpWarning::malformed_media_section(
-                                media_type.to_string(),
-                                e.to_string(),
-                            ));
-                    }
-                }
+                let parsed = parse_media_section(media, media_type.clone(), &defaults);
+                section.entries = parsed.entries;
+                section.unmapped = parsed.unmapped;
+                section.non_codec = parsed.non_codec;
+                result
+                    .warnings
+                    .extend(parsed.warnings);
             }
 
             result
@@ -1031,10 +1018,10 @@ mod tests {
 
     #[test]
     fn codec_name_with_delimiter_is_skipped_lenient_and_erred_strict() {
-        // A comma in the a=rtpmap encoding name cannot be represented as a codec-string
+        // A dot in the a=rtpmap encoding name, a token byte to sofia, cannot be a codec-string
         // entry at all — distinct from UnmappedPayload (no rtpmap name whatsoever).
         let sdp = format!(
-            "{}m=audio 5004 RTP/AVP 100\r\na=rtpmap:100 bad,name/8000\r\n",
+            "{}m=audio 5004 RTP/AVP 100\r\na=rtpmap:100 bad.name/8000\r\n",
             sdp_header()
         );
         let codecs = SdpCodecs::parse(&sdp).unwrap();

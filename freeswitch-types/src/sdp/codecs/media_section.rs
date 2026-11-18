@@ -3,7 +3,7 @@
 //! Line numbers in this module index FreeSWITCH `v1.11.1`
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
-use crate::sdp::error::{SdpCodecError, SdpWarning};
+use crate::sdp::error::SdpWarning;
 use crate::sdp::session;
 use crate::sdp::{
     NonCodecKind, NonCodecPayload, SdpCodec, SdpCodecEntry, SdpDirection, SdpMediaType,
@@ -20,8 +20,7 @@ pub(super) struct SessionDefaults {
     pub(super) direction: SdpDirection,
 }
 
-/// One `m=` section's payload walk, staged locally so a mid-section parse
-/// failure can be discarded wholesale instead of reaching
+/// One `m=` section's payload walk, before it is moved onto
 /// [`SdpMediaSection`](super::SdpMediaSection).
 #[derive(Default)]
 pub(super) struct MediaSection {
@@ -52,16 +51,11 @@ fn non_codec_kind(canonical_name: &str) -> Option<NonCodecKind> {
 }
 
 /// Walk one RTP `m=` section's format list into codec entries.
-///
-/// Returns `Err` only for structural breakage within this section (an
-/// unparseable `a=rtpmap` or `a=fmtp`) — the
-/// caller records this as [`SdpWarning::MalformedMediaSection`] and keeps the
-/// section empty rather than aborting the whole parse.
 pub(super) fn parse_media_section(
     media: &session::Media,
     media_type: SdpMediaType,
     defaults: &SessionDefaults,
-) -> Result<MediaSection, SdpCodecError> {
+) -> MediaSection {
     let mut section = MediaSection::default();
 
     // Media-level attributes override session-level.
@@ -70,7 +64,7 @@ pub(super) fn parse_media_section(
     let media_maxptime = ptime_from_attrs(&media.attributes, "maxptime", &mut section.warnings)
         .or(defaults.maxptime);
 
-    let tables = attribute_tables(media, &mut section.warnings)?;
+    let tables = attribute_tables(media, &mut section.warnings);
 
     for (at, &pt) in media
         .payloads
@@ -149,7 +143,7 @@ pub(super) fn parse_media_section(
             .push(SdpCodecEntry::Rtp(codec));
     }
 
-    Ok(section)
+    section
 }
 
 /// One payload's resolved packetization and bitrate.
