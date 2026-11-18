@@ -1130,3 +1130,156 @@ fn the_enterprise_separator_is_refused_in_any_field() {
         assert!(!msg.contains("SECRET"), "{input}: {msg}");
     }
 }
+
+/// Each constructor and `with_*` builder refuses the field parse and config load refuse, naming
+/// the same endpoint, field and fault.
+#[test]
+fn builders_refuse_what_parse_refuses() {
+    use EndpointFieldFault::*;
+    let cases: Vec<(
+        Result<Endpoint, OriginateError>,
+        &str,
+        &str,
+        EndpointFieldFault,
+    )> = vec![
+        (
+            SofiaEndpoint::new("gateway", "1000").map(Endpoint::from),
+            "sofia",
+            "profile",
+            ReadsAsGateway,
+        ),
+        (
+            SofiaEndpoint::new("a/b", "1000").map(Endpoint::from),
+            "sofia",
+            "profile",
+            ModuleSeparator("/"),
+        ),
+        (
+            SofiaEndpoint::new("internal", "a:_:b").map(Endpoint::from),
+            "sofia",
+            "destination",
+            EnterpriseSeparator,
+        ),
+        (
+            SofiaGateway::new("gw@x", "1").map(Endpoint::from),
+            "sofia gateway",
+            "gateway",
+            ModuleSeparator("@"),
+        ),
+        (
+            SofiaGateway::new("a::b", "1").map(Endpoint::from),
+            "sofia gateway",
+            "gateway",
+            ModuleSeparator("::"),
+        ),
+        (
+            SofiaGateway::new("gw", "1")
+                .and_then(|ep| ep.with_profile("p^"))
+                .map(Endpoint::from),
+            "sofia gateway",
+            "profile",
+            ModuleSeparator("^"),
+        ),
+        (
+            SofiaContact::new("u~", "d").map(Endpoint::from),
+            "sofia_contact",
+            "user",
+            FunctionSeparator("~"),
+        ),
+        (
+            SofiaContact::new("u", "").map(Endpoint::from),
+            "sofia_contact",
+            "domain",
+            EmptyReadsAsDefault,
+        ),
+        (
+            SofiaContact::new("u", "d")
+                .and_then(|ep| ep.with_profile(""))
+                .map(Endpoint::from),
+            "sofia_contact",
+            "profile",
+            EmptyReadsAsDefault,
+        ),
+        (
+            LoopbackEndpoint::new("9/9").map(Endpoint::from),
+            "loopback",
+            "extension",
+            ModuleSeparator("/"),
+        ),
+        (
+            LoopbackEndpoint::new("9199")
+                .and_then(|ep| ep.with_context(""))
+                .map(Endpoint::from),
+            "loopback",
+            "context",
+            EmptyReadsAsDefault,
+        ),
+        (
+            LoopbackEndpoint::new("9199")
+                .and_then(|ep| ep.with_dialplan(""))
+                .map(Endpoint::from),
+            "loopback",
+            "dialplan",
+            EmptyReadsAsDefault,
+        ),
+        (
+            LoopbackEndpoint::new("app=park")
+                .and_then(|ep| ep.with_context("x"))
+                .map(Endpoint::from),
+            "loopback",
+            "context",
+            FollowsAnApplication,
+        ),
+        (
+            UserEndpoint::new("a@b").map(Endpoint::from),
+            "user",
+            "name",
+            ModuleSeparator("@"),
+        ),
+        (
+            UserEndpoint::new("").map(Endpoint::from),
+            "user",
+            "name",
+            EmptyDialsNothing,
+        ),
+        (
+            UserEndpoint::new("bob")
+                .and_then(|ep| ep.with_domain("a:_:b"))
+                .map(Endpoint::from),
+            "user",
+            "domain",
+            EnterpriseSeparator,
+        ),
+        (
+            AudioEndpoint::new()
+                .with_destination("")
+                .map(Endpoint::Alsa),
+            "audio",
+            "destination",
+            EmptyReadsAsDefault,
+        ),
+        (
+            GroupCall::new("g+", "d").map(Endpoint::from),
+            "group_call",
+            "group",
+            FunctionSeparator("+"),
+        ),
+        (
+            GroupCall::new("g", "d d").map(Endpoint::from),
+            "group_call",
+            "domain",
+            ReadBeforeTheFunction,
+        ),
+    ];
+    for (built, endpoint, field, fault) in cases {
+        assert_eq!(
+            built,
+            Err(OriginateError::UndeliverableEndpointField {
+                endpoint,
+                field,
+                fault
+            }),
+            "{endpoint} {field}"
+        );
+    }
+}
