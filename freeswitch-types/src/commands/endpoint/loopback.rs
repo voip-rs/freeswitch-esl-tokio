@@ -185,7 +185,8 @@ mod tests {
     #[test]
     fn loopback_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("loopback_initial_codec", "L16@48000h");
+        vars.insert("loopback_initial_codec", "L16@48000h")
+            .unwrap();
         let ep = LoopbackEndpoint::new("100")
             .with_context("test")
             .with_variables(vars);

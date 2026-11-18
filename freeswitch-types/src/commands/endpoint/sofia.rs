@@ -482,7 +482,8 @@ mod tests {
     #[test]
     fn sofia_endpoint_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("originate_timeout", "30");
+        vars.insert("originate_timeout", "30")
+            .unwrap();
         let ep = SofiaEndpoint {
             profile: "internal".into(),
             destination: "1000@example.com".into(),
@@ -550,7 +551,8 @@ mod tests {
     #[test]
     fn serde_sofia_endpoint_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("originate_timeout", "30");
+        vars.insert("originate_timeout", "30")
+            .unwrap();
         let ep = SofiaEndpoint {
             profile: "internal".into(),
             destination: "1000@example.com".into(),
@@ -591,7 +593,8 @@ mod tests {
     #[test]
     fn sofia_gateway_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("sip_h_X-Custom", "value");
+        vars.insert("sip_h_X-Custom", "value")
+            .unwrap();
         let ep = SofiaGateway {
             gateway: "gw1".into(),
             destination: "1234".into(),
@@ -712,7 +715,8 @@ mod tests {
     #[test]
     fn sofia_contact_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("presence_id", "1000@example.com");
+        vars.insert("presence_id", "1000@example.com")
+            .unwrap();
         let ep = SofiaContact {
             user: "1000".into(),
             domain: "example.com".into(),

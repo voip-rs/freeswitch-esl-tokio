@@ -88,7 +88,8 @@ fn an_unbalanced_bracket_is_refused_while_a_balanced_one_is_not() {
 #[test]
 fn chosen_separator_leaves_commas_alone() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("codecs", "PCMA,PCMU,G729");
+    vars.insert("codecs", "PCMA,PCMU,G729")
+        .unwrap();
     let vars = vars
         .with_separator(':')
         .unwrap();
@@ -124,7 +125,8 @@ fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
             VariablesType::Channel,
         ] {
             let mut vars = Variables::new(scope);
-            vars.insert("a", "1");
+            vars.insert("a", "1")
+                .unwrap();
             assert!(
                 vars.with_separator(sep)
                     .is_err(),
@@ -142,7 +144,8 @@ fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
     }
     for sep in ['~', ';', '!', '#', 'N', '0', '"', ','] {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("a", "1");
+        vars.insert("a", "1")
+            .unwrap();
         assert!(
             vars.with_separator(sep)
                 .is_ok(),
@@ -171,7 +174,8 @@ fn the_parser_refuses_every_separator_the_builder_does() {
 #[test]
 fn separator_already_present_in_a_value_is_refused() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("uri", "sip:bob@example.com");
+    vars.insert("uri", "sip:bob@example.com")
+        .unwrap();
     let err = vars
         .with_separator(':')
         .unwrap_err()
@@ -291,7 +295,8 @@ fn the_direct_carrier_escapes_for_the_originate_passes_alone() {
 #[test]
 fn display_defaults_to_the_api_carrier() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "it's");
+    vars.insert("k", "it's")
+        .unwrap();
     assert_eq!(vars.to_string(), r"{k=it\\\\\\\'s}");
     assert_eq!(
         vars.display_for(DialStringCarrier::Dialplan)
@@ -305,8 +310,10 @@ fn round_trips_at_every_carrier() {
     for carrier in CARRIERS {
         for value in ["it's", r"a\,b", r"C:\path", "a,b", "with space"] {
             let mut vars = Variables::new(VariablesType::Default);
-            vars.insert("k", value);
-            vars.insert("after", "sentinel");
+            vars.insert("k", value)
+                .unwrap();
+            vars.insert("after", "sentinel")
+                .unwrap();
             let rendered = vars
                 .display_for(carrier)
                 .to_string();
@@ -327,8 +334,10 @@ fn separated_block_round_trips_at_every_carrier() {
     for carrier in CARRIERS {
         for value in ["it's", "a,b", r"C:\path", r"a\nb", "with space"] {
             let mut vars = Variables::new(VariablesType::Default);
-            vars.insert("k", value);
-            vars.insert("after", "sentinel");
+            vars.insert("k", value)
+                .unwrap();
+            vars.insert("after", "sentinel")
+                .unwrap();
             let vars = vars
                 .with_separator('~')
                 .expect("'~' appears in none of these values");
@@ -352,8 +361,10 @@ fn separated_block_round_trips_at_every_carrier() {
 fn value_with_backslash_round_trips() {
     for value in [r"a\,b", r"C:\path", r"trailing\", r"\\", r"a\nb"] {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("k", value);
-        vars.insert("after", "sentinel");
+        vars.insert("k", value)
+            .unwrap();
+        vars.insert("after", "sentinel")
+            .unwrap();
         let rendered = vars.to_string();
 
         let back: Variables = rendered
@@ -401,15 +412,18 @@ fn unknown_delimiters_error_omits_the_block() {
 #[test]
 fn variables_standard_chars() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("test_key", "this_value");
-    vars.insert("second", "2");
+    vars.insert("test_key", "this_value")
+        .unwrap();
+    vars.insert("second", "2")
+        .unwrap();
     assert_eq!(vars.to_string(), "{test_key=this_value,second=2}");
 }
 
 #[test]
 fn variables_comma_escaped() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("test_key", "this,is,a,value");
+    vars.insert("test_key", "this,is,a,value")
+        .unwrap();
     let result = vars.to_string();
     assert!(result.contains("\\,"));
 }
@@ -417,7 +431,8 @@ fn variables_comma_escaped() {
 #[test]
 fn variables_spaces_quoted() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("test_key", "this is a value");
+    vars.insert("test_key", "this is a value")
+        .unwrap();
     let result = vars.to_string();
     assert_eq!(
         result
@@ -430,7 +445,8 @@ fn variables_spaces_quoted() {
 #[test]
 fn variables_single_quote_escaped() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("test_key", "let's_this_be_a_value");
+    vars.insert("test_key", "let's_this_be_a_value")
+        .unwrap();
     let result = vars.to_string();
     assert!(result.contains("\\'"));
 }
@@ -438,7 +454,8 @@ fn variables_single_quote_escaped() {
 #[test]
 fn variables_enterprise_delimiters() {
     let mut vars = Variables::new(VariablesType::Enterprise);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     let result = vars.to_string();
     assert!(result.starts_with('<'));
     assert!(result.ends_with('>'));
@@ -447,7 +464,8 @@ fn variables_enterprise_delimiters() {
 #[test]
 fn variables_channel_delimiters() {
     let mut vars = Variables::new(VariablesType::Channel);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     let result = vars.to_string();
     assert!(result.starts_with('['));
     assert!(result.ends_with(']'));
@@ -456,7 +474,8 @@ fn variables_channel_delimiters() {
 #[test]
 fn variables_default_delimiters() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     let result = vars.to_string();
     assert!(result.starts_with('{'));
     assert!(result.ends_with('}'));
@@ -465,8 +484,10 @@ fn variables_default_delimiters() {
 #[test]
 fn variables_parse_round_trip() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("origination_caller_id_number", "9005551212");
-    vars.insert("sip_h_Call-Info", "<url>;meta=123,<uri>");
+    vars.insert("origination_caller_id_number", "9005551212")
+        .unwrap();
+    vars.insert("sip_h_Call-Info", "<url>;meta=123,<uri>")
+        .unwrap();
     let s = vars.to_string();
     let parsed: Variables = s
         .parse()
@@ -616,8 +637,10 @@ fn serde_variables_type() {
 #[test]
 fn serde_variables_flat_default() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("key1", "val1");
-    vars.insert("key2", "val2");
+    vars.insert("key1", "val1")
+        .unwrap();
+    vars.insert("key2", "val2")
+        .unwrap();
     let json = serde_json::to_string(&vars).unwrap();
     let parsed: Variables = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.scope(), VariablesType::Default);
@@ -628,7 +651,8 @@ fn serde_variables_flat_default() {
 #[test]
 fn serde_variables_scoped_enterprise() {
     let mut vars = Variables::new(VariablesType::Enterprise);
-    vars.insert("key1", "val1");
+    vars.insert("key1", "val1")
+        .unwrap();
     let json = serde_json::to_string(&vars).unwrap();
     assert!(json.contains("\"enterprise\""));
     let parsed: Variables = serde_json::from_str(&json).unwrap();
@@ -658,7 +682,8 @@ fn serde_variables_scoped_deserializes() {
 #[test]
 fn serde_variables_separator_round_trips() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("codecs", "PCMA,PCMU");
+    vars.insert("codecs", "PCMA,PCMU")
+        .unwrap();
     let vars = vars
         .with_separator('|')
         .unwrap();
@@ -675,11 +700,14 @@ fn serde_variables_separator_round_trips() {
 #[test]
 fn serde_variables_default_separator_is_absent() {
     let mut flat = Variables::new(VariablesType::Default);
-    flat.insert("k", "v");
+    flat.insert("k", "v")
+        .unwrap();
     assert_eq!(serde_json::to_string(&flat).unwrap(), r#"{"k":"v"}"#);
 
     let mut scoped = Variables::new(VariablesType::Channel);
-    scoped.insert("k", "v");
+    scoped
+        .insert("k", "v")
+        .unwrap();
     assert_eq!(
         serde_json::to_string(&scoped).unwrap(),
         r#"{"scope":"channel","vars":{"k":"v"}}"#
@@ -700,13 +728,15 @@ fn serde_variables_separator_deserializes_from_config() {
 #[test]
 fn pipe_separator_is_refused_in_channel_scope_only() {
     let mut vars = Variables::new(VariablesType::Channel);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     assert!(vars
         .clone()
         .with_separator('|')
         .is_err());
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     assert!(vars
         .with_separator('|')
         .is_ok());
@@ -832,7 +862,8 @@ fn an_edge_space_is_escaped_for_the_pass_that_trims_it() {
     }
 
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", " a b ");
+    vars.insert("k", " a b ")
+        .unwrap();
     assert_eq!(
         vars.display_for(tilde())
             .to_string(),
@@ -917,8 +948,10 @@ fn round_trips_at_every_target() {
             for (scope, values) in &cases {
                 for &value in values {
                     let mut vars = Variables::new(*scope);
-                    vars.insert("k", value);
-                    vars.insert("after", "sentinel");
+                    vars.insert("k", value)
+                        .unwrap();
+                    vars.insert("after", "sentinel")
+                        .unwrap();
                     let rendered = vars
                         .display_for(target)
                         .to_string();
@@ -1129,7 +1162,8 @@ fn a_block_at_an_argv_separator_is_escaped_once_at_its_edge() {
     ];
     for (scope, value, want) in cases {
         let mut vars = Variables::new(scope);
-        vars.insert("k", value);
+        vars.insert("k", value)
+            .unwrap();
         assert_eq!(
             vars.display_for(tilde())
                 .to_string(),
@@ -1218,8 +1252,10 @@ fn a_key_the_switch_splits_arrives_escaped_and_round_trips() {
                     continue;
                 }
                 let mut vars = Variables::new(scope);
-                vars.insert(key, "v");
-                vars.insert("after", "sentinel");
+                vars.insert(key, "v")
+                    .unwrap();
+                vars.insert("after", "sentinel")
+                    .unwrap();
                 let rendered = vars
                     .display_for(target)
                     .to_string();

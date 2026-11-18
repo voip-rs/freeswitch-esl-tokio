@@ -131,7 +131,14 @@ fn variables_corpus(records: &mut Vec<String>) {
     for scope in scopes {
         for sep in seps {
             let sep_label = sep.map_or("comma".to_string(), |c| c.to_string());
-            let mut vars = Variables::with_vars(scope, entries.clone());
+            let Ok(mut vars) = Variables::with_vars(scope, entries.clone()) else {
+                rec(
+                    records,
+                    format!("vars/{scope:?}/sep-{sep_label}/build-err"),
+                    "Err",
+                );
+                continue;
+            };
             if let Some(c) = sep {
                 vars = match vars.with_separator(c) {
                     Ok(v) => v,
@@ -168,7 +175,14 @@ fn variables_corpus(records: &mut Vec<String>) {
     // every other value sharing the block.
     for scope in scopes {
         for &(name, v) in VALUES {
-            let vars = Variables::with_vars(scope, [("k", v)]);
+            let Ok(vars) = Variables::with_vars(scope, [("k", v)]) else {
+                rec(
+                    records,
+                    format!("vars/{scope:?}/single-{name}/build-err"),
+                    "Err",
+                );
+                continue;
+            };
             for &(tname, target) in &targets {
                 let rendered = vars
                     .display_for(target)
@@ -323,7 +337,8 @@ fn endpoint_corpus(records: &mut Vec<String>) {
     }
 
     let attach_vars = |mut ep: Endpoint| -> Endpoint {
-        let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")]);
+        let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
+            .expect("plain pairs build");
         ep.set_variables(Some(vars));
         ep
     };
@@ -515,7 +530,8 @@ fn originate_corpus(records: &mut Vec<String>) {
 }
 
 fn bridge_corpus(records: &mut Vec<String>) {
-    let vars = Variables::with_vars(VariablesType::Default, [("hangup_after_bridge", "true")]);
+    let vars = Variables::with_vars(VariablesType::Default, [("hangup_after_bridge", "true")])
+        .expect("a plain pair builds");
     let ep1: Endpoint = SofiaGateway::new("gw-a", "it's,weird").into();
     let ep2: Endpoint = SofiaGateway::new("gw-b", "a|b\\c").into();
     let ep3: Endpoint = ErrorEndpoint::new(HangupCause::NoRouteDestination).into();

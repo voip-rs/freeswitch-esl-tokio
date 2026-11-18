@@ -245,7 +245,8 @@ fn endpoint_display_delegates_to_inner() {
 #[test]
 fn dial_string_variables_returns_some() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     let ep = SofiaEndpoint {
         profile: "internal".into(),
         destination: "1000".into(),
@@ -282,7 +283,8 @@ fn dial_string_set_variables() {
         variables: None,
     };
     let mut vars = Variables::new(VariablesType::Channel);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     ep.set_variables(Some(vars));
     assert!(ep
         .variables()
@@ -300,7 +302,8 @@ fn dial_string_error_endpoint_no_variables() {
 #[test]
 fn dial_string_on_endpoint_enum() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "v");
+    vars.insert("k", "v")
+        .unwrap();
     let ep = Endpoint::Sofia(SofiaEndpoint {
         profile: "internal".into(),
         destination: "1000".into(),
@@ -426,7 +429,8 @@ fn audio_endpoints_render_and_parse_per_module() {
 #[test]
 fn audio_endpoint_carries_variables() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("codec", "PCMU");
+    vars.insert("codec", "PCMU")
+        .unwrap();
     let ep = Endpoint::PortAudio(
         AudioEndpoint::new()
             .with_destination("auto_answer")
@@ -446,8 +450,10 @@ fn audio_endpoint_carries_variables() {
 #[test]
 fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
     let mut vars = Variables::new(VariablesType::Channel);
-    vars.insert("path", r"C:\path");
-    vars.insert("other", "a,b");
+    vars.insert("path", r"C:\path")
+        .unwrap();
+    vars.insert("other", "a,b")
+        .unwrap();
 
     let with_vars = |mut ep: Endpoint| {
         ep.set_variables(Some(vars.clone()));
@@ -506,10 +512,14 @@ fn every_endpoint_type_round_trips_at_an_argv_separator() {
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments");
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("path", r"C:\path");
-    vars.insert("tilde", "x~y");
-    vars.insert("spaced", "a b");
-    vars.insert("quote", "it's");
+    vars.insert("path", r"C:\path")
+        .unwrap();
+    vars.insert("tilde", "x~y")
+        .unwrap();
+    vars.insert("spaced", "a b")
+        .unwrap();
+    vars.insert("quote", "it's")
+        .unwrap();
 
     let with_vars = |mut ep: Endpoint| {
         ep.set_variables(Some(vars.clone()));

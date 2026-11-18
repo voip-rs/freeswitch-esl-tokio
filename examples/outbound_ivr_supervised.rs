@@ -160,8 +160,8 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
     // execute-time one as the only way this pair can resign -- which is the
     // path that masquerades the socket application onto the real channel.
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("loopback_bowout", "false");
-    vars.insert("loopback_bowout_on_execute", "true");
+    vars.insert("loopback_bowout", "false")?;
+    vars.insert("loopback_bowout_on_execute", "true")?;
 
     let originate = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new(&endpoint).with_variables(vars)),

@@ -50,3 +50,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Originate::dialplan_name()` | `dialplan_type().map(DialplanType::name)`; `dialplan_type()` now returns a named dialplan too, where it returned `None` |
 | `"name".parse::<DialplanType>()` refuses any name but `inline` and `xml` | accepts any dialplan name but `undef`, which `ParseDialplanTypeError` now reports alone |
 | `Application::to_string_with_dialplan` | no public replacement; render the `Originate` |
+| `Variables::insert(k, v)` returns `()` | returns `Result<(), OriginateError>`, refusing what parsing a block refuses |
+| `Variables::with_vars(scope, pairs)` returns `Variables` | returns `Result<Variables, OriginateError>` |
+| `Variables::set_scope(scope)` returns `()` | returns `Result<(), OriginateError>`, refusing a scope a held pair or the chosen separator cannot be written in |
+| `Variables::iter_mut()`, `values_mut()` | removed; `insert` the new value under the same name, which keeps its position |

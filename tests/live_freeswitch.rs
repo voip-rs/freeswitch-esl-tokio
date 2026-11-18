@@ -337,7 +337,8 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
     // FS preserves the variable name verbatim and emits it as
     // `variable_<name>` in the connect reply.
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("MyMixed_Case_Var", "preserved");
+    vars.insert("MyMixed_Case_Var", "preserved")
+        .unwrap();
 
     let endpoint = LoopbackEndpoint::new("9199")
         .with_context("test")

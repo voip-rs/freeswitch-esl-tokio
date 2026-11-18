@@ -122,7 +122,8 @@ fn build_vars(
                     value.clone(),
                 )
             }),
-    );
+    )
+    .ok()?;
     match sep {
         Some(sep) => vars
             .with_separator(sep)

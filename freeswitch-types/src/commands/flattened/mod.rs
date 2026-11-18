@@ -482,16 +482,20 @@ fn write_blocks(
     target: DialStringTarget,
 ) -> fmt::Result {
     for block in blocks {
-        let mut vars = Variables::new(VariablesType::of_block(block));
-        for pair in &block.pairs {
-            if let PairEffect::Set(value) = &pair.effect {
-                vars.insert(
-                    pair.key
-                        .as_str(),
-                    value.as_str(),
-                );
-            }
-        }
+        let vars = Variables::installed_by_switch(
+            VariablesType::of_block(block),
+            block
+                .pairs
+                .iter()
+                .filter_map(|pair| match &pair.effect {
+                    PairEffect::Set(value) => Some((
+                        pair.key
+                            .as_str(),
+                        value.as_str(),
+                    )),
+                    _ => None,
+                }),
+        );
         if vars.is_empty() {
             continue;
         }

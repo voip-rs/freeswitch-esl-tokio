@@ -430,9 +430,12 @@ mod tests {
     #[test]
     fn display_and_from_str_are_the_default_revision() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("cid", "it's");
+        vars.insert("cid", "it's")
+            .unwrap();
         let mut ep_vars = Variables::new(VariablesType::Channel);
-        ep_vars.insert("path", r"C:\path");
+        ep_vars
+            .insert("path", r"C:\path")
+            .unwrap();
         let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
             .with_variables(ep_vars)
             .into()]])
@@ -455,7 +458,8 @@ mod tests {
     #[test]
     fn bridge_renders_one_level_shallower_than_the_default() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("cid", "it's");
+        vars.insert("cid", "it's")
+            .unwrap();
         let ep = SofiaGateway::new("gw", "18005551234");
         let bridge = BridgeDialString::new(vec![vec![ep.into()]]).with_variables(vars.clone());
 
@@ -472,8 +476,12 @@ mod tests {
     #[test]
     fn per_endpoint_escaped_values_round_trip() {
         let mut ep_vars = Variables::new(VariablesType::Channel);
-        ep_vars.insert("path", r"C:\path");
-        ep_vars.insert("other", "a,b");
+        ep_vars
+            .insert("path", r"C:\path")
+            .unwrap();
+        ep_vars
+            .insert("other", "a,b")
+            .unwrap();
         let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
             .with_variables(ep_vars)
             .into()]]);
@@ -551,7 +559,8 @@ mod tests {
     #[test]
     fn display_with_global_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("hangup_after_bridge", "true");
+        vars.insert("hangup_after_bridge", "true")
+            .unwrap();
         let bridge =
             BridgeDialString::new(vec![vec![
                 SofiaEndpoint::new("internal", "1000@domain").into()
@@ -566,7 +575,9 @@ mod tests {
     #[test]
     fn display_with_per_endpoint_variables() {
         let mut ep_vars = Variables::new(VariablesType::Channel);
-        ep_vars.insert("leg_timeout", "30");
+        ep_vars
+            .insert("leg_timeout", "30")
+            .unwrap();
         let bridge = BridgeDialString::new(vec![vec![
             SofiaGateway::new("gw1", "1234")
                 .with_variables(ep_vars)
@@ -786,7 +797,8 @@ mod tests {
     #[test]
     fn serde_round_trip_multi_group() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("hangup_after_bridge", "true");
+        vars.insert("hangup_after_bridge", "true")
+            .unwrap();
         let bridge = BridgeDialString::new(vec![
             vec![
                 SofiaGateway::new("primary", "1234").into(),
@@ -889,7 +901,8 @@ mod tests {
         let mut vars = Variables::new(VariablesType::Channel)
             .with_separator(sep)
             .unwrap();
-        vars.insert("v0", value);
+        vars.insert("v0", value)
+            .unwrap();
         BridgeDialString::new(vec![vec![
             Endpoint::PortAudio(AudioEndpoint::new().with_destination("[\\")),
             SofiaGateway::new("]", "")

@@ -42,7 +42,8 @@ fn endpoint_uri_only() {
 #[test]
 fn endpoint_uri_with_variable() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("one_variable", "1");
+    vars.insert("one_variable", "1")
+        .unwrap();
     let ep = Endpoint::Sofia(SofiaEndpoint {
         profile: "internal".into(),
         destination: "123@example.com".into(),
@@ -57,7 +58,8 @@ fn endpoint_uri_with_variable() {
 #[test]
 fn endpoint_variable_with_quote() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("one_variable", "one'quote");
+    vars.insert("one_variable", "one'quote")
+        .unwrap();
     let ep = Endpoint::Sofia(SofiaEndpoint {
         profile: "internal".into(),
         destination: "123@example.com".into(),
@@ -77,7 +79,8 @@ fn display_and_from_str_are_the_default_revision() {
     use crate::commands::variables::BlockParse;
 
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("cid", "it's");
+    vars.insert("cid", "it's")
+        .unwrap();
     let orig = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("gw", "1234").with_variables(vars)),
         Application::simple("park"),
@@ -97,7 +100,8 @@ fn display_and_from_str_are_the_default_revision() {
 #[test]
 fn loopback_endpoint_display() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("one_variable", "1");
+    vars.insert("one_variable", "1")
+        .unwrap();
     let ep = Endpoint::Loopback(
         LoopbackEndpoint::new("aUri")
             .with_context("aContext")
@@ -109,7 +113,8 @@ fn loopback_endpoint_display() {
 #[test]
 fn sofia_gateway_endpoint_display() {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("one_variable", "1");
+    vars.insert("one_variable", "1")
+        .unwrap();
     let ep = Endpoint::SofiaGateway(SofiaGateway {
         destination: "aUri".into(),
         profile: None,
@@ -713,8 +718,12 @@ fn originate_gap_filler_round_trips() {
 #[test]
 fn serde_originate_full_round_trip_with_variables() {
     let mut ep_vars = Variables::new(VariablesType::Default);
-    ep_vars.insert("originate_timeout", "30");
-    ep_vars.insert("sip_h_X-Custom", "value with spaces");
+    ep_vars
+        .insert("originate_timeout", "30")
+        .unwrap();
+    ep_vars
+        .insert("sip_h_X-Custom", "value with spaces")
+        .unwrap();
     let ep = Endpoint::SofiaGateway(SofiaGateway {
         gateway: "my_provider".into(),
         destination: "18005551234".into(),
@@ -1165,7 +1174,8 @@ fn test_endpoint() -> Endpoint {
 
 fn spaced_endpoint() -> Endpoint {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("k", "a b");
+    vars.insert("k", "a b")
+        .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
             .with_context("test")

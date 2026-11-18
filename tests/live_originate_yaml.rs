@@ -533,7 +533,8 @@ async fn live_originate_loopback_bowout_on_execute() {
 
     // No trigger yet: parking means this leg's first execute pass cannot race.
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("loopback_bowout", "false");
+    vars.insert("loopback_bowout", "false")
+        .unwrap();
     let cmd = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new("app=bridge:null/farend").with_variables(vars)),
         Application::park(),

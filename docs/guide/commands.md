@@ -211,7 +211,7 @@ let target = DialStringTarget::new(DialStringCarrier::EslApi)
 
 let hook = ExecuteOn::lua("/run/app/load_multipart.lua", ["/run/app/call-42.xml"]).unwrap();
 let mut vars = Variables::new(VariablesType::Default);
-vars.insert(ChannelVariable::ExecuteOnOriginate.as_str(), hook.to_string());
+vars.insert(ChannelVariable::ExecuteOnOriginate.as_str(), hook.to_string()).unwrap();
 assert_eq!(
     vars.display_for(target).to_string(),
     "{execute_on_originate='lua /run/app/load_multipart.lua /run/app/call-42.xml'}"

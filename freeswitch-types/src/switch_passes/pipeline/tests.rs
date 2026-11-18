@@ -408,9 +408,11 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
                     if separator.is_some_and(|sep| v.contains(sep)) {
                         continue;
                     }
-                    vars.insert(format!("v{i}"), *v);
+                    vars.insert(format!("v{i}"), *v)
+                        .unwrap();
                 }
-                vars.insert("sentinel", "s");
+                vars.insert("sentinel", "s")
+                    .unwrap();
                 let vars = match separator {
                     Some(sep) => vars
                         .with_separator(sep)

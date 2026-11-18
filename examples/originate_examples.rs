@@ -34,7 +34,7 @@ use tracing::{error, info};
 /// result is coming.
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
 
-fn print_endpoint_examples(block_parse: BlockParse) {
+fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Endpoint wire formats ===");
 
     // -----------------------------------------------------------------------
@@ -171,8 +171,8 @@ fn print_endpoint_examples(block_parse: BlockParse) {
     println!("\n-- Default scope {{}} --");
 
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("hangup_after_bridge", "true");
-    vars.insert("continue_on_fail", "true");
+    vars.insert("hangup_after_bridge", "true")?;
+    vars.insert("continue_on_fail", "true")?;
     let cmd = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("carrier", "15551234567").with_variables(vars)),
         Application::simple("bridge"),
@@ -184,13 +184,9 @@ fn print_endpoint_examples(block_parse: BlockParse) {
     println!("\n-- Channel scope [] --");
 
     let mut vars = Variables::new(VariablesType::Channel);
-    vars.insert("originate_timeout", "20");
+    vars.insert("originate_timeout", "20")?;
     // Typed SIP passthrough header -- produces "sip_h_X-Tenant" on the wire
-    vars.insert(
-        // Safe unwrap: "X-Tenant" is a valid SIP header name (alphanumeric + hyphens)
-        SipPassthroughHeader::request_raw("X-Tenant").unwrap(),
-        "acme",
-    );
+    vars.insert(SipPassthroughHeader::request_raw("X-Tenant")?, "acme")?;
     let cmd = Originate::application(
         Endpoint::Sofia(
             SofiaEndpoint::new("external", "sip:alice@carrier.example.com").with_variables(vars),
@@ -204,7 +200,7 @@ fn print_endpoint_examples(block_parse: BlockParse) {
     println!("\n-- Comma-containing values (auto-escaped) --");
 
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("absolute_codec_string", "PCMU,PCMA,G722");
+    vars.insert("absolute_codec_string", "PCMU,PCMA,G722")?;
     let cmd = Originate::application(
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "1234").with_variables(vars)),
         Application::simple("park"),
@@ -316,6 +312,7 @@ fn print_endpoint_examples(block_parse: BlockParse) {
         }
         Err(e) => println!("parse error: {}", e),
     }
+    Ok(())
 }
 
 #[tokio::main]
@@ -327,7 +324,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let block_parse = block_parse::block_parse_from_env()?;
     println!("parser revision: {block_parse}\n");
 
-    print_endpoint_examples(block_parse);
+    print_endpoint_examples(block_parse)?;
 
     // -----------------------------------------------------------------------
     // Part 2: live call via bgapi

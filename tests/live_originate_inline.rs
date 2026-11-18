@@ -31,8 +31,10 @@ const PARK_TIMEOUT_SECS: &str = "8";
 /// Holds the leg while the test reads back what the application received.
 fn parked_loopback(uuid: &str) -> Endpoint {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("origination_uuid", uuid);
-    vars.insert("park_timeout", PARK_TIMEOUT_SECS);
+    vars.insert("origination_uuid", uuid)
+        .unwrap();
+    vars.insert("park_timeout", PARK_TIMEOUT_SECS)
+        .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
             .with_context("test")

@@ -37,7 +37,8 @@ fn test_9199() -> Endpoint {
 /// [`test_9199`] with application arguments delivered as the originate line left them.
 fn unexpanded_9199() -> Endpoint {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("app_disable_expand_variables", "true");
+    vars.insert("app_disable_expand_variables", "true")
+        .unwrap();
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
             .with_context("test")
@@ -358,8 +359,10 @@ async fn unanswered_originate_elapsed(
 ) {
     let marker = format!("argv-timeout-{}-{seconds}", std::process::id());
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("fp_marker", marker.as_str());
-    vars.insert("ignore_early_media", "true");
+    vars.insert("fp_marker", marker.as_str())
+        .unwrap();
+    vars.insert("ignore_early_media", "true")
+        .unwrap();
     let cmd = Originate::application(
         Endpoint::Loopback(LoopbackEndpoint::new("app=park").with_variables(vars)),
         Application::simple("park"),
@@ -701,9 +704,11 @@ async fn dial_without_waiting(
 /// `{origination_uuid=<uuid>}` plus `extra`, so the dialled channel is found by its own uuid.
 fn uuid_block(uuid: &str, extra: &[(&str, &str)]) -> Variables {
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("origination_uuid", uuid);
+    vars.insert("origination_uuid", uuid)
+        .unwrap();
     for (key, value) in extra {
-        vars.insert(*key, *value);
+        vars.insert(*key, *value)
+            .unwrap();
     }
     vars
 }
@@ -1102,8 +1107,10 @@ async fn live_chosen_separator_carries_commas_unescaped() {
     let (client, _events, permit) = connect().await;
 
     let mut vars = Variables::new(VariablesType::Default);
-    vars.insert("codecs", "PCMA,PCMU,G729");
-    vars.insert("tenant", "acme");
+    vars.insert("codecs", "PCMA,PCMU,G729")
+        .unwrap();
+    vars.insert("tenant", "acme")
+        .unwrap();
     let vars = vars
         .with_separator(':')
         .expect("':' does not appear in any value here");
@@ -1225,7 +1232,8 @@ async fn live_execute_on_originate_runs_before_the_leg_does() {
     vars.insert(
         ChannelVariable::ExecuteOnOriginate.as_str(),
         hook.to_string(),
-    );
+    )
+    .unwrap();
 
     let uuid = client
         .api(&format!("originate {vars}null/hook &park()"))

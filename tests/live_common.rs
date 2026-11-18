@@ -557,7 +557,8 @@ pub fn escaping_block(
         .iter()
         .chain(pairs.iter())
     {
-        vars.insert(*k, *v);
+        vars.insert(*k, *v)
+            .unwrap();
     }
     match separator {
         None => vars,

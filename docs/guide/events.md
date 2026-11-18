@@ -173,7 +173,7 @@ if let Some(raw) = pai {
 }
 
 // Setting outgoing SIP headers via channel variables
-vars.insert(SipPassthroughHeader::request(SipHeader::CallInfo), "<sip:example.com>;answer-after=0");
+vars.insert(SipPassthroughHeader::request(SipHeader::CallInfo), "<sip:example.com>;answer-after=0").unwrap();
 
 // SIP multipart body extraction
 let body = MultipartBody::parse(raw_multipart).unwrap().unwrap();

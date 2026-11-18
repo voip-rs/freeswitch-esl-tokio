@@ -199,19 +199,17 @@ impl Variables {
         }
     }
 
-    /// Create from an existing set of key-value pairs.
+    /// Create from an existing set of key-value pairs, refusing the first one
+    /// [`insert`](Self::insert) refuses.
     pub fn with_vars(
         vars_type: VariablesType,
         vars: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
-    ) -> Self {
-        Self {
-            vars_type,
-            inner: vars
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            separator: None,
+    ) -> Result<Self, OriginateError> {
+        let mut built = Self::new(vars_type);
+        for (key, value) in vars {
+            built.insert(key, value)?;
         }
+        Ok(built)
     }
 
     /// Separate the pairs with `sep` instead of a comma, emitting the block in
@@ -255,15 +253,36 @@ impl Variables {
         Ok(self)
     }
 
+    /// The pairs the switch itself installed, unchecked: text it produced is reported, not
+    /// refused, so a pair the builder would refuse still renders as the switch read it.
+    pub(crate) fn installed_by_switch<'a>(
+        vars_type: VariablesType,
+        pairs: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Self {
+        Self {
+            vars_type,
+            inner: pairs
+                .into_iter()
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect(),
+            separator: None,
+        }
+    }
+
     /// The `^^` separator this block renders with, if one was chosen.
     pub fn separator(&self) -> Option<char> {
         self.separator
     }
 
     /// Insert or overwrite a variable.
-    pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
+    pub fn insert(
+        &mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<(), OriginateError> {
         self.inner
             .insert(key.into(), value.into());
+        Ok(())
     }
 
     /// Remove a variable by name, returning its value if it existed.
@@ -297,8 +316,9 @@ impl Variables {
     }
 
     /// Change the variable scope.
-    pub fn set_scope(&mut self, scope: VariablesType) {
+    pub fn set_scope(&mut self, scope: VariablesType) -> Result<(), OriginateError> {
         self.vars_type = scope;
+        Ok(())
     }
 
     /// Iterate over key-value pairs in insertion order.
@@ -306,19 +326,6 @@ impl Variables {
         self.inner
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
-    }
-
-    /// Mutable iterator over key-value pairs in insertion order.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut String)> {
-        self.inner
-            .iter_mut()
-            .map(|(k, v)| (k.as_str(), v))
-    }
-
-    /// Mutable iterator over values in insertion order.
-    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut String> {
-        self.inner
-            .values_mut()
     }
 }
 
