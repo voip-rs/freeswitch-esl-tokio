@@ -503,3 +503,29 @@ fn an_rtpmap_reads_as_far_as_its_rate_and_channels() {
         .collect();
     assert_eq!(channels, [("opus", Some(2)), ("L16", Some(0))]);
 }
+
+// parse_media_attr and parse_session_attr match attribute names with su_casematch, and each
+// direction attribute overwrites the mode the one before it set.
+#[test]
+fn attribute_names_match_in_any_case_and_the_last_direction_wins() {
+    let codecs = parse(
+        "a=RECVONLY\r\nm=audio 5004 RTP/AVP 96\r\na=RTPMAP:96 opus/48000/2\r\na=FMTP:96 useinbandfec=1\r\na=PTIME:40\r\nm=audio 5006 RTP/AVP 0\r\na=SendOnly\r\na=inactive\r\na=sendrecv\r\n",
+    );
+    let rtp = rtp_codec(codecs.entries());
+    let opus = codec_named(&rtp, "opus").expect("RTPMAP names pt 96");
+    assert_eq!(opus.fmtp(), Some("useinbandfec=1"));
+    assert_eq!(opus.ptime(), Some(40));
+    let directions: Vec<_> = codecs
+        .sections()
+        .iter()
+        .map(|s| s.direction())
+        .collect();
+    assert_eq!(directions, [SdpDirection::RecvOnly, SdpDirection::SendRecv]);
+    assert!(
+        codecs
+            .warnings()
+            .is_empty(),
+        "{:?}",
+        codecs.warnings()
+    );
+}

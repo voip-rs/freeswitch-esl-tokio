@@ -20,7 +20,7 @@ use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
 /// Lines whose handling waits on a fix still to land; each fix flips its own.
 const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = false;
-const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
+const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = false;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
 const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = false;
