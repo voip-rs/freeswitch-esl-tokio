@@ -14,11 +14,12 @@ the connection using the preserved fd and any residual parser bytes.
 
 ```rust
 #[cfg(unix)]
-let (fd, residual) = client.teardown_for_reexec().await?;
+let handoff = client.teardown_for_reexec().await?;
+let (fd, residual) = (handoff.fd(), handoff.residual());
 ```
 
-Returns the raw socket fd and any unparsed bytes remaining in the
-parser buffer. After this call:
+Returns a `ReexecHandoff` carrying the raw socket fd and any unparsed
+bytes remaining in the parser buffer. After this call:
 
 - The connection status is `Disconnected(ReexecTeardown)`.
 - The caller must clear `CLOEXEC` on the fd before `exec()`.
@@ -139,8 +140,9 @@ since the process exits shortly after).
 SIGUSR2 received:
   // 1. Stop accepting new work
   // 2. Wait for pending commands to complete
-  let (fd, residual) = client.teardown_for_reexec().await?;
-  // 3. Serialize app state + residual to disk/env
+  let handoff = client.teardown_for_reexec().await?;
+  let fd = handoff.fd();
+  // 3. Serialize app state + handoff.residual() to disk/env
   // 4. Clear CLOEXEC on fd
   nix::fcntl::fcntl(fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty()))?;
   // 5. mem::forget(client) to keep fd open

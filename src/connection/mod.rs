@@ -24,6 +24,8 @@ mod reexec;
 
 pub use auth::AuthMethod;
 pub use client::SwallowedEventTypes;
+#[cfg(unix)]
+pub use reexec::ReexecHandoff;
 
 use auth::{authenticate, Handshake};
 use reader::reader_loop;

@@ -65,19 +65,21 @@ mod demo {
 
         // Phase 2: teardown
         info!("Tearing down for re-exec...");
-        let (fd, residual) = client
+        let handoff = client
             .teardown_for_reexec()
             .await?;
         info!(
             "Teardown complete: fd={}, {} residual bytes",
-            fd,
-            residual.len()
+            handoff.fd(),
+            handoff
+                .residual()
+                .len()
         );
 
         // A real re-exec clears CLOEXEC and execs here; this one stays in the
         // process, so it dup()s past the reactor registration the old client
         // still holds. Both steps are in docs/reexec.md.
-        let dup_fd = nix::unistd::dup(unsafe { BorrowedFd::borrow_raw(fd) })?;
+        let dup_fd = nix::unistd::dup(unsafe { BorrowedFd::borrow_raw(handoff.fd()) })?;
         std::mem::forget(client);
 
         // Phase 3: adopt the stream (simulating new process)
@@ -89,7 +91,8 @@ mod demo {
         std_stream.set_nonblocking(true)?;
         let tokio_stream = tokio::net::TcpStream::from_std(std_stream)?;
 
-        let (new_client, mut new_events) = EslClient::adopt_stream(tokio_stream, &residual)?;
+        let (new_client, mut new_events) =
+            EslClient::adopt_stream(tokio_stream, handoff.residual())?;
 
         // Exercise the write half too. Reading alone would leave the demo
         // claiming a working connection on the evidence of one direction.

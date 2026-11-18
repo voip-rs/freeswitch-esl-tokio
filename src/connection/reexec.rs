@@ -19,6 +19,32 @@ use super::{ConnectionStatus, DisconnectReason, EslClient};
 #[cfg(unix)]
 pub(crate) type ReexecResult = Result<Vec<u8>, EslError>;
 
+/// What [`EslClient::teardown_for_reexec`] hands over for the next process image.
+///
+/// The fd stays open only while the old [`EslClient`] is alive, and its
+/// `CLOEXEC` flag is still set: the caller clears it before `exec()`.
+#[cfg(unix)]
+#[must_use = "the fd and residual bytes are what the next process adopts"]
+#[derive(Debug)]
+pub struct ReexecHandoff {
+    fd: std::os::unix::io::RawFd,
+    residual: Vec<u8>,
+}
+
+#[cfg(unix)]
+impl ReexecHandoff {
+    /// The connected, authenticated socket.
+    pub fn fd(&self) -> std::os::unix::io::RawFd {
+        self.fd
+    }
+
+    /// Bytes the reader had read past the last complete message, for
+    /// [`EslClient::adopt_stream`] to seed its parser with.
+    pub fn residual(&self) -> &[u8] {
+        &self.residual
+    }
+}
+
 /// Caller-side half of the re-exec channel (stored in `SharedState`).
 ///
 /// Taken by [`EslClient::teardown_for_reexec()`] to signal the reader and
@@ -43,7 +69,7 @@ pub(crate) struct ReexecReader {
 
 #[cfg(unix)]
 impl EslClient {
-    /// Gracefully stop the reader loop and return the raw socket fd and any
+    /// Gracefully stop the reader loop and hand over the raw socket fd and any
     /// unparsed bytes remaining in the parser buffer.
     ///
     /// Used for zero-downtime binary upgrades via `exec()`. The caller
@@ -65,7 +91,7 @@ impl EslClient {
     /// - The caller **must not drop** the `EslClient` before `exec()` (or
     ///   must [`std::mem::forget`] it) to keep the fd open.
     /// - The caller is responsible for clearing `CLOEXEC` on the fd.
-    pub async fn teardown_for_reexec(&self) -> EslResult<(std::os::unix::io::RawFd, Vec<u8>)> {
+    pub async fn teardown_for_reexec(&self) -> EslResult<ReexecHandoff> {
         use crate::constants::REEXEC_DRAIN_TIMEOUT_MS;
         use std::os::unix::io::AsRawFd;
 
@@ -156,6 +182,6 @@ impl EslClient {
             fd,
             residual.len()
         );
-        Ok((fd, residual))
+        Ok(ReexecHandoff { fd, residual })
     }
 }

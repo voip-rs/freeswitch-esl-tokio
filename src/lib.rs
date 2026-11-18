@@ -217,6 +217,8 @@ pub use command::{
     parse_api_body, parse_channel_dump, parse_channel_dump_with_options, ChannelDumpOptions,
     CommandBuilder, DivertMode, EslCommand, EslResponse, ExecuteOptions, ReplyStatus, Secret,
 };
+#[cfg(unix)]
+pub use connection::ReexecHandoff;
 pub use connection::{
     AuthMethod, ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
     EslEventStream, EventOverflow, SwallowedEventTypes,

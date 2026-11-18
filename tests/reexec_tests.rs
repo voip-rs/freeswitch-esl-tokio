@@ -22,8 +22,9 @@ async fn teardown_returns_valid_fd_and_residual() {
         .await;
     assert!(result.is_ok(), "teardown failed: {:?}", result.err());
 
-    let (fd, residual) = result.unwrap();
-    assert!(fd >= 0, "fd should be non-negative");
+    let handoff = result.unwrap();
+    assert!(handoff.fd() >= 0, "fd should be non-negative");
+    let residual = handoff.residual();
     // No data was in-flight, so residual should be empty
     assert!(
         residual.is_empty(),
@@ -61,11 +62,11 @@ async fn teardown_with_buffered_event_delivers_then_stops() {
     // a teardown that beats them there would drain an empty parser.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-    let (fd, _residual) = client
+    let handoff = client
         .teardown_for_reexec()
         .await
         .unwrap();
-    assert!(fd >= 0);
+    assert!(handoff.fd() >= 0);
 
     // The event should have been dispatched before the drain completed
     let event = tokio::time::timeout(std::time::Duration::from_secs(1), events.recv()).await;
@@ -245,10 +246,11 @@ async fn sequential_teardown_adopt_teardown() {
     let (_mock, client, events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // First teardown
-    let (fd, residual) = client
+    let handoff = client
         .teardown_for_reexec()
         .await
         .expect("first teardown failed");
+    let fd = handoff.fd();
     assert_eq!(
         events.status(),
         ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
@@ -274,11 +276,11 @@ async fn sequential_teardown_adopt_teardown() {
         .set_nonblocking(true)
         .expect("set_nonblocking failed");
     let stream = tokio::net::TcpStream::from_std(std_stream).expect("from_std failed");
-    let (client2, events2) = EslClient::adopt_stream(stream, &residual).unwrap();
+    let (client2, events2) = EslClient::adopt_stream(stream, handoff.residual()).unwrap();
     assert!(client2.is_connected());
 
     // Second teardown
-    let (_fd2, _residual2) = client2
+    let _handoff2 = client2
         .teardown_for_reexec()
         .await
         .expect("second teardown failed");
@@ -318,8 +320,8 @@ async fn teardown_wins_race_against_stalled_dispatch() {
     let result = tokio::time::timeout(Duration::from_secs(3), client.teardown_for_reexec())
         .await
         .expect("teardown did not beat the stalled dispatch");
-    let (fd, _residual) = result.expect("teardown failed");
-    assert!(fd >= 0);
+    let handoff = result.expect("teardown failed");
+    assert!(handoff.fd() >= 0);
 
     let mut received = 0u64;
     while let Ok(Some(Ok(_))) =
