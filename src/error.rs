@@ -209,6 +209,38 @@ pub enum EslError {
         /// Which field; the value is not kept, since it may be a credential.
         field: &'static str,
     },
+
+    /// A `filter` or `filter delete` header mod_event_socket would read as
+    /// some other header, or as a keyword.
+    #[error("filter header {header:?} {fault}")]
+    UnsplittableFilterHeader {
+        /// The header as given.
+        header: String,
+        /// How the switch would misread it.
+        fault: FilterHeaderFault,
+    },
+}
+
+/// How mod_event_socket would misread a filter header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FilterHeaderFault {
+    /// The switch skips it and reads the value as the header.
+    Empty,
+    /// The switch cuts the header at it.
+    Space,
+    /// `add` or `delete`, which `filter` reads as a keyword in any case.
+    Keyword,
+}
+
+impl std::fmt::Display for FilterHeaderFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            FilterHeaderFault::Empty => "is empty",
+            FilterHeaderFault::Space => "holds a space",
+            FilterHeaderFault::Keyword => "is a filter keyword",
+        })
+    }
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -357,6 +389,7 @@ impl EslError {
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
             EslError::WireTerminatorInField { .. } => false,
+            EslError::UnsplittableFilterHeader { .. } => false,
         }
     }
 
@@ -410,6 +443,7 @@ impl EslError {
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
             EslError::WireTerminatorInField { .. } => false,
+            EslError::UnsplittableFilterHeader { .. } => false,
         }
     }
 

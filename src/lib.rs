@@ -224,4 +224,4 @@ pub use connection::{
     EslEventStream, EventOverflow, SwallowedEventTypes,
 };
 pub use constants::UNDEF_VALUE;
-pub use error::{CommandFailure, EslError, EslResult};
+pub use error::{CommandFailure, EslError, EslResult, FilterHeaderFault};

@@ -3,7 +3,7 @@
 // qual:allow(coupling, sdp) reason: "channel dumps reuse the protocol decoder"
 use crate::{
     constants::{FILTER_DELETE_ALL, HEADER_TERMINATOR, LINE_TERMINATOR},
-    error::{EslError, EslResult},
+    error::{EslError, EslResult, FilterHeaderFault},
     event::{EslEvent, EventFormat},
     headers::EventHeader,
     LogLevel,
@@ -48,6 +48,30 @@ fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
         return Err(EslError::WireTerminatorInField { field });
     }
     Ok(())
+}
+
+/// Words `filter` reads in the header position as an action, in any case.
+const FILTER_KEYWORDS: &[&str] = &["add", "delete"];
+
+/// Refuse a filter header mod_event_socket would cut at a space, skip as
+/// empty, or read as one of `keywords`.
+fn check_filter_header(header: &str, keywords: &[&str]) -> EslResult<()> {
+    let fault = if header.is_empty() {
+        FilterHeaderFault::Empty
+    } else if header.contains(' ') {
+        FilterHeaderFault::Space
+    } else if keywords
+        .iter()
+        .any(|k| header.eq_ignore_ascii_case(k))
+    {
+        FilterHeaderFault::Keyword
+    } else {
+        return Ok(());
+    };
+    Err(EslError::UnsplittableFilterHeader {
+        header: header.to_string(),
+        fault,
+    })
 }
 
 /// Builder for custom ESL commands not covered by [`EslClient`](crate::EslClient) methods.
@@ -387,7 +411,8 @@ impl EslCommand {
             EslCommand::Events { events, .. } => validate_wire_text(events, "event list"),
             EslCommand::Filter { header, value } => {
                 validate_wire_text(header, "filter header")?;
-                validate_wire_text(value, "filter value")
+                validate_wire_text(value, "filter value")?;
+                check_filter_header(header, FILTER_KEYWORDS)
             }
             EslCommand::SendMsg { uuid, .. } => match uuid {
                 Some(u) => validate_wire_text(u, "sendmsg uuid"),
@@ -415,6 +440,7 @@ impl EslCommand {
             EslCommand::NixEvent { events } => validate_wire_text(events, "nixevent list"),
             EslCommand::FilterDelete { header, value } => {
                 validate_wire_text(header, "filter delete header")?;
+                check_filter_header(header, &[])?;
                 if header.eq_ignore_ascii_case(FILTER_DELETE_ALL) {
                     return Err(EslError::FilterDeleteAllHeader {
                         header: header.clone(),
@@ -834,6 +860,10 @@ mod tests {
             }
             .to_wire_format()
             .expect_err(header);
+            assert!(
+                matches!(err, EslError::UnsplittableFilterHeader { .. }),
+                "{header:?}: {err}"
+            );
             assert!(!err.is_recoverable(), "{header:?}: {err}");
             assert!(!err.is_connection_error(), "{header:?}: {err}");
         }
@@ -844,6 +874,10 @@ mod tests {
             }
             .to_wire_format()
             .expect_err(header);
+            assert!(
+                matches!(err, EslError::UnsplittableFilterHeader { .. }),
+                "{header:?}: {err}"
+            );
             assert!(!err.is_recoverable(), "{header:?}: {err}");
             assert!(!err.is_connection_error(), "{header:?}: {err}");
         }
