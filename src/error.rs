@@ -97,9 +97,16 @@ pub enum EslError {
     #[error("XML parsing error: {0}")]
     XmlError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
-    /// UTF-8 conversion error
-    #[error("UTF-8 conversion error: {0}")]
-    Utf8Error(#[source] std::str::Utf8Error),
+    /// Bytes the framing reads as text were not UTF-8: the stream is no longer
+    /// trustworthy, so this is a connection error.
+    #[error("invalid UTF-8 in {context}")]
+    Utf8Error {
+        /// What was being decoded (e.g. `"message headers"`).
+        context: &'static str,
+        /// Underlying decoder error.
+        #[source]
+        source: std::str::Utf8Error,
+    },
 
     /// UTF-8 decoding failed for a specific header value during parsing.
     ///
@@ -380,7 +387,7 @@ impl EslError {
             EslError::InvalidEventFormat { .. } => false,
             EslError::JsonError(_) => false,
             EslError::XmlError(_) => false,
-            EslError::Utf8Error(_) => false,
+            EslError::Utf8Error { .. } => false,
             EslError::InvalidUtf8InHeader { .. } => false,
             EslError::InvalidHeader { .. } => false,
             EslError::MissingHeader { .. } => false,
@@ -402,8 +409,8 @@ impl EslError {
 
     /// `true` if the TCP session is dead and the caller should reconnect.
     ///
-    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`,
-    /// `ProtocolError`.
+    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `AccessDenied`,
+    /// `HeartbeatExpired`, `ProtocolError`, `BufferOverflow`, `Utf8Error`.
     ///
     /// Returns `true` for errors that indicate the TCP session is no longer
     /// usable, *during* an established connection. Authentication failures
@@ -436,7 +443,8 @@ impl EslError {
             EslError::InvalidEventFormat { .. } => false,
             EslError::JsonError(_) => false,
             EslError::XmlError(_) => false,
-            EslError::Utf8Error(_) => false,
+            // Only built from bytes the framing reads as text.
+            EslError::Utf8Error { .. } => true,
             EslError::InvalidUtf8InHeader { .. } => false,
             EslError::InvalidHeader { .. } => false,
             EslError::MissingHeader { .. } => false,
@@ -791,7 +799,7 @@ mod tests {
             ),
             (json_error(), false, false),
             (EslError::XmlError("bad xml".into()), false, false),
-            (utf8_error(), false, false),
+            (utf8_error(), true, false),
             #[cfg(unix)]
             (
                 EslError::ReexecFailed {
@@ -816,7 +824,10 @@ mod tests {
     #[allow(invalid_from_utf8)]
     fn utf8_error() -> EslError {
         let bytes = [0xffu8];
-        EslError::Utf8Error(std::str::from_utf8(&bytes).unwrap_err())
+        EslError::Utf8Error {
+            context: "message headers",
+            source: std::str::from_utf8(&bytes).unwrap_err(),
+        }
     }
 
     #[test]

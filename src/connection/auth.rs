@@ -172,8 +172,10 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
         return Ok(None);
     }
 
-    let data_str = std::str::from_utf8(data)
-        .map_err(|_| EslError::protocol_error("invalid UTF-8 in truncated auth response"))?;
+    let data_str = std::str::from_utf8(data).map_err(|source| EslError::Utf8Error {
+        context: "truncated auth response",
+        source,
+    })?;
 
     // Find the last newline. Everything before it is complete header lines.
     // Everything after may be a truncated line.

@@ -231,8 +231,10 @@ impl EslParser {
         self.buffer
             .compact();
 
-        let headers_str = String::from_utf8(headers_data)
-            .map_err(|_| EslError::protocol_error("Invalid UTF-8 in headers"))?;
+        let headers_str = String::from_utf8(headers_data).map_err(|e| EslError::Utf8Error {
+            context: "message headers",
+            source: e.utf8_error(),
+        })?;
         let (headers, lossy_values) = self.parse_headers(&headers_str)?;
 
         // Every ESL message must have Content-Type. Missing means
