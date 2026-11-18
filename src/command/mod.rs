@@ -815,6 +815,51 @@ mod tests {
         }
     }
 
+    /// mod_event_socket cuts a filter header at its first space, takes
+    /// `add` and `delete` as keywords before it, and leaves an empty one
+    /// empty: each would act on some other header than the one named.
+    #[test]
+    fn filter_headers_the_switch_would_split_are_refused() {
+        let filters = [
+            ("Event Name", "x"),
+            (" Event-Name", "x"),
+            ("", "x"),
+            ("add", "Event-Name CHANNEL_CREATE"),
+            ("DELETE", "Event-Name"),
+        ];
+        for (header, value) in filters {
+            let err = EslCommand::Filter {
+                header: header.to_string(),
+                value: value.to_string(),
+            }
+            .to_wire_format()
+            .expect_err(header);
+            assert!(!err.is_recoverable(), "{header:?}: {err}");
+            assert!(!err.is_connection_error(), "{header:?}: {err}");
+        }
+        for header in ["Event Name", "", " Event-Name"] {
+            let err = EslCommand::FilterDelete {
+                header: header.to_string(),
+                value: None,
+            }
+            .to_wire_format()
+            .expect_err(header);
+            assert!(!err.is_recoverable(), "{header:?}: {err}");
+            assert!(!err.is_connection_error(), "{header:?}: {err}");
+        }
+        for header in ["add", "delete"] {
+            assert!(
+                EslCommand::FilterDelete {
+                    header: header.to_string(),
+                    value: None,
+                }
+                .to_wire_format()
+                .is_ok(),
+                "after delete, {header} is a header name"
+            );
+        }
+    }
+
     #[test]
     fn test_filter_delete_all_wire_format() {
         assert_eq!(
