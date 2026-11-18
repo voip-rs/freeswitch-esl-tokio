@@ -254,27 +254,79 @@ mod tests {
 
     #[test]
     fn new_holds_the_items_given() {
-        let arr = EslArray::new(vec!["a".into(), "b".into(), "c".into()]);
+        let arr = EslArray::new(vec!["a".into(), "b".into(), "c".into()]).unwrap();
         assert_eq!(arr.items(), &["a", "b", "c"]);
         assert_eq!(arr.len(), 3);
     }
 
     #[test]
     fn push_appends() {
-        let mut arr = EslArray::new(vec!["first".into()]);
-        arr.push("second".into());
-        arr.push("third".into());
+        let mut arr = EslArray::new(vec!["first".into()]).unwrap();
+        arr.push("second".into())
+            .unwrap();
+        arr.push("third".into())
+            .unwrap();
         assert_eq!(arr.items(), &["first", "second", "third"]);
         assert_eq!(arr.to_string(), "ARRAY::first|:second|:third");
     }
 
     #[test]
     fn unshift_prepends() {
-        let mut arr = EslArray::new(vec!["last".into()]);
-        arr.unshift("middle".into());
-        arr.unshift("first".into());
+        let mut arr = EslArray::new(vec!["last".into()]).unwrap();
+        arr.unshift("middle".into())
+            .unwrap();
+        arr.unshift("first".into())
+            .unwrap();
         assert_eq!(arr.items(), &["first", "middle", "last"]);
         assert_eq!(arr.to_string(), "ARRAY::first|:middle|:last");
+    }
+
+    fn full() -> Vec<String> {
+        vec!["x".to_string(); MAX_ARRAY_ITEMS]
+    }
+
+    const OVER: EslArrayError = EslArrayError::TooManyItems {
+        count: MAX_ARRAY_ITEMS + 1,
+        max: MAX_ARRAY_ITEMS,
+    };
+
+    /// `new` refuses what `parse` refuses, so `Display` never emits an array `parse` rejects.
+    #[test]
+    fn new_refuses_more_than_max_items() {
+        assert_eq!(
+            EslArray::new(full())
+                .unwrap()
+                .len(),
+            MAX_ARRAY_ITEMS
+        );
+        let mut over = full();
+        over.push("y".into());
+        assert_eq!(EslArray::new(over), Err(OVER));
+    }
+
+    #[test]
+    fn push_and_unshift_refuse_past_max_items_and_leave_the_array_as_it_was() {
+        let mut arr = EslArray::new(full()).unwrap();
+        assert_eq!(arr.push("y".into()), Err(OVER));
+        assert_eq!(arr.unshift("y".into()), Err(OVER));
+        assert_eq!(arr.items(), full().as_slice());
+    }
+
+    /// Config load refuses what `parse` refuses.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize_refuses_more_than_max_items() {
+        let mut over = full();
+        over.push("y".into());
+        let json = serde_json::to_string(&over).unwrap();
+        assert!(serde_json::from_str::<EslArray>(&json).is_err());
+        let json = serde_json::to_string(&full()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<EslArray>(&json)
+                .unwrap()
+                .len(),
+            MAX_ARRAY_ITEMS
+        );
     }
 
     #[test]
