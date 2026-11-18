@@ -106,3 +106,11 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `EslArray::new(vec![])`, `new(vec!["".into()])` and `EslArray::parse("ARRAY::")` succeed | refused with `EslArrayError::Empty`: both render a bare `ARRAY::`, which the switch drops on input and never writes; two or more empty items (`ARRAY::\|:`) are still accepted |
 | `sip_status_code()` reads anything `u16::from_str` takes (`+200`, `0200`, `42`) | exactly three digits with a nonzero first one; anything else is `ParseSipStatusCodeError` with the raw value. 9xx stays legal: sofia-sip's nua reports its own failures as 9xx in `sofia::gateway_state` and `sofia::sip_user_state` |
 | `EslEvent::push_header` / `unshift_header` onto a header holding `""` give `ARRAY::\|:v` / `ARRAY::v\|:` | set it to `v`: the switch deletes a header set to an empty value, so there is nothing to stack onto |
+
+## SDP (`sdp` feature)
+
+| 2.x | 3.0 |
+|---|---|
+| `SdpWarning::MalformedMediaSection`: a bad `a=rtpmap`, `a=fmtp` or RTP format emptied its section | removed; the section keeps everything else. An unreadable payload type in `a=rtpmap` or `a=fmtp` is `SdpWarning::PayloadAttributeIgnored { offset }`; an `a=rtpmap` with no readable rate, or an RTP format that is not a number below 128, is `SdpWarning::SwitchRejects` with `SwitchRejection::InvalidRtpmap` or `InvalidRtpFormat` |
+| `SdpWarning::NonCanonicalDirectionAttribute` for `a=SENDONLY` and other casings | removed; a direction attribute is read in any case, as the switch reads it, and the last one in a section wins |
+| `SdpCodecError::MalformedRtpmap`, `MalformedFmtp`, `NonNumericPayloadType` | removed; `parse` no longer fails on an attribute or a format, see the first row |

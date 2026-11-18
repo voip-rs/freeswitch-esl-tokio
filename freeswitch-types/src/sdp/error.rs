@@ -19,16 +19,6 @@ pub enum SdpCodecError {
         /// The underlying parse error, preserved for `Error::source()`.
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    /// An `a=rtpmap` line was malformed (wrong number of fields, non-numeric payload
-    /// type, non-numeric clock rate, etc.).
-    MalformedRtpmap(String),
-    /// A payload type in the `m=` format list could not be parsed as a number.
-    NonNumericPayloadType(String),
-    /// An `a=fmtp` line was malformed (non-numeric payload type).
-    ///
-    /// A non-numeric payload type in `a=fmtp` is the same structural breakage as
-    /// in `a=rtpmap` — the line is uninterpretable and cannot be recovered from.
-    MalformedFmtp(String),
 }
 
 impl SdpCodecError {
@@ -48,19 +38,6 @@ impl fmt::Display for SdpCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ParseFailure { message, .. } => write!(f, "SDP parse failure: {message}"),
-            Self::MalformedRtpmap(raw) => {
-                write!(f, "malformed a=rtpmap ({} bytes)", raw.len())
-            }
-            Self::NonNumericPayloadType(raw) => {
-                write!(
-                    f,
-                    "non-numeric payload type in m= format list ({} bytes)",
-                    raw.len()
-                )
-            }
-            Self::MalformedFmtp(raw) => {
-                write!(f, "malformed a=fmtp ({} bytes)", raw.len())
-            }
         }
     }
 }
@@ -69,7 +46,6 @@ impl std::error::Error for SdpCodecError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ParseFailure { source, .. } => Some(source.as_ref()),
-            _ => None,
         }
     }
 }
@@ -341,18 +317,6 @@ pub enum SdpWarning {
         /// Human-readable reason the name could not be embedded.
         reason: String,
     },
-    /// A single `m=` section was structurally broken and was skipped entirely.
-    ///
-    /// Occurs when an `a=rtpmap`, `a=fmtp`, or `m=` format-list entry in one media
-    /// section cannot be parsed at all (as opposed to [`CodecNameUnrepresentable`](SdpWarning::CodecNameUnrepresentable),
-    /// which drops a single codec). Every other section's codecs are still parsed
-    /// and returned.
-    MalformedMediaSection {
-        /// The media type of the skipped section (e.g. `"audio"`).
-        media_type: String,
-        /// Human-readable reason the section could not be parsed.
-        reason: String,
-    },
     /// A lenient parse read more comma-separated slots than FreeSWITCH would.
     ///
     /// Every entry parsed is returned; the switch itself keeps only the first
@@ -363,14 +327,6 @@ pub enum SdpWarning {
         entries: usize,
         /// The cap, [`CodecString::MAX_SWITCH_ENTRIES`](super::codec_string::CodecString::MAX_SWITCH_ENTRIES).
         limit: usize,
-    },
-    /// A value-less attribute names a direction in a case RFC 8866 does not accept.
-    ///
-    /// It is not read as one, so the section keeps the direction of the level above
-    /// it — which is what the peer wrote only by coincidence.
-    NonCanonicalDirectionAttribute {
-        /// The attribute name as the peer spelled it.
-        attribute: String,
     },
     /// FreeSWITCH's SDP parser refuses this offer, so the switch derives no codecs from it.
     ///
@@ -525,16 +481,6 @@ impl fmt::Display for SdpWarning {
                  skipped: it {reason}",
                 codec_name.len()
             ),
-            Self::MalformedMediaSection { media_type, reason } => write!(
-                f,
-                "{media_type} section could not be parsed and was skipped entirely: {reason}"
-            ),
-            Self::NonCanonicalDirectionAttribute { attribute } => write!(
-                f,
-                "direction attribute ({} bytes) is not spelled as RFC 8866 defines it \
-                 and was not read as a direction",
-                attribute.len()
-            ),
             Self::CodecStringTruncated { entries, limit } => write!(
                 f,
                 "codec string carries {entries} comma-separated slots; FreeSWITCH keeps \
@@ -604,43 +550,6 @@ mod tests {
         let e = SdpCodecError::parse_failure("wrapper", Root);
         let src = std::error::Error::source(&e).expect("source must be present");
         assert_eq!(src.to_string(), "root cause");
-    }
-
-    #[test]
-    fn sdp_codec_error_malformed_rtpmap_display() {
-        let e = SdpCodecError::MalformedRtpmap("opus/abc/2".into());
-        let msg = e.to_string();
-        assert!(msg.contains("malformed a=rtpmap"));
-        assert!(!msg.contains("opus/abc/2"), "error quoted its input: {msg}");
-        assert!(msg.contains("10 bytes"), "{msg}");
-        let SdpCodecError::MalformedRtpmap(raw) = &e else {
-            panic!("wrong variant");
-        };
-        assert_eq!(raw, "opus/abc/2");
-    }
-
-    #[test]
-    fn sdp_codec_error_non_numeric_pt_display() {
-        let e = SdpCodecError::NonNumericPayloadType("abc".into());
-        let msg = e.to_string();
-        assert!(msg.contains("non-numeric payload type"));
-        assert!(!msg.contains("abc"), "error quoted its input: {msg}");
-        assert!(msg.contains("3 bytes"), "{msg}");
-    }
-
-    #[test]
-    fn sdp_codec_error_other_variants_have_no_source() {
-        let e = SdpCodecError::MalformedRtpmap("x".into());
-        assert!(std::error::Error::source(&e).is_none());
-    }
-
-    #[test]
-    fn sdp_codec_error_malformed_fmtp_display() {
-        let e = SdpCodecError::MalformedFmtp("x minptime=10".into());
-        let msg = e.to_string();
-        assert!(msg.contains("malformed a=fmtp"));
-        assert!(!msg.contains("minptime"), "error quoted its input: {msg}");
-        assert!(msg.contains("13 bytes"), "{msg}");
     }
 
     // --- CodecStringError ---
