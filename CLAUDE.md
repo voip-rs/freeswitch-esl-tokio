@@ -135,6 +135,10 @@ is not set, ask the user for the path. Use it to verify wire protocol
 behavior, event header handling, and SIP/ESL internals. If tasking an
 agent resolve the variable and give the value to the agent.
 
+sofia-sip's source is at `$SOFIA_SIP_SOURCE`, pinned under `sofia_sip` in
+`hooks/source-refs.yaml`. Read a file at the pin with
+`git -C $SOFIA_SIP_SOURCE show <pin>:<path>`, never from the checkout.
+
 ## Public Type Rename/Removal Checklist
 
 When renaming, removing, or replacing a public type, update **all** of
@@ -161,7 +165,10 @@ The pre-commit hook is the gate: `Cargo.lock` kept off branches, fmt, clippy
 over `--workspace --all-features --all-targets` (examples included),
 `-D missing_docs` and broken intra-doc links, the full test suite with doctests,
 and the enum/source-ref sync checks. The source-ref check needs
-`FREESWITCH_SOURCE` exported and refuses the commit without it.
+`FREESWITCH_SOURCE` and `SOFIA_SIP_SOURCE` exported, each a clone holding the
+commit `hooks/source-refs.yaml` pins for it, and refuses the commit without them.
+The C oracle reads both pins from git objects, so neither clone needs to be
+checked out at its pin.
 Do not re-run any of those separately — a failing hook rejects the commit and
 prints the same thing.
 

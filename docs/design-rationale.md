@@ -917,13 +917,11 @@ is the offer's fidelity rather than the switch's, and a caller holding the negot
 rate applies the switch's rule itself.
 
 The same holds a level up: every `m=` line yields a section, whatever its port or media
-type, carrying what the peer wrote there. A declined or held stream is where a reader
-most needs the offer — a no-audio complaint is routinely a re-INVITE to port 0 — and
-dropping it leaves a payload type with no name to render. Sections excluded from the
-codec string are therefore the inventory, and the accessors that feed the string stay a
-view over the subset the switch negotiates, so retaining more never widens what a codec
-string or a format-parameter lookup can see. Excluded sections are parsed rather than
-skipped, so they contribute parse warnings the switch never had occasion to produce.
+type, so declined and held streams stay in the inventory. A section carries what the
+switch read there. Reading what the peer wrote instead, which an analyzer of SDP
+captured outside the switch needs, is an option of the same parse, and it reaches only
+sections no codec string or format-parameter lookup can see, so neither view widens what
+the switch negotiates.
 
 ## Dedup and default-stripping follow the switch's loop
 
@@ -955,17 +953,23 @@ a log, so the caller supplies what it knows and is told what that removed.
 
 ## Sofia's leniency, not the RFC's grammar
 
-The SDP this crate reads is an offer the switch has already accepted and
-negotiated, which settles what "malformed" may cost. Rejecting a field the switch
+The SDP this crate reads is held to what the switch reads, which settles what
+"malformed" may cost. Rejecting a field the switch
 parsed contradicts a decision that has already been made, and the punishment lands
 on codecs that are not at fault: a stray tab in one rtpmap discarded every codec in
 that media section, so the emitted codec string disagreed with the negotiation it
 was supposed to mirror. Attribute values are therefore tokenized the way sofia
 tokenizes them, whitespace decided once while consuming a field rather than trimmed
 back off at each one, because the per-field spelling is what let the encoding name
-go unhandled. The session layer stays a dependency; the attribute layer is ours
-precisely because that is where fidelity is owed to a specific parser rather than
-to the grammar.
+go unhandled.
+
+Both layers are ours, and the session layer is a port of sofia's control flow at
+the flags the switch passes: which bytes form a line, which section a line belongs
+to, which lines are skipped, and where the parse refuses the offer or stops reading
+it. Neither of those last two fails the parse: an offer the switch refused or read
+only in part is still what the peer sent, and SDP analyzed outside the switch has
+not been through it at all. The offer is parsed as far as extraction can go, and
+the refusal or the stop rides with it as a warning.
 
 Which sections carry payload types at all is sofia's call too. It fills a section's
 rtpmap list, and reads `a=rtpmap` and `a=fmtp` into it, only for the transports it
