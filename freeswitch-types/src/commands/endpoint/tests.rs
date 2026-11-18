@@ -292,6 +292,25 @@ fn dial_string_error_endpoint_no_variables() {
         .is_none());
 }
 
+/// `error/` renders no block, so a block handed to it would vanish from the wire.
+#[test]
+fn error_endpoint_refuses_a_variable_block() {
+    let mut vars = Variables::new(VariablesType::Channel);
+    vars.insert("k", "v")
+        .unwrap();
+    let mut ep = ErrorEndpoint::new(crate::channel::HangupCause::UserBusy);
+    assert_eq!(
+        ep.set_variables(Some(vars.clone())),
+        Err(OriginateError::VariablesNotSupported("error"))
+    );
+    let mut wrapped = Endpoint::from(ep);
+    assert_eq!(
+        wrapped.set_variables(Some(vars)),
+        Err(OriginateError::VariablesNotSupported("error"))
+    );
+    assert_eq!(ep.set_variables(None), Ok(()));
+}
+
 #[test]
 fn dial_string_on_endpoint_enum() {
     let mut vars = Variables::new(VariablesType::Default);
