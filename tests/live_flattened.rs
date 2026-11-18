@@ -989,10 +989,7 @@ async fn escaping_through_the_typed_view(carrier: DialStringCarrier, scope: Vari
                 .map(|uuid| ("origination_uuid", uuid.as_str()))
                 .collect();
             let vars = escaping_block(&lead, pairs, separator, scope);
-            let dial_string = format!(
-                "{}null/escaping",
-                vars.display_for(target_under_test(carrier))
-            );
+            let dial_string = format!("{}null/escaping", vars.render(target_under_test(carrier)));
 
             let list = parse(&dial_string, carrier);
             let legs: Vec<&FlattenedLeg> = list
@@ -1188,12 +1185,8 @@ async fn escaping_at_an_argv_separator(scope: VariablesType) {
                     "{case} in {scope:?} scope, block separator {block_separator:?}, at ^^{sep}"
                 );
                 let vars = escaping_block(&[], pairs, block_separator, scope);
-                let at_api = vars
-                    .display_for(target_under_test(API))
-                    .to_string();
-                let at_sep = vars
-                    .display_for(target)
-                    .to_string();
+                let at_api = vars.render(target_under_test(API));
+                let at_sep = vars.render(target);
                 assert_eq!(
                     deep_escapes(&at_sep, Some(sep)),
                     deep_escapes(&at_api, None),
@@ -1211,12 +1204,7 @@ async fn escaping_at_an_argv_separator(scope: VariablesType) {
                     .map(|(key, _)| *key)
                     .collect();
 
-                for dial in [
-                    format!("{at_sep}null/escaping"),
-                    endpoint
-                        .display_for(target)
-                        .to_string(),
-                ] {
+                for dial in [format!("{at_sep}null/escaping"), endpoint.render(target)] {
                     let list = FlattenedDialString::parse_for(&dial, target)
                         .unwrap_or_else(|e| panic!("{label}: {dial:?}: {e}"));
                     let legs: Vec<&FlattenedLeg> = list

@@ -8,8 +8,7 @@
 /// Emit the [`DialString`] impl and the `with_variables` builder for an endpoint
 /// struct holding `variables: Option<Variables>`. Given the module text and the
 /// function writing it, also emit the target-aware `write_for` — variable-block
-/// prologue included — and the [`Display`](std::fmt::Display) that renders it for
-/// the default target.
+/// prologue included — and the `render` that names its target.
 macro_rules! impl_dial_string_with_variables {
     ($ty:ty) => {
         impl $crate::commands::endpoint::DialString for $ty {
@@ -71,14 +70,16 @@ macro_rules! impl_dial_string_with_variables {
                 $crate::commands::endpoint::write_variables(f, &self.variables, target)?;
                 $crate::commands::endpoint::$write(f, &self.module_text(), target)
             }
-        }
 
-        impl ::std::fmt::Display for $ty {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                self.write_for(
-                    f,
-                    $crate::commands::variables::DialStringCarrier::EslApi.into(),
-                )
+            /// This leg as `target` reads it.
+            pub fn render(
+                &self,
+                target: impl Into<$crate::commands::variables::DialStringTarget>,
+            ) -> String {
+                target
+                    .into()
+                    .argument(|f, target| self.write_for(f, target))
+                    .to_string()
             }
         }
     };
@@ -101,20 +102,20 @@ macro_rules! forward_to_variant {
     };
 }
 
-/// Emit `FromStr` at the ESL API carrier for each endpoint parsed from a dial string, or the serde
-/// `config` module a file's endpoints load through, each load refusing what `check_deliverable` refuses.
+/// Emit `parse_for` for each endpoint parsed from a dial string, or the serde `config` module a
+/// file's endpoints load through, each load refusing what `check_deliverable` refuses.
 macro_rules! impl_endpoint_parse {
-    (from_str: $($ty:ident),* $(,)?) => {
+    (parse_for: $($ty:ident),* $(,)?) => {
         $(
-            impl ::std::str::FromStr for $ty {
-                type Err = $crate::commands::originate::OriginateError;
-
-                fn from_str(s: &str) -> Result<Self, Self::Err> {
-                    let (variables, ep) = $crate::commands::endpoint::parse_leg(
-                        s,
-                        $crate::commands::variables::DialStringCarrier::EslApi.into(),
-                        Self::parse_bare,
-                    )?;
+            impl $ty {
+                /// Parse a leg written for a named carrier or
+                /// [`DialStringTarget`](crate::commands::DialStringTarget), mirroring `render`.
+                pub fn parse_for(
+                    s: &str,
+                    target: impl Into<$crate::commands::variables::DialStringTarget>,
+                ) -> Result<Self, $crate::commands::originate::OriginateError> {
+                    let (variables, ep) =
+                        $crate::commands::endpoint::parse_leg(s, target.into(), Self::parse_bare)?;
                     Ok(Self { variables, ..ep })
                 }
             }
@@ -169,7 +170,6 @@ pub use sofia::{DestinationEncoding, SofiaContact, SofiaEndpoint, SofiaGateway};
 pub use user::UserEndpoint;
 
 use std::fmt;
-use std::str::FromStr;
 
 use super::originate::OriginateError;
 use super::variables::{
@@ -447,7 +447,7 @@ impl From<ErrorEndpoint> for Endpoint {
 }
 
 // ---------------------------------------------------------------------------
-// Display
+// Render
 // ---------------------------------------------------------------------------
 
 impl Endpoint {
@@ -470,18 +470,19 @@ impl Endpoint {
         }
     }
 
-    /// Render for a named carrier or [`DialStringTarget`] rather than the
-    /// [`DialStringCarrier::EslApi`] default of [`Display`](fmt::Display).
-    pub fn display_for(&self, target: impl Into<DialStringTarget>) -> EndpointDisplay<'_> {
-        EndpointDisplay {
-            endpoint: self,
-            target: target.into(),
-        }
+    /// This leg as `target` reads it.
+    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
+        self.display_for(target.into())
+            .to_string()
+    }
+
+    /// [`render`](Self::render), for writing into a formatter.
+    pub(crate) fn display_for(&self, target: DialStringTarget) -> impl fmt::Display + '_ {
+        target.argument(|f, target| self.write_for(f, target))
     }
 
     /// Parse a dial string written for a named carrier or [`DialStringTarget`],
-    /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the
-    /// [`DialStringCarrier::EslApi`] default.
+    /// mirroring [`render`](Self::render).
     ///
     /// A `sofia_contact` or `group_call` expression parses at the dialplan carrier only.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
@@ -577,42 +578,6 @@ impl Endpoint {
             .find(|(prefix, _)| uri.starts_with(prefix))
             .ok_or_else(|| OriginateError::UnknownEndpointType(uri.to_string()))?;
         parse(uri)
-    }
-}
-
-/// Renders an [`Endpoint`] for one target. Returned by
-/// [`Endpoint::display_for`].
-#[derive(Debug, Clone, Copy)]
-pub struct EndpointDisplay<'a> {
-    endpoint: &'a Endpoint,
-    target: DialStringTarget,
-}
-
-impl fmt::Display for EndpointDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.target
-            .write_argument(f, |f, target| {
-                self.endpoint
-                    .write_for(f, target)
-            })
-    }
-}
-
-impl fmt::Display for Endpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_for(f, DialStringCarrier::EslApi.into())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// FromStr
-// ---------------------------------------------------------------------------
-
-impl FromStr for Endpoint {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_for(s, DialStringCarrier::EslApi)
     }
 }
 

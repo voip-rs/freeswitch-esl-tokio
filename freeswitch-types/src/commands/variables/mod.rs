@@ -2,7 +2,6 @@
 
 use indexmap::IndexMap;
 use std::fmt;
-use std::str::FromStr;
 
 use super::originate::OriginateError;
 use crate::switch_passes::brackets::{check_separator, same_header, unbalanced, Block, PairEffect};
@@ -64,7 +63,8 @@ impl VariablesType {
 /// A comma is escaped with `\,`, a backslash and a single quote with as many
 /// backslashes as the [`DialStringTarget`]'s passes consume, a space at either
 /// edge of a value as a `\s` escaped for the same passes, and a value with other
-/// spaces is wrapped in single quotes. This form round-trips through [`FromStr`];
+/// spaces is wrapped in single quotes. [`render`](Self::render) and
+/// [`parse_for`](Self::parse_for) at the same target round-trip;
 /// what the switch itself decodes depends on which command carries the block
 /// and which parser revision reads it, documented in `docs/dial-string-format.md`.
 ///
@@ -407,32 +407,16 @@ impl<'de> serde::Deserialize<'de> for Variables {
     }
 }
 
-/// Renders a [`Variables`] for one target. Returned by
-/// [`Variables::display_for`].
-#[derive(Debug, Clone, Copy)]
-pub struct VariablesDisplay<'a> {
-    vars: &'a Variables,
-    target: DialStringTarget,
-}
-
-impl fmt::Display for VariablesDisplay<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.target
-            .write_argument(f, |f, target| {
-                self.vars
-                    .write_for(f, target)
-            })
-    }
-}
-
 impl Variables {
-    /// Render for a named carrier or [`DialStringTarget`], rather than the
-    /// [`DialStringCarrier::EslApi`] default that [`Display`](fmt::Display) uses.
-    pub fn display_for(&self, target: impl Into<DialStringTarget>) -> VariablesDisplay<'_> {
-        VariablesDisplay {
-            vars: self,
-            target: target.into(),
-        }
+    /// The block as `target` reads it.
+    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
+        self.display_for(target.into())
+            .to_string()
+    }
+
+    /// [`render`](Self::render), for writing into a formatter.
+    pub(crate) fn display_for(&self, target: DialStringTarget) -> impl fmt::Display + '_ {
+        target.argument(|f, target| self.write_for(f, target))
     }
 
     pub(super) fn write_for(
@@ -478,28 +462,13 @@ impl Variables {
     }
 }
 
-impl fmt::Display for Variables {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_for(f, DialStringCarrier::EslApi.into())
-    }
-}
-
-impl FromStr for Variables {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_for(s, DialStringCarrier::EslApi)
-    }
-}
-
 /// The endpoint text a lone block is read ahead of, so the switch's passes see a whole leg.
 const LONE_BLOCK_ENDPOINT: &str = "null/x";
 
 impl Variables {
     /// Parse a block written for a named carrier or [`DialStringTarget`], as the switch installs
     /// it there: the pairs are read through a port of every pass that target applies, so a block
-    /// [`display_for`](Self::display_for) wrote at the same target reads back as built.
-    /// [`FromStr`] uses the [`DialStringCarrier::EslApi`] default of [`Display`](fmt::Display).
+    /// [`render`](Self::render) wrote at the same target reads back as built.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
         let (argument, target) = target
             .into()

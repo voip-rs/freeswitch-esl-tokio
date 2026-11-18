@@ -28,7 +28,7 @@ use crate::version::FreeswitchVersion;
 #[non_exhaustive]
 pub enum DialStringCarrier {
     /// `api originate` / `bgapi originate`, whose argument list is split before
-    /// the block itself is parsed. The default for [`Display`](fmt::Display).
+    /// the block itself is parsed.
     EslApi,
     /// A dialplan application such as `bridge`, including via `sendmsg execute`,
     /// which receives its argument whole.
@@ -297,6 +297,17 @@ impl DialStringTarget {
         }
     }
 
+    /// `render` at this target as one argument of its split, for writing into a formatter.
+    pub(crate) fn argument<R>(self, render: R) -> impl fmt::Display
+    where
+        R: Fn(&mut fmt::Formatter<'_>, Self) -> fmt::Result,
+    {
+        Argument {
+            target: self,
+            render,
+        }
+    }
+
     /// A separator [`with_argv_separator`](Self::with_argv_separator) refuses as policy, for
     /// reading captures the switch accepts under it.
     #[cfg(test)]
@@ -381,6 +392,21 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         (self.render)(f, self.target)
+    }
+}
+
+struct Argument<R> {
+    target: DialStringTarget,
+    render: R,
+}
+
+impl<R> fmt::Display for Argument<R>
+where
+    R: Fn(&mut fmt::Formatter<'_>, DialStringTarget) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.target
+            .write_argument(f, &self.render)
     }
 }
 

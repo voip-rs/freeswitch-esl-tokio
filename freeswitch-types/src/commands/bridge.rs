@@ -497,7 +497,7 @@ mod tests {
             bridge.to_string(),
             r"{cid=it\\\\\\'s}sofia/gateway/gw/18005551234"
         );
-        assert_eq!(vars.to_string(), r"{cid=it\\\\\\\'s}");
+        assert_eq!(vars.render(DialStringCarrier::EslApi), r"{cid=it\\\\\\\'s}");
     }
 
     /// Both halves have to agree on the carrier. Rendering at dialplan depth
@@ -1017,11 +1017,7 @@ mod tests {
         let group = bracket_around_block(':', "a,b");
         let rendered = group
             .iter()
-            .map(|endpoint| {
-                endpoint
-                    .display_for(CARRIER)
-                    .to_string()
-            })
+            .map(|endpoint| endpoint.render(CARRIER))
             .collect::<Vec<_>>()
             .join(",");
         assert!(
@@ -1053,7 +1049,7 @@ mod tests {
     fn joined(endpoints: &[Endpoint], separator: &str) -> String {
         endpoints
             .iter()
-            .map(ToString::to_string)
+            .map(|endpoint| endpoint.render(DialStringCarrier::EslApi))
             .collect::<Vec<_>>()
             .join(separator)
     }

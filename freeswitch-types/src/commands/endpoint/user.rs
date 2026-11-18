@@ -110,7 +110,7 @@ impl UserEndpoint {
     }
 }
 
-impl_endpoint_parse!(from_str: UserEndpoint);
+impl_endpoint_parse!(parse_for: UserEndpoint);
 
 impl_endpoint_parse!(config:
     UserEndpoint {
@@ -124,6 +124,7 @@ impl_endpoint_parse!(config:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::variables::DialStringCarrier;
 
     #[test]
     fn user_endpoint_display() {
@@ -132,7 +133,10 @@ mod tests {
             domain: Some("example.com".into()),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "user/1000@example.com");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "user/1000@example.com"
+        );
     }
 
     #[test]
@@ -142,14 +146,13 @@ mod tests {
             domain: None,
             variables: None,
         };
-        assert_eq!(ep.to_string(), "user/1000");
+        assert_eq!(ep.render(DialStringCarrier::EslApi), "user/1000");
     }
 
     #[test]
     fn user_endpoint_from_str() {
-        let ep: UserEndpoint = "user/1000@example.com"
-            .parse()
-            .unwrap();
+        let ep =
+            UserEndpoint::parse_for("user/1000@example.com", DialStringCarrier::EslApi).unwrap();
         assert_eq!(ep.name, "1000");
         assert_eq!(
             ep.domain
@@ -160,9 +163,7 @@ mod tests {
 
     #[test]
     fn user_endpoint_from_str_no_domain() {
-        let ep: UserEndpoint = "user/1000"
-            .parse()
-            .unwrap();
+        let ep = UserEndpoint::parse_for("user/1000", DialStringCarrier::EslApi).unwrap();
         assert_eq!(ep.name, "1000");
         assert!(ep
             .domain
@@ -176,10 +177,8 @@ mod tests {
             domain: Some("example.com".into()),
             variables: None,
         };
-        let s = ep.to_string();
-        let parsed: UserEndpoint = s
-            .parse()
-            .unwrap();
+        let s = ep.render(DialStringCarrier::EslApi);
+        let parsed = UserEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
         assert_eq!(parsed, ep);
     }
 

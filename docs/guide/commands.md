@@ -28,14 +28,14 @@ let target = DialStringTarget::new(DialStringCarrier::EslApi)
 
 // Direct SIP profile routing
 let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
-assert_eq!(ep.display_for(target).to_string(), "sofia/internal/1000@example.com");
+assert_eq!(ep.render(target), "sofia/internal/1000@example.com");
 
 // SIP gateway routing
 let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234").unwrap());
-assert_eq!(ep.display_for(target).to_string(), "sofia/gateway/my_provider/18005551234");
+assert_eq!(ep.render(target), "sofia/gateway/my_provider/18005551234");
 
-// Parse from wire format
-let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
+// Parse from wire format, as the target named reads it
+let ep = Endpoint::parse_for("sofia/gateway/my_provider/18005551234", target).unwrap();
 
 // Downstream crates can implement DialString on custom endpoint types
 ```
@@ -213,7 +213,7 @@ let hook = ExecuteOn::lua("/run/app/load_multipart.lua", ["/run/app/call-42.xml"
 let mut vars = Variables::new(VariablesType::Default);
 vars.insert(ChannelVariable::ExecuteOnOriginate.as_str(), hook.to_string()).unwrap();
 assert_eq!(
-    vars.display_for(target).to_string(),
+    vars.render(target),
     "{execute_on_originate='lua /run/app/load_multipart.lua /run/app/call-42.xml'}"
 );
 ```

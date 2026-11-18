@@ -762,16 +762,16 @@ async fn live_loopback_fields_arrive_on_either_carrier() {
             .await;
 
         let created =
-            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint:?} was never created"));
         assert_eq!(
             created.header(EventHeader::CallerDestinationNumber),
             Some(extension.as_str()),
-            "{carrier:?}: {endpoint}"
+            "{carrier:?}: {endpoint:?}"
         );
         assert_eq!(
             created.header(EventHeader::CallerContext),
             Some(context.as_str()),
-            "{carrier:?}: {endpoint}"
+            "{carrier:?}: {endpoint:?}"
         );
     }
 }
@@ -810,11 +810,11 @@ async fn live_sofia_destination_arrives_on_either_carrier() {
             .await;
 
         let created =
-            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint:?} was never created"));
         assert_eq!(
             created.variable(SofiaVariable::SipDestinationUrl),
             Some(destination.as_str()),
-            "{carrier:?}: {endpoint}"
+            "{carrier:?}: {endpoint:?}"
         );
     }
 }
@@ -860,11 +860,11 @@ async fn live_sofia_destination_encodes_the_user_part_by_tree() {
             .await;
 
         let created =
-            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint:?} was never created"));
         assert_eq!(
             created.variable(SofiaVariable::SipDestinationUrl),
             Some(format!("sip:{user}@127.0.0.1:9").as_str()),
-            "{carrier:?}: {endpoint} on FreeSWITCH {version}"
+            "{carrier:?}: {endpoint:?} on FreeSWITCH {version}"
         );
     }
 }
@@ -927,10 +927,10 @@ async fn live_user_fields_arrive_on_either_carrier() {
             .await;
 
         let logged =
-            logged.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never looked up"));
+            logged.unwrap_or_else(|| panic!("{carrier:?}: {endpoint:?} was never looked up"));
         assert!(
             logged.contains(&format!("[{name}@example.com]")),
-            "{carrier:?}: {endpoint} logged {logged:?}"
+            "{carrier:?}: {endpoint:?} logged {logged:?}"
         );
     }
 }
@@ -1009,7 +1009,7 @@ async fn escaping_over_the_api_carrier(separator: Option<char>, scope: Variables
             continue;
         }
         let vars = escaping_block(&[], pairs, separator, scope);
-        let block = vars.display_for(target_under_test(DialStringCarrier::EslApi));
+        let block = vars.render(target_under_test(DialStringCarrier::EslApi));
         let resp = client
             .api(&format!("originate {block}null/escaping &park()"))
             .await
@@ -1062,7 +1062,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
 
         let dial_string = format!(
             "{}null/escaping",
-            vars.display_for(target_under_test(DialStringCarrier::Dialplan))
+            vars.render(target_under_test(DialStringCarrier::Dialplan))
         );
         client
             .execute_with_options(
@@ -1141,13 +1141,14 @@ async fn live_chosen_separator_carries_commas_unescaped() {
     let vars = vars
         .with_separator(':')
         .expect("':' does not appear in any value here");
+    let block = vars.render(target_under_test(DialStringCarrier::EslApi));
 
     let uuid = client
-        .api(&format!("originate {vars}null/escaping &park()"))
+        .api(&format!("originate {block}null/escaping &park()"))
         .await
         .expect("originate transport error")
         .api_result()
-        .unwrap_or_else(|e| panic!("originate rejected {vars}: {e}"))
+        .unwrap_or_else(|e| panic!("originate rejected {block}: {e}"))
         .to_string();
 
     let mut reaper = ChannelReaper::new(&client);
@@ -1261,9 +1262,10 @@ async fn live_execute_on_originate_runs_before_the_leg_does() {
         hook.to_string(),
     )
     .unwrap();
+    let block = vars.render(target_under_test(DialStringCarrier::EslApi));
 
     let uuid = client
-        .api(&format!("originate {vars}null/hook &park()"))
+        .api(&format!("originate {block}null/hook &park()"))
         .await
         .expect("originate transport error")
         .api_result()
@@ -1280,7 +1282,7 @@ async fn live_execute_on_originate_runs_before_the_leg_does() {
     assert_eq!(
         probe.as_deref(),
         Some("hooked"),
-        "the hook did not run from {vars}"
+        "the hook did not run from {block}"
     );
 
     drop(permit);

@@ -525,7 +525,7 @@ impl SofiaContact {
     }
 }
 
-impl_endpoint_parse!(from_str: SofiaEndpoint, SofiaGateway);
+impl_endpoint_parse!(parse_for: SofiaEndpoint, SofiaGateway);
 
 impl_endpoint_parse!(config:
     SofiaEndpoint {
@@ -553,6 +553,7 @@ impl_endpoint_parse!(config:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::variables::DialStringCarrier;
     use crate::commands::variables::VariablesType;
 
     // --- SofiaEndpoint ---
@@ -564,7 +565,10 @@ mod tests {
             destination: "1000@example.com".into(),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "sofia/internal/1000@example.com"
+        );
     }
 
     #[test]
@@ -578,16 +582,16 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.to_string(),
+            ep.render(DialStringCarrier::EslApi),
             "{originate_timeout=30}sofia/internal/1000@example.com"
         );
     }
 
     #[test]
     fn sofia_endpoint_from_str() {
-        let ep: SofiaEndpoint = "sofia/internal/1000@example.com"
-            .parse()
-            .unwrap();
+        let ep =
+            SofiaEndpoint::parse_for("sofia/internal/1000@example.com", DialStringCarrier::EslApi)
+                .unwrap();
         assert_eq!(ep.profile, "internal");
         assert_eq!(ep.destination, "1000@example.com");
         assert!(ep
@@ -597,9 +601,11 @@ mod tests {
 
     #[test]
     fn sofia_endpoint_from_str_with_variables() {
-        let ep: SofiaEndpoint = "{originate_timeout=30}sofia/internal/1000@example.com"
-            .parse()
-            .unwrap();
+        let ep = SofiaEndpoint::parse_for(
+            "{originate_timeout=30}sofia/internal/1000@example.com",
+            DialStringCarrier::EslApi,
+        )
+        .unwrap();
         assert_eq!(ep.profile, "internal");
         assert_eq!(ep.destination, "1000@example.com");
         assert_eq!(
@@ -617,10 +623,8 @@ mod tests {
             destination: "sip:user@host:5060".into(),
             variables: None,
         };
-        let s = ep.to_string();
-        let parsed: SofiaEndpoint = s
-            .parse()
-            .unwrap();
+        let s = ep.render(DialStringCarrier::EslApi);
+        let parsed = SofiaEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -661,7 +665,10 @@ mod tests {
             profile: None,
             variables: None,
         };
-        assert_eq!(ep.to_string(), "sofia/gateway/my_provider/18005551234");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "sofia/gateway/my_provider/18005551234"
+        );
     }
 
     #[test]
@@ -673,7 +680,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.to_string(),
+            ep.render(DialStringCarrier::EslApi),
             "sofia/gateway/external::my_provider/18005551234"
         );
     }
@@ -690,16 +697,18 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.to_string(),
+            ep.render(DialStringCarrier::EslApi),
             "{sip_h_X-Custom=value}sofia/gateway/gw1/1234"
         );
     }
 
     #[test]
     fn sofia_gateway_from_str() {
-        let ep: SofiaGateway = "sofia/gateway/my_provider/18005551234"
-            .parse()
-            .unwrap();
+        let ep = SofiaGateway::parse_for(
+            "sofia/gateway/my_provider/18005551234",
+            DialStringCarrier::EslApi,
+        )
+        .unwrap();
         assert_eq!(ep.gateway, "my_provider");
         assert_eq!(ep.destination, "18005551234");
         assert!(ep
@@ -709,9 +718,11 @@ mod tests {
 
     #[test]
     fn sofia_gateway_from_str_with_profile() {
-        let ep: SofiaGateway = "sofia/gateway/external::my_provider/18005551234"
-            .parse()
-            .unwrap();
+        let ep = SofiaGateway::parse_for(
+            "sofia/gateway/external::my_provider/18005551234",
+            DialStringCarrier::EslApi,
+        )
+        .unwrap();
         assert_eq!(ep.gateway, "my_provider");
         assert_eq!(ep.destination, "18005551234");
         assert_eq!(
@@ -729,10 +740,8 @@ mod tests {
             profile: Some("external".into()),
             variables: None,
         };
-        let s = ep.to_string();
-        let parsed: SofiaGateway = s
-            .parse()
-            .unwrap();
+        let s = ep.render(DialStringCarrier::EslApi);
+        let parsed = SofiaGateway::parse_for(&s, DialStringCarrier::EslApi).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -772,7 +781,10 @@ mod tests {
             profile: None,
             variables: None,
         };
-        assert_eq!(ep.to_string(), "${sofia_contact(1000@example.com)}");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "${sofia_contact(1000@example.com)}"
+        );
     }
 
     #[test]
@@ -784,7 +796,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.to_string(),
+            ep.render(DialStringCarrier::EslApi),
             "${sofia_contact(internal/1000@example.com)}"
         );
     }
@@ -797,7 +809,10 @@ mod tests {
             profile: Some("*".into()),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "${sofia_contact(*/1000@example.com)}");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "${sofia_contact(*/1000@example.com)}"
+        );
     }
 
     #[test]
@@ -812,7 +827,7 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.to_string(),
+            ep.render(DialStringCarrier::EslApi),
             "{presence_id=1000@example.com}${sofia_contact(1000@example.com)}"
         );
     }
@@ -847,7 +862,7 @@ mod tests {
             profile: Some("*".into()),
             variables: None,
         };
-        let s = ep.to_string();
+        let s = ep.render(DialStringCarrier::EslApi);
         let parsed = SofiaContact::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }
@@ -858,7 +873,7 @@ mod tests {
             .unwrap()
             .with_profile("user@realm")
             .unwrap();
-        let s = ep.to_string();
+        let s = ep.render(DialStringCarrier::EslApi);
         assert_eq!(s, "${sofia_contact(user@realm/1000@example.com)}");
         // Round-trip: the first @ is in profile, the parser splits on / first
         // then finds @ in the user_at_domain part

@@ -22,37 +22,30 @@ fn a_leading_block_closes_at_its_matching_bracket() {
     assert!(Endpoint::parse_for("{a=b", DialStringCarrier::EslApi).is_err());
 }
 
-// --- Endpoint enum FromStr dispatch ---
+// --- Endpoint::parse_for dispatch ---
 
 #[test]
 fn endpoint_from_str_sofia() {
-    let ep: Endpoint = "sofia/internal/1000@example.com"
-        .parse()
-        .unwrap();
+    let ep =
+        Endpoint::parse_for("sofia/internal/1000@example.com", DialStringCarrier::EslApi).unwrap();
     assert!(matches!(ep, Endpoint::Sofia(_)));
 }
 
 #[test]
 fn endpoint_from_str_sofia_gateway() {
-    let ep: Endpoint = "sofia/gateway/my_gw/1234"
-        .parse()
-        .unwrap();
+    let ep = Endpoint::parse_for("sofia/gateway/my_gw/1234", DialStringCarrier::EslApi).unwrap();
     assert!(matches!(ep, Endpoint::SofiaGateway(_)));
 }
 
 #[test]
 fn endpoint_from_str_loopback() {
-    let ep: Endpoint = "loopback/9199/test"
-        .parse()
-        .unwrap();
+    let ep = Endpoint::parse_for("loopback/9199/test", DialStringCarrier::EslApi).unwrap();
     assert!(matches!(ep, Endpoint::Loopback(_)));
 }
 
 #[test]
 fn endpoint_from_str_user() {
-    let ep: Endpoint = "user/1000@example.com"
-        .parse()
-        .unwrap();
+    let ep = Endpoint::parse_for("user/1000@example.com", DialStringCarrier::EslApi).unwrap();
     assert!(matches!(ep, Endpoint::User(_)));
 }
 
@@ -93,7 +86,11 @@ fn an_expression_is_refused_where_nothing_expands_it() {
             let refused = Endpoint::parse_for(text, target);
             assert_eq!(refused, Err(unexpanded(kind)), "{text} at {target:?}");
         }
-        assert_eq!(text.parse::<Endpoint>(), Err(unexpanded(kind)), "{text}");
+        assert_eq!(
+            Endpoint::parse_for(text, DialStringCarrier::EslApi),
+            Err(unexpanded(kind)),
+            "{text}"
+        );
         let msg = unexpanded(kind).to_string();
         assert!(msg.contains(kind) && !msg.contains("SECRET"), "{msg}");
         let line = format!("originate {text} &park()");
@@ -118,9 +115,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
 
 #[test]
 fn endpoint_from_str_error() {
-    let ep: Endpoint = "error/USER_BUSY"
-        .parse()
-        .unwrap();
+    let ep = Endpoint::parse_for("error/USER_BUSY", DialStringCarrier::EslApi).unwrap();
     assert!(matches!(ep, Endpoint::Error(_)));
 }
 
@@ -134,9 +129,7 @@ fn a_block_on_an_endpoint_that_cannot_hold_one_is_refused() {
             .to_string();
         assert!(msg.contains("error"), "does not name the type: {msg}");
     }
-    assert!("{a=b}error/USER_BUSY"
-        .parse::<Endpoint>()
-        .is_err());
+    assert!(Endpoint::parse_for("{a=b}error/USER_BUSY", DialStringCarrier::EslApi).is_err());
 }
 
 /// The two entry points have to agree: `from_str` is `parse_for` at the
@@ -152,9 +145,7 @@ fn from_str_matches_parse_for_at_the_default_carrier() {
         "verto/1234",
     ] {
         assert_eq!(
-            input
-                .parse::<Endpoint>()
-                .is_ok(),
+            Endpoint::parse_for(input, DialStringCarrier::EslApi).is_ok(),
             Endpoint::parse_for(input, DialStringCarrier::EslApi).is_ok(),
             "{input}"
         );
@@ -203,15 +194,17 @@ fn whitespace_other_than_a_space_is_kept() {
 
 #[test]
 fn endpoint_from_str_unknown_errors() {
-    let result = "verto/1234".parse::<Endpoint>();
+    let result = Endpoint::parse_for("verto/1234", DialStringCarrier::EslApi);
     assert!(result.is_err());
 }
 
 #[test]
 fn endpoint_from_str_with_variables() {
-    let ep: Endpoint = "{timeout=30}sofia/internal/1000@example.com"
-        .parse()
-        .unwrap();
+    let ep = Endpoint::parse_for(
+        "{timeout=30}sofia/internal/1000@example.com",
+        DialStringCarrier::EslApi,
+    )
+    .unwrap();
     if let Endpoint::Sofia(inner) = &ep {
         assert_eq!(inner.profile(), "internal");
         assert!(inner
@@ -227,7 +220,10 @@ fn endpoint_from_str_with_variables() {
 #[test]
 fn endpoint_display_delegates_to_inner() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
-    assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
+    assert_eq!(
+        ep.render(DialStringCarrier::EslApi),
+        "sofia/internal/1000@example.com"
+    );
 }
 
 // --- DialString trait ---
@@ -430,11 +426,9 @@ fn audio_endpoints_render_and_parse_per_module() {
                 .unwrap(),
             None => AudioEndpoint::new(),
         });
-        assert_eq!(ep.to_string(), wire);
+        assert_eq!(ep.render(DialStringCarrier::EslApi), wire);
 
-        let parsed: Endpoint = wire
-            .parse()
-            .unwrap();
+        let parsed = Endpoint::parse_for(wire, DialStringCarrier::EslApi).unwrap();
         assert_eq!(parsed, ep, "{wire}");
         assert!(
             parsed
@@ -460,11 +454,16 @@ fn audio_endpoint_carries_variables() {
             .unwrap()
             .with_variables(vars),
     );
-    assert_eq!(ep.to_string(), "{codec=PCMU}portaudio/auto_answer");
     assert_eq!(
-        ep.to_string()
-            .parse::<Endpoint>()
-            .unwrap(),
+        ep.render(DialStringCarrier::EslApi),
+        "{codec=PCMU}portaudio/auto_answer"
+    );
+    assert_eq!(
+        Endpoint::parse_for(
+            &ep.render(DialStringCarrier::EslApi),
+            DialStringCarrier::EslApi
+        )
+        .unwrap(),
         ep
     );
 }
@@ -539,9 +538,7 @@ fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
     ];
 
     for ep in cases {
-        let rendered = ep
-            .display_for(DialStringCarrier::Dialplan)
-            .to_string();
+        let rendered = ep.render(DialStringCarrier::Dialplan);
         let back = Endpoint::parse_for(&rendered, DialStringCarrier::Dialplan)
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, ep, "rendered {rendered}");
@@ -962,12 +959,15 @@ fn fields_the_switch_cannot_receive_are_refused_at_config_load() {
 /// whole text is the extension.
 #[test]
 fn a_loopback_application_is_one_extension() {
-    let ep: LoopbackEndpoint = "loopback/app=bridge:null/farend"
-        .parse()
-        .unwrap();
+    let ep =
+        LoopbackEndpoint::parse_for("loopback/app=bridge:null/farend", DialStringCarrier::EslApi)
+            .unwrap();
     assert_eq!(ep.extension(), "app=bridge:null/farend");
     assert_eq!(ep.context(), None);
-    assert_eq!(ep.to_string(), "loopback/app=bridge:null/farend");
+    assert_eq!(
+        ep.render(DialStringCarrier::EslApi),
+        "loopback/app=bridge:null/farend"
+    );
 }
 
 /// `sofia_contact_function` cuts at the first `~`, then `/`, then `@`, then a `/` after the
@@ -1095,7 +1095,7 @@ fn expression_fields_split_where_the_functions_split() {
     );
     let contact = SofiaContact::on_profile("p", "u/x", "example.com").unwrap();
     assert_eq!(
-        SofiaContact::parse_bare(&contact.to_string()).unwrap(),
+        SofiaContact::parse_bare(&contact.render(DialStringCarrier::EslApi)).unwrap(),
         contact
     );
     assert!(serde_json::from_str::<Endpoint>(
@@ -1310,12 +1310,7 @@ fn qualified_constructors_build_what_parse_builds() {
         ),
     ];
     for (built, text, carrier) in cases {
-        assert_eq!(
-            built
-                .display_for(carrier)
-                .to_string(),
-            text
-        );
+        assert_eq!(built.render(carrier), text);
         assert_eq!(Endpoint::parse_for(text, carrier), Ok(built), "{text}");
     }
     assert!(SofiaGateway::on_profile("p^", "gw", "1").is_err());

@@ -28,8 +28,8 @@ mod common;
 use freeswitch_esl_tokio::commands::{ExecuteOn, UuidGetVar, UuidKill};
 use freeswitch_esl_tokio::variables::SofiaVariable;
 use freeswitch_esl_tokio::{
-    Application, ChannelVariable, DialString, Endpoint, EslClient, EslResult, MultipartBody,
-    Originate, Variables, VariablesType,
+    Application, ChannelVariable, DialString, DialStringCarrier, DialStringTarget, Endpoint,
+    EslClient, EslResult, MultipartBody, Originate, Variables, VariablesType,
 };
 
 /// A `-ERR` from `api` is data, not a transport failure, and this example
@@ -65,10 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let [endpoint, script, document] = args.as_slice() else {
         return Err("usage: originate_multipart_file <endpoint> <script> <document>".into());
     };
-    let mut endpoint: Endpoint = endpoint.parse()?;
     // Escaping depends on the switch's parser revision, which the crate never
     // asks the switch for, so the version is stated in the environment.
     let block_parse = block_parse::block_parse_from_env()?;
+    // Read as it would be written on an `api originate` line.
+    let target = DialStringTarget::new(DialStringCarrier::EslApi).with_block_parse(block_parse);
+    let mut endpoint = Endpoint::parse_for(endpoint, target)?;
 
     let (client, _events) = common::connect_from_env().await?;
 

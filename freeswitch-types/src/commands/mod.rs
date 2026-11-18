@@ -30,9 +30,9 @@ pub use conference::{
     ParseMuteActionError,
 };
 pub use endpoint::{
-    AudioEndpoint, DestinationEncoding, DialString, EndpointDisplay, EndpointFieldFault,
-    ErrorEndpoint, GroupCall, GroupCallOrder, LoopbackEndpoint, ParseGroupCallOrderError,
-    SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint,
+    AudioEndpoint, DestinationEncoding, DialString, EndpointFieldFault, ErrorEndpoint, GroupCall,
+    GroupCallOrder, LoopbackEndpoint, ParseGroupCallOrderError, SofiaContact, SofiaEndpoint,
+    SofiaGateway, UserEndpoint,
 };
 pub use execute_on::{ExecuteOn, ExecuteOnFault};
 pub use flattened::{
@@ -46,7 +46,7 @@ pub use originate::{
 };
 pub use variables::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
-    UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart, VariablesDisplay,
+    UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart,
 };
 
 use crate::switch_passes::api_argument::{self, clean_argument, split_line};

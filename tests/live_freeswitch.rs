@@ -11,8 +11,9 @@ use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{GroupCall, LoopbackEndpoint};
 use freeswitch_esl_tokio::connection::AuthMethod;
 use freeswitch_esl_tokio::{
-    parse_api_body, Application, ConnectionStatus, DisconnectReason, Endpoint, EslClient,
-    EslConnectOptions, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
+    parse_api_body, Application, ConnectionStatus, DialStringCarrier, DisconnectReason, Endpoint,
+    EslClient, EslConnectOptions, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    Originate,
 };
 use live_common::{
     connect, esl_env, kill_channel, wait_for_own_event, ChannelReaper, CONN_SEMAPHORE,
@@ -65,7 +66,7 @@ async fn live_api_originate_leaves_an_expression_unexpanded() {
         esl_env().port
     );
     let expanded = client
-        .api(&format!("eval {group}"))
+        .api(&format!("eval {}", group.render(DialStringCarrier::EslApi)))
         .await
         .unwrap();
     assert_eq!(

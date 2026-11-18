@@ -136,11 +136,15 @@ impl_endpoint_parse!(config:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::variables::DialStringCarrier;
 
     #[test]
     fn group_call_display() {
         let ep = GroupCall::new("support", "example.com").unwrap();
-        assert_eq!(ep.to_string(), "${group_call(support@example.com)}");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "${group_call(support@example.com)}"
+        );
     }
 
     #[test]
@@ -148,7 +152,10 @@ mod tests {
         let ep = GroupCall::new("support", "example.com")
             .unwrap()
             .with_order(GroupCallOrder::All);
-        assert_eq!(ep.to_string(), "${group_call(support@example.com+A)}");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi),
+            "${group_call(support@example.com+A)}"
+        );
     }
 
     #[test]
@@ -174,7 +181,7 @@ mod tests {
         let ep = GroupCall::new("calltakers", "example.com")
             .unwrap()
             .with_order(GroupCallOrder::Enterprise);
-        let s = ep.to_string();
+        let s = ep.render(DialStringCarrier::EslApi);
         let parsed = GroupCall::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }

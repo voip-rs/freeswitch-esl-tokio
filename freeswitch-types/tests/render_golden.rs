@@ -158,9 +158,7 @@ fn variables_corpus(records: &mut Vec<String>) {
                 };
             }
             for &(tname, target) in &targets {
-                let rendered = vars
-                    .display_for(target)
-                    .to_string();
+                let rendered = vars.render(target);
                 rec(
                     records,
                     format!("vars/{scope:?}/sep-{sep_label}/{tname}/render"),
@@ -189,9 +187,7 @@ fn variables_corpus(records: &mut Vec<String>) {
                 continue;
             };
             for &(tname, target) in &targets {
-                let rendered = vars
-                    .display_for(target)
-                    .to_string();
+                let rendered = vars.render(target);
                 rec(
                     records,
                     format!("vars/{scope:?}/single-{name}/{tname}/render"),
@@ -212,8 +208,7 @@ fn variables_corpus(records: &mut Vec<String>) {
             rec(
                 records,
                 format!("vars/{scope:?}/empty/{tname}/render"),
-                vars.display_for(target)
-                    .to_string(),
+                vars.render(target),
             );
         }
     }
@@ -226,15 +221,11 @@ fn endpoint_case(
     targets: &[(&str, DialStringTarget)],
 ) {
     for &(tname, target) in targets {
-        let rendered = ep
-            .display_for(target)
-            .to_string();
+        let rendered = ep.render(target);
         rec(records, format!("{id}/{tname}/render"), &rendered);
         match Endpoint::parse_for(&rendered, target) {
             Ok(p) => {
-                let again = p
-                    .display_for(target)
-                    .to_string();
+                let again = p.render(target);
                 if again != rendered {
                     rec(
                         records,
@@ -328,7 +319,7 @@ fn endpoint_corpus(records: &mut Vec<String>) {
         for &(tname, target) in &targets3 {
             let text = format!("error/{cause_text}");
             let repr = match Endpoint::parse_for(&text, target) {
-                Ok(p) => format!("Ok {}", p.display_for(target)),
+                Ok(p) => format!("Ok {}", p.render(target)),
                 Err(_) => "Err".to_string(),
             };
             rec(
@@ -738,12 +729,12 @@ fn flattened_corpus(records: &mut Vec<String>) {
     }
 }
 
-fn json_result<T>(json: &str) -> String
+fn json_result<T>(json: &str, render: impl Fn(&T) -> String) -> String
 where
-    T: serde::de::DeserializeOwned + std::fmt::Display,
+    T: serde::de::DeserializeOwned,
 {
     match serde_json::from_str::<T>(json) {
-        Ok(v) => format!("Ok {v}"),
+        Ok(v) => format!("Ok {}", render(&v)),
         Err(_) => "Err".to_string(),
     }
 }
@@ -765,7 +756,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/vars/{id}"),
-            json_result::<Variables>(json),
+            json_result(json, |v: &Variables| v.render(DialStringCarrier::EslApi)),
         );
     }
 
@@ -794,7 +785,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/endpoint/{id}"),
-            json_result::<Endpoint>(json),
+            json_result(json, |e: &Endpoint| e.render(DialStringCarrier::EslApi)),
         );
     }
 
@@ -821,7 +812,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/originate/{id}"),
-            json_result::<Originate>(json),
+            json_result(json, |o: &Originate| o.to_string()),
         );
     }
 
@@ -839,7 +830,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/bridge/{id}"),
-            json_result::<BridgeDialString>(json),
+            json_result(json, |b: &BridgeDialString| b.to_string()),
         );
     }
 }
