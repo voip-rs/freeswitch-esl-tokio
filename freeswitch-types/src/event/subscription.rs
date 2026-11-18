@@ -994,6 +994,28 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// mod_event_socket cuts a filter header at its first space, lets the value
+    /// stand in for an empty one, and reads `add` and `delete` as keywords.
+    #[test]
+    fn filter_raw_rejects_a_header_the_switch_would_misread() {
+        for header in ["Event Name", " Event-Name", "", "add", "DELETE"] {
+            assert!(
+                EventSubscription::new(EventFormat::Plain)
+                    .filter_raw(header, "x")
+                    .is_err(),
+                "{header:?}"
+            );
+            let json = format!(r#"{{"format":"Plain","filters":[[{header:?},"x"]]}}"#);
+            assert!(
+                serde_json::from_str::<EventSubscription>(&json).is_err(),
+                "config load accepted {header:?}"
+            );
+        }
+        assert!(EventSubscription::new(EventFormat::Plain)
+            .filter_raw("Event-Name", "a value with spaces")
+            .is_ok());
+    }
+
     #[test]
     fn filter_raw_rejects_nul() {
         assert!(EventSubscription::new(EventFormat::Plain)
