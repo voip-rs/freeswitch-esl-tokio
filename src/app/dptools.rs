@@ -5,7 +5,9 @@ use std::fmt;
 use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
-use crate::commands::{BlockParse, BridgeDialString, UndeliverableVariable};
+use crate::commands::{
+    originate_split, originate_unquote, BlockParse, BridgeDialString, UndeliverableVariable,
+};
 use freeswitch_types::wire_safety::check_header_value;
 
 /// Constructors for common dptools application commands.
@@ -69,6 +71,9 @@ impl AppCommand {
     ///
     /// The switch takes `force_transfer_dialplan` and `force_transfer_context`
     /// first, then the caller profile's, with `inline` falling back to `XML`.
+    ///
+    /// Every `transfer` constructor refuses a field the switch's blank split
+    /// would read as something else; see [`TransferArgumentError`].
     pub fn transfer(extension: &str) -> Result<EslCommand, TransferArgumentError> {
         transfer_command(&[(TransferField::Extension, extension)])
     }
@@ -145,7 +150,51 @@ pub enum TransferArgumentError {
     },
 }
 
+/// Whether `value` comes back from the switch's blank split as one token equal
+/// to itself. Only the line's first token can open with a `^^X` delimiter head,
+/// so a later one is checked behind a stand-in token.
+fn survives_blank_split(value: &str, first: bool) -> bool {
+    let line = if first {
+        value.to_string()
+    } else {
+        format!("x {value}")
+    };
+    let Ok(tokens) = originate_split(&line, ' ') else {
+        return false;
+    };
+    let read: Vec<String> = tokens
+        .iter()
+        .skip(usize::from(!first))
+        .map(|t| originate_unquote(t))
+        .collect();
+    read == [value]
+}
+
+/// First arguments `transfer_function` reads as the leg to transfer, in any case.
+const LEG_SELECTORS: [&str; 2] = ["-bleg", "-both"];
+
 fn transfer_command(fields: &[(TransferField, &str)]) -> Result<EslCommand, TransferArgumentError> {
+    if let Some((_, extension)) = fields.first() {
+        if LEG_SELECTORS
+            .iter()
+            .any(|s| extension.eq_ignore_ascii_case(s))
+        {
+            return Err(TransferArgumentError::LegSelector {
+                extension: extension.to_string(),
+            });
+        }
+    }
+    for (index, (field, value)) in fields
+        .iter()
+        .enumerate()
+    {
+        if !survives_blank_split(value, index == 0) {
+            return Err(TransferArgumentError::Unsplittable {
+                field: *field,
+                value: value.to_string(),
+            });
+        }
+    }
     let args: Vec<&str> = fields
         .iter()
         .map(|(_, value)| *value)
