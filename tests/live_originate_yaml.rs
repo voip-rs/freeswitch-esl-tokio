@@ -14,7 +14,9 @@ use freeswitch_esl_tokio::{
     Application, ChannelState, DialplanType, Endpoint, EslEventType, EventFormat, EventHeader,
     HeaderLookup, Originate,
 };
-use live_common::{channel_exists, connect, getvar, wait_for_var, ChannelReaper};
+use live_common::{
+    block_parse_under_test, channel_exists, connect, getvar, wait_for_var, ChannelReaper,
+};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -70,7 +72,7 @@ fn yaml_loopback_originate_parses() {
     assert_eq!(cmd.timeout_seconds(), Some(30));
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(block_parse_under_test()),
         "originate [origination_caller_id_name='Sales Desk',\
 origination_caller_id_number=5550100,ignore_early_media=true,customer_id=CUST-42,\
 tenant=acme,sip_h_X-Ticket='T-1001\\, urgent']loopback/9199/test \
@@ -106,7 +108,7 @@ fn yaml_loopback_bowout_parses() {
     ));
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(block_parse_under_test()),
         "originate {loopback_bowout=true}loopback/app=bridge:null/farend &bridge(null/nearend)"
     );
 }
@@ -131,7 +133,7 @@ async fn live_originate_loopback_from_yaml() {
     // leg's dialplan (9199 -> answer) answers. Events queue while it blocks.
     let cmd = loopback_yaml_originate();
     let resp = client
-        .api(&cmd.to_string())
+        .api(&cmd.render(block_parse_under_test()))
         .await
         .expect("originate transport error");
     let a_leg = resp
@@ -235,7 +237,7 @@ fn yaml_loopback_scoped_vars_parses() {
     let cmd: Originate = yaml_serde::from_str(LOOPBACK_SCOPED_YAML)
         .expect("examples/originate_loopback_scoped_vars.yaml must deserialize");
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(block_parse_under_test()),
         "originate {leg_a_only=outer}loopback/9199/test &bridge({leg_b_only=inner}null/far)"
     );
 }
@@ -252,7 +254,7 @@ async fn live_originate_loopback_nested_bridge_scopes_vars() {
 
     let cmd: Originate = yaml_serde::from_str(LOOPBACK_SCOPED_YAML).unwrap();
     let resp = client
-        .api(&cmd.to_string())
+        .api(&cmd.render(block_parse_under_test()))
         .await
         .expect("originate transport error");
     let a_leg = resp
@@ -342,7 +344,7 @@ async fn live_originate_loopback_bowout_from_yaml() {
 
     let cmd: Originate = yaml_serde::from_str(LOOPBACK_BOWOUT_YAML).unwrap();
     let resp = client
-        .api(&cmd.to_string())
+        .api(&cmd.render(block_parse_under_test()))
         .await
         .expect("originate transport error");
     let a_leg = resp
@@ -539,7 +541,7 @@ async fn live_originate_loopback_bowout_on_execute() {
     );
 
     let resp = client
-        .api(&cmd.to_string())
+        .api(&cmd.render(block_parse_under_test()))
         .await
         .expect("originate transport error");
     let a_leg = resp

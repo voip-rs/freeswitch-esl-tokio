@@ -44,7 +44,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 
 | 2.x | 3.0 |
 |---|---|
-| `commands::parse_originate_target(s, dialplan)` | parse the whole line as an `Originate`, whose target is read the way `originate_function` reads it |
+| `commands::parse_originate_target(s, dialplan)` | parse the whole line with `Originate::parse_for(s, block_parse)`, whose target is read the way `originate_function` reads it |
 | `DialplanType::Xml`, `DialplanType::Inline`, matched as enum variants | `DialplanType::XML`, `DialplanType::INLINE`, compared with `==`; the type is no longer `Copy` |
 | `Originate::dialplan_raw(name)` | `.dialplan(DialplanType::named(name)?)`; `inline` and `xml` in any case resolve to the known two |
 | `Originate::dialplan_name()` | `dialplan_type().map(DialplanType::name)`; `dialplan_type()` now returns a named dialplan too, where it returned `None` |
@@ -73,3 +73,8 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Variables`, `Endpoint` and the endpoint structs' `Display` (`to_string()`, `format!("{vars}")`), which rendered for `DialStringCarrier::EslApi` | `render(target)`, naming the carrier or `DialStringTarget`; `Debug` stays for logs |
 | `s.parse::<Variables>()`, `s.parse::<Endpoint>()`, `s.parse::<SofiaEndpoint>()` and the other endpoint structs' `FromStr` | `Variables::parse_for(s, target)`, `Endpoint::parse_for(s, target)`, `SofiaEndpoint::parse_for(s, target)` |
 | `Variables::display_for(target)`, `Endpoint::display_for(target)` and their `VariablesDisplay`, `EndpointDisplay` adapters | `render(target)`, which returns the `String` |
+| `Originate` and `BridgeDialString`'s `Display` (`cmd.to_string()`, `format!("{cmd}")`), which rendered at the default revision | `cmd.render(block_parse)`; the carrier is fixed by the type, so only the `BlockParse` is named, `BlockParse::for_version(&version)` or `BlockParse::default()` |
+| `s.parse::<Originate>()`, `s.parse::<BridgeDialString>()` | `Originate::parse_for(s, block_parse)`, `BridgeDialString::parse_for(s, block_parse)` |
+| `Originate::display_with(block_parse)`, `BridgeDialString::display_with(block_parse)` and their `OriginateDisplay`, `BridgeDialStringDisplay` adapters | `render(block_parse)`, which returns the `String` |
+| `Originate::parse_with(s, block_parse)`, `BridgeDialString::parse_with(s, block_parse)` | `parse_for(s, block_parse)` |
+| `AppCommand::bridge(bridge)` with a `BridgeDialString` or `Endpoint` | `AppCommand::bridge(bridge.render(block_parse))`, or `endpoint.render(DialStringCarrier::Dialplan)` |

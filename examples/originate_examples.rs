@@ -51,7 +51,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     .cid_num("5551234")
     .timeout(Duration::from_secs(30));
     // originate sofia/internal/1000@10.0.0.1 1000 undef undef Alice 5551234 30
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // SIP gateway routing
@@ -66,7 +66,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     )
     .timeout(Duration::from_secs(60));
     // originate sofia/gateway/my_provider/18005551234 &park() undef undef undef undef 60
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // With a profile qualifier: sofia/gateway/external::my_provider/destination
     let cmd = Originate::application(
@@ -76,7 +76,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate sofia/gateway/external::my_provider/18005551234 &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // User endpoint -- FreeSWITCH resolves the contact via the directory
@@ -89,7 +89,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         "5000",
     );
     // originate user/1000@pbx.example.com 5000
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // sofia_contact -- runtime expression a dialplan application expands; `originate`
@@ -103,7 +103,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Endpoint::SofiaContact(SofiaContact::new("bob", "pbx.example.com")?.with_profile("*")?),
     ]])?;
     // ${sofia_contact(*/bob@pbx.example.com)}
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // group_call -- runtime expression resolving a directory group, expanded by a
@@ -117,7 +117,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         GroupCall::new("support", "pbx.example.com")?.with_order(GroupCallOrder::All),
     )]])?;
     // ${group_call(support@pbx.example.com+A)}
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // Loopback -- routes through the dialplan; useful for testing
@@ -131,7 +131,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate loopback/9196/default &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // error/ -- immediately fails with a specified hangup cause
@@ -146,7 +146,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate error/USER_BUSY &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // Audio device endpoints (portaudio / pulseaudio / alsa)
@@ -159,7 +159,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate portaudio/auto_answer &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // Variable scoping
@@ -178,7 +178,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("bridge"),
     );
     // originate {hangup_after_bridge=true,continue_on_fail=true}sofia/gateway/carrier/15551234567 &bridge()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // Channel scope []: applies only to the immediately following endpoint
     println!("\n-- Channel scope [] --");
@@ -194,7 +194,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate [originate_timeout=20,sip_h_X-Tenant=acme]sofia/external/sip:alice@carrier.example.com &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // Values containing commas are auto-escaped as \, -- required by the FS variable parser
     println!("\n-- Comma-containing values (auto-escaped) --");
@@ -206,7 +206,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::simple("park"),
     );
     // originate {absolute_codec_string=PCMU\,PCMA\,G722}sofia/gateway/gw1/1234 &park()
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // OriginateTarget variants
@@ -226,7 +226,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     .unwrap()
     .context("default");
     // originate sofia/gateway/gw1/18005551234 1000 XML default
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // Any other dialplan module goes by the name it registers; the switch hangs the
     // channel up if no module answers to it.
@@ -238,7 +238,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     .dialplan(DialplanType::named("enum").unwrap())
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 1000 enum
-    println!("{}", cmd);
+    println!("{}", cmd.render(block_parse));
 
     // Application: single &app(args) XML form
     println!("\n-- Application (&app(args)) with spaces auto-quoted --");
@@ -250,7 +250,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Application::new("socket", Some("127.0.0.1:8040 async full")),
     );
     // originate sofia/gateway/gw1/18005551234 '&socket(127.0.0.1:8040 async full)'
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // Inline applications: comma-separated app:args list
     println!("\n-- InlineApplications (app:args,app:args) --");
@@ -270,7 +270,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     .dialplan(DialplanType::INLINE)
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 conference:test_room,hangup inline
-    println!("{}", cmd.display_with(block_parse));
+    println!("{}", cmd.render(block_parse));
 
     // -----------------------------------------------------------------------
     // JSON deserialization -- config-driven originate
@@ -293,17 +293,15 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         "timeout_secs": 30
     }"#;
     match serde_json::from_str::<Originate>(json) {
-        Ok(cmd) => println!("from JSON: {}", cmd.display_with(block_parse)),
+        Ok(cmd) => println!("from JSON: {}", cmd.render(block_parse)),
         Err(e) => println!("JSON parse error: {}", e),
     }
 
     // Wire format round-trip, parsed and rendered for the same revision
     let wire = "originate sofia/gateway/carrier/15551234567 &bridge(user/1000) XML default Alice 5551234 60";
-    match Originate::parse_with(wire, block_parse) {
+    match Originate::parse_for(wire, block_parse) {
         Ok(cmd) => {
-            let round_tripped = cmd
-                .display_with(block_parse)
-                .to_string();
+            let round_tripped = cmd.render(block_parse);
             if round_tripped == wire {
                 println!("round-trip: {round_tripped}");
             } else {
@@ -356,11 +354,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .timeout(Duration::from_secs(10));
 
     println!("\n=== Live call via bgapi ===");
-    // display_with, not to_string: Display renders for the crate's default
-    // revision, which is right for one build and silently wrong on another.
-    let wire = cmd
-        .display_with(block_parse)
-        .to_string();
+    // The wire form has to match the revision the switch runs.
+    let wire = cmd.render(block_parse);
     println!("originate: {wire}");
 
     // bgapi returns immediately with a Job-UUID and the originate result

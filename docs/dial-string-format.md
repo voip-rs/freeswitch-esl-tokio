@@ -1025,14 +1025,11 @@ It refuses others as policy, though the switch splits on them:
 - every other letter and digit, which a reader cannot tell from the words it
   separates.
 
-These two lines are the ESL carriers of [Parse depth](#parse-depth), and the
-typed API picks the right escaping for each without being told: `Originate`
-renders for the API carrier, `BridgeDialString` for the dialplan one. `Display`
-on a bare `Variables` or `Endpoint` means the API carrier, because that is what
-this crate mostly drives — so a block rendered on its own and spliced into a
-dialplan string by hand is the one case that needs
-`display_for(DialStringCarrier::Dialplan)` and will otherwise be escaped one
-level too deep. All of these assume the default
-[parser revision](#parser-revisions): `Originate::display_with` and
-`BridgeDialString::display_with` take another, and a `DialStringTarget` carries
-carrier and revision together wherever `display_for` accepts a carrier.
+These two lines are the ESL carriers of [Parse depth](#parse-depth), and each
+typed builder names its own: `Originate` renders for the API carrier,
+`BridgeDialString` for the dialplan one, and both take only a
+[parser revision](#parser-revisions). A bare `Variables` or `Endpoint` has no
+carrier of its own, so `render` and `parse_for` take a `DialStringCarrier` or a
+`DialStringTarget`, which carries carrier and revision together; a block
+rendered at the API carrier and spliced into a dialplan string by hand is
+escaped one level too deep.

@@ -9,20 +9,23 @@ scope brackets.
 
 ## Design
 
-Pure `Display`/`FromStr` types with no transport coupling. They produce and parse
-strings; the caller renders one and hands `EslClient` the text.
+Pure string types with no transport coupling. They produce and parse strings,
+and `EslClient` sends what they produce. A builder whose text depends on where
+it goes (`Variables`, `Endpoint` and its structs, `Originate`,
+`BridgeDialString`) renders through `render` and parses through `parse_for`,
+each naming its target; the rest implement `Display`/`FromStr`.
 
 ```rust
 let block_parse = BlockParse::for_version(&"1.10.12".parse()?)?;
 let cmd = Originate::application(endpoint, app).timeout(Duration::from_secs(30));
-let wire = cmd.display_with(block_parse).to_string();
-client.bgapi(&wire).await?;
+let line = cmd.render(block_parse);
+client.bgapi(&line).await?;
 
-let parsed = Originate::parse_with(&wire, block_parse)?;
-assert_eq!(wire, parsed.display_with(block_parse).to_string());
+let parsed = Originate::parse_for(&line, block_parse)?;
+assert_eq!(cmd, parsed);
 ```
 
-### Why Display/FromStr, not a trait on EslClient
+### Why plain strings, not a trait on EslClient
 
 - Round-trip testing without a FreeSWITCH connection
 - Downstream crates can build commands without depending on tokio/transport
@@ -32,8 +35,8 @@ assert_eq!(wire, parsed.display_with(block_parse).to_string());
 ### Why not a Command trait
 
 A `Command` trait with `fn to_command_string(&self) -> String` would add ceremony
-for no benefit over `Display`. Every FreeSWITCH API command is ultimately a string.
-`Display` is idiomatic Rust for "this type serializes to a string representation".
+for no benefit over `Display` and `render`. Every FreeSWITCH API command is
+ultimately a string.
 
 ## Module Layout
 
@@ -118,12 +121,13 @@ Uses `indexmap::IndexMap` to preserve insertion order — variable order matters
 readability and debugging, and round-trip parsing should produce identical output.
 
 **Endpoint** — enum wrapping concrete structs, one per FreeSWITCH endpoint module.
-Each struct implements `Serialize`, `Deserialize` and the `DialString` trait, and
-all but `AudioEndpoint`, which does not know its module, implement `Display`.
-All but `AudioEndpoint`, `SofiaContact` and `GroupCall` implement `FromStr` at the
-API carrier, which never expands an expression; parse those through
-`Endpoint::parse_for`. The enum provides serde-compatible polymorphism and
-renders every endpoint.
+Each struct implements `Serialize`, `Deserialize` and the `DialString` trait.
+All but `AudioEndpoint`, which does not know its module, and `ErrorEndpoint`,
+whose text reads the same at every carrier and so keeps `Display`/`FromStr`,
+implement `render(target)`; all of those but `SofiaContact` and `GroupCall`
+implement `parse_for`, and an expression parses through `Endpoint::parse_for`,
+which refuses it where no pass expands it. The enum provides serde-compatible
+polymorphism and renders every endpoint.
 
 Real endpoints:
 
@@ -260,8 +264,8 @@ Each element is `mime/type:body_data` within an `ARRAY::` container. Provides
 ### BridgeDialString
 
 Typed builder for bridge dial strings with multiple endpoints, simultaneous
-ring, and sequential failover. Implements `Display`/`FromStr`/`Serialize`/
-`Deserialize`.
+ring, and sequential failover. Implements `render`/`parse_for` at a `BlockParse`,
+`Serialize` and `Deserialize`.
 
 Structure: `Vec<Vec<Endpoint>>` — outer vec is sequential groups (`|`),
 inner vec is simultaneous endpoints (`,`). Global `{variables}` apply to
@@ -321,6 +325,6 @@ Key design choices:
 
 ## What This Does Not Cover
 
-- Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.display_with(block_parse).to_string())`)
+- Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.render(block_parse))`)
 - Modelling a command's output schema (`status`, `sofia status`, `show` rows)
 - SIP URI type (future extension point)

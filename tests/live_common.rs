@@ -112,7 +112,7 @@ pub async fn create_uuid(client: &EslClient) -> String {
 /// Send `cmd` over bgapi and return the Job-UUID its BACKGROUND_JOB will carry.
 pub async fn bgapi_originate(client: &EslClient, cmd: &Originate) -> String {
     client
-        .bgapi(&cmd.to_string())
+        .bgapi(&cmd.render(BlockParse::default()))
         .await
         .expect("bgapi originate transport error")
         .job_uuid()

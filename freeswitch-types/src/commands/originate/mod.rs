@@ -2,7 +2,6 @@
 //! and automatic quoting for socket application arguments.
 
 use std::fmt::{self, Write as _};
-use std::str::FromStr;
 use std::time::Duration;
 
 use super::variables::{BlockParse, DialStringCarrier, DialStringTarget};
@@ -51,7 +50,7 @@ pub use super::endpoint::Endpoint;
 /// Constructed via [`Originate::extension`], [`Originate::application`], or
 /// [`Originate::inline`]. Invalid states (Extension + Inline dialplan, inline
 /// apps under another dialplan, empty inline apps) are rejected at construction
-/// time rather than at `Display`.
+/// time rather than at render.
 ///
 /// Optional fields are set via consuming-self chaining methods:
 ///
@@ -232,7 +231,7 @@ impl Originate {
     /// .with_argv_separator('~')?;
     ///
     /// assert_eq!(
-    ///     cmd.display_with(block_parse).to_string(),
+    ///     cmd.render(block_parse),
     ///     "originate ^^~loopback/9199/default~&socket(127.0.0.1:8040 async full)~undef~undef~Front Desk"
     /// );
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -421,43 +420,31 @@ impl Originate {
     }
 }
 
-/// Renders an [`Originate`] for one parser revision. Returned by
-/// [`Originate::display_with`].
-#[derive(Debug, Clone, Copy)]
-pub struct OriginateDisplay<'a> {
+/// An [`Originate`] written for one parser revision.
+struct Rendered<'a> {
     originate: &'a Originate,
     block_parse: BlockParse,
 }
 
-impl fmt::Display for OriginateDisplay<'_> {
+impl fmt::Display for Rendered<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.originate
             .write_with(f, self.block_parse)
     }
 }
 
-impl fmt::Display for Originate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_with(f, BlockParse::default())
-    }
-}
-
-impl FromStr for Originate {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_with(s, BlockParse::default())
-    }
-}
-
 impl Originate {
-    /// Render for a switch running `block_parse`, rather than the default
-    /// revision [`Display`](fmt::Display) uses.
-    pub fn display_with(&self, block_parse: BlockParse) -> OriginateDisplay<'_> {
-        OriginateDisplay {
+    /// The `originate` line for a switch running `block_parse`.
+    ///
+    /// The carrier is the API command itself, and the argument separator is the one
+    /// [`with_argv_separator`](Self::with_argv_separator) set, so the revision is all
+    /// a caller names.
+    pub fn render(&self, block_parse: BlockParse) -> String {
+        Rendered {
             originate: self,
             block_parse,
         }
+        .to_string()
     }
 
     /// The target argument before the split's quoting or escaping.
@@ -504,9 +491,9 @@ impl Originate {
             .map_err(OriginateError::InvalidArgvSeparator)
     }
 
-    /// Parse an originate written for a switch running `block_parse`, mirroring
-    /// [`display_with`](Self::display_with).
-    pub fn parse_with(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
+    /// Parse an `originate` line written for a switch running `block_parse`, mirroring
+    /// [`render`](Self::render); a `^^<sep>` opening the line names its argument separator.
+    pub fn parse_for(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
         let s = s
             .strip_prefix("originate")
             .unwrap_or(s)

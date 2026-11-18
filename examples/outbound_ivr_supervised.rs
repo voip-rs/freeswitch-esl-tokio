@@ -167,13 +167,11 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
         Endpoint::Loopback(LoopbackEndpoint::new(&endpoint)?.with_variables(vars)),
         Application::new("socket", Some(addr.as_str())),
     );
-    let wire = originate
-        .display_with(block_parse)
-        .to_string();
-    info!("originate: {wire}");
+    let line = originate.render(block_parse);
+    info!("originate: {line}");
 
     let loopback_leg = client
-        .api(&wire)
+        .api(&line)
         .await?
         .api_result()?
         .to_string();

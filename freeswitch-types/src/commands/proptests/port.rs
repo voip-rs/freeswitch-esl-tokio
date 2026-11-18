@@ -101,11 +101,11 @@ proptest! {
         let Some(originate) = build_originate(&spec) else {
             return Ok(());
         };
-        let rendered = originate.to_string();
+        let rendered = originate.render(BlockParse::default());
         let want = intended(&spec, &originate);
         let got = switch_view(&rendered);
         let delivered = got.as_ref() == Ok(&want);
-        let parsed = Originate::from_str(&rendered);
+        let parsed = Originate::parse_for(&rendered, BlockParse::default());
         let refused = serde_json::to_value(&originate)
             .and_then(serde_json::from_value::<Originate>)
             .is_err()
@@ -115,7 +115,7 @@ proptest! {
             "{spec:?}: rendered {rendered:?}, switch reads {got:?}, want {want:?}"
         );
         if delivered {
-            let rerendered = parsed.map(|parsed| parsed.to_string());
+            let rerendered = parsed.map(|parsed| parsed.render(BlockParse::default()));
             prop_assert_eq!(
                 rerendered.as_deref().map(switch_view),
                 Ok(Ok(want)),
@@ -222,8 +222,8 @@ proptest! {
         if config_refuses_bridge(&bridge) {
             return Ok(());
         }
-        let rendered = bridge.to_string();
-        let parsed = rendered.parse::<BridgeDialString>();
+        let rendered = bridge.render(BlockParse::default());
+        let parsed = BridgeDialString::parse_for(&rendered, BlockParse::default());
         prop_assert_eq!(
             parsed.as_ref().map(bridge_view),
             Ok(bridge_view(&bridge)),

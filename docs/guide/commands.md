@@ -1,6 +1,6 @@
 # Command builders
 
-Typed builders for FreeSWITCH API commands. All implement `Display`, are independent of `EslClient`, and can be unit tested without a connection.
+Typed builders for FreeSWITCH API commands, independent of `EslClient` and testable without a connection. A builder whose text depends on where it goes (`Variables`, `Endpoint`, `Originate`, `BridgeDialString`) renders only through `render` and parses through `parse_for`, each naming its target; the others implement `Display`.
 
 See [command-builders.md](../command-builders.md) for the full builder architecture, all channel/conference command types, and escaping rules.
 
@@ -67,12 +67,12 @@ let ext_cmd = Originate::extension(gw(), "1000")
     .dialplan(DialplanType::XML).unwrap()
     .context("default");
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
-let wire = cmd.display_with(block_parse).to_string();
-client.bgapi(&wire).await?;
+let line = cmd.render(block_parse);
+client.bgapi(&line).await?;
 
-// Round-trip: parse <-> display, both for the same revision
-let parsed = Originate::parse_with(&wire, block_parse).unwrap();
-assert_eq!(parsed.display_with(block_parse).to_string(), wire);
+// Round-trip: render <-> parse_for at the same revision
+let parsed = Originate::parse_for(&line, block_parse).unwrap();
+assert_eq!(parsed, cmd);
 # let _ = ext_cmd;
 # Ok(())
 # }
@@ -96,7 +96,7 @@ let cmd = Originate::application(
 .unwrap(); // '~' is a usable separator
 
 assert_eq!(
-    cmd.display_with(block_parse).to_string(),
+    cmd.render(block_parse),
     "originate ^^~loopback/9199/default~&socket(127.0.0.1:8040 async full)~undef~undef~Front Desk"
 );
 ```
@@ -127,7 +127,7 @@ let bridge = BridgeDialString::new(vec![
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
 // Use with the bridge dptools application
-client.send_command(AppCommand::bridge(bridge.display_with(block_parse))).await?;
+client.send_command(AppCommand::bridge(bridge.render(block_parse))).await?;
 # Ok(())
 # }
 ```
@@ -136,7 +136,7 @@ See [dial-string-format.md](../dial-string-format.md) for the complete dial stri
 
 ## The switch's parser revision
 
-How deeply a variable value is escaped depends on the switch's bracket-block parser as well as the command carrying it. `Display` renders for the revision this crate measured; state the FreeSWITCH version you target and render with the revision it maps to. A development build or a version outside the vouched range is refused, and the application names a `BlockParse` itself:
+How deeply a variable value is escaped depends on the switch's bracket-block parser as well as the command carrying it, so every render names a `BlockParse`. State the FreeSWITCH version you target and render with the revision it maps to. A development build or a version outside the vouched range is refused, and the application names a `BlockParse` itself:
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
@@ -149,8 +149,8 @@ let cmd = Originate::application(
 
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
 let parse = BlockParse::for_version(&version).unwrap();
-let wire = cmd.display_with(parse).to_string();
-assert_eq!(wire, "originate sofia/gateway/my_provider/18005551234 &park()");
+let wire = cmd.render(parse);
+assert!(wire.starts_with("originate sofia/gateway/my_provider/"));
 
 let dev: FreeswitchVersion = "1.10.13-dev".parse().unwrap();
 assert!(BlockParse::for_version(&dev).is_err());

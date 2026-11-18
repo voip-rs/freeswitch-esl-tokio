@@ -6,7 +6,7 @@ use crate::commands::variables::InvalidArgvSeparator;
 /// `switch_strip_whitespace` strips tab, newline, vertical tab, CR and space only.
 #[test]
 fn parse_strips_only_the_switch_whitespace() {
-    let extension = |line: &str| match Originate::from_str(line)
+    let extension = |line: &str| match Originate::parse_for(line, BlockParse::default())
         .unwrap()
         .target()
     {
@@ -72,9 +72,9 @@ fn endpoint_variable_with_quote() {
     );
 }
 
-/// `Display` and `FromStr` are the default revision, not a second render path.
+/// What renders for a revision parses back at it.
 #[test]
-fn display_and_from_str_are_the_default_revision() {
+fn round_trips_at_a_named_revision() {
     use crate::commands::variables::BlockParse;
 
     let mut vars = Variables::new(VariablesType::Default);
@@ -89,12 +89,9 @@ fn display_and_from_str_are_the_default_revision() {
         Application::simple("park"),
     );
 
-    let rendered = orig
-        .display_with(BlockParse::PairSplitCleans)
-        .to_string();
-    assert_eq!(rendered, orig.to_string());
+    let rendered = orig.render(BlockParse::PairSplitCleans);
     assert_eq!(
-        Originate::parse_with(&rendered, BlockParse::PairSplitCleans)
+        Originate::parse_for(&rendered, BlockParse::PairSplitCleans)
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}")),
         orig
     );
@@ -169,7 +166,7 @@ fn originate_xml_display() {
         .dialplan(DialplanType::XML)
         .unwrap();
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate sofia/internal/123@example.com &conference(1) XML"
     );
 }
@@ -182,7 +179,7 @@ fn originate_inline_display() {
         .dialplan(DialplanType::INLINE)
         .unwrap();
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate sofia/internal/123@example.com conference:1 inline"
     );
 }
@@ -195,7 +192,7 @@ fn originate_extension_display() {
         .unwrap()
         .context("default");
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate sofia/internal/123@example.com 1000 XML default"
     );
 }
@@ -203,21 +200,17 @@ fn originate_extension_display() {
 #[test]
 fn originate_extension_round_trip() {
     let input = "originate sofia/internal/test@example.com 1000 XML default";
-    let parsed: Originate = input
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), input);
+    let parsed: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), input);
     assert!(matches!(parsed.target(), OriginateTarget::Extension(ref e) if e == "1000"));
 }
 
 #[test]
 fn originate_extension_no_dialplan() {
     let input = "originate sofia/internal/test@example.com 1000";
-    let parsed: Originate = input
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
     assert!(matches!(parsed.target(), OriginateTarget::Extension(ref e) if e == "1000"));
-    assert_eq!(parsed.to_string(), input);
+    assert_eq!(parsed.render(BlockParse::default()), input);
 }
 
 #[test]
@@ -237,11 +230,9 @@ fn originate_empty_inline_errors() {
 #[test]
 fn originate_from_string_round_trip() {
     let input = "originate {test='variable with quote'}sofia/internal/test@example.com 123";
-    let orig: Originate = input
-        .parse()
-        .unwrap();
+    let orig: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
     assert!(matches!(orig.target(), OriginateTarget::Extension(ref e) if e == "123"));
-    assert_eq!(orig.to_string(), input);
+    assert_eq!(orig.render(BlockParse::default()), input);
 }
 
 #[test]
@@ -257,7 +248,7 @@ fn originate_socket_app_quoted() {
         Application::new("socket", Some("127.0.0.1:8040 async full")),
     );
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'"
     );
 }
@@ -265,10 +256,8 @@ fn originate_socket_app_quoted() {
 #[test]
 fn originate_socket_round_trip() {
     let input = "originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'";
-    let parsed: Originate = input
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), input);
+    let parsed: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), input);
     if let OriginateTarget::Application(ref app) = parsed.target() {
         assert_eq!(app.args(), Some("127.0.0.1:8040 async full"));
     } else {
@@ -282,20 +271,16 @@ fn originate_display_round_trip() {
     let orig = Originate::application(ep, Application::new("conference", Some("1")))
         .dialplan(DialplanType::XML)
         .unwrap();
-    let s = orig.to_string();
-    let parsed: Originate = s
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), s);
+    let s = orig.render(BlockParse::default());
+    let parsed: Originate = Originate::parse_for(&s, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), s);
 }
 
 #[test]
 fn originate_inline_no_args_round_trip() {
     let input = "originate sofia/internal/123@example.com park inline";
-    let parsed: Originate = input
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), input);
+    let parsed: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), input);
     if let OriginateTarget::InlineApplications(ref apps) = parsed.target() {
         assert!(apps[0]
             .args()
@@ -309,10 +294,8 @@ fn originate_inline_no_args_round_trip() {
 fn originate_inline_multi_app_round_trip() {
     let input =
             "originate sofia/internal/123@example.com playback:/tmp/test.wav,hangup:NORMAL_CLEARING inline";
-    let parsed: Originate = input
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), input);
+    let parsed: Originate = Originate::parse_for(input, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), input);
 }
 
 #[test]
@@ -320,7 +303,7 @@ fn originate_inline_auto_dialplan() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::inline(ep, vec![Application::simple("park")]).unwrap();
     assert!(orig
-        .to_string()
+        .render(BlockParse::default())
         .contains("inline"));
 }
 
@@ -494,7 +477,7 @@ fn serde_originate_extension() {
     let orig: Originate = serde_json::from_str(json).unwrap();
     assert!(matches!(orig.target(), OriginateTarget::Extension(ref e) if e == "1000"));
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate sofia/internal/123@example.com 1000 XML default"
     );
 }
@@ -536,7 +519,7 @@ fn serde_originate_inline_applications() {
         panic!("expected InlineApplications");
     }
     assert!(orig
-        .to_string()
+        .render(BlockParse::default())
         .contains("inline"));
 }
 
@@ -555,7 +538,7 @@ fn serde_inline_gets_a_separator_without_naming_one() {
 
     assert_eq!(orig.inline_delimiter(), None);
     assert!(orig
-        .to_string()
+        .render(BlockParse::default())
         .contains(r"playback:tone_stream://%(500\\,0\\,800),park"));
 
     // Serializing back must not introduce a separator field the source
@@ -563,7 +546,10 @@ fn serde_inline_gets_a_separator_without_naming_one() {
     let round_tripped = serde_json::to_string(&orig).unwrap();
     assert!(!round_tripped.contains("delimiter"));
     let reparsed: Originate = serde_json::from_str(&round_tripped).unwrap();
-    assert_eq!(reparsed.to_string(), orig.to_string());
+    assert_eq!(
+        reparsed.render(BlockParse::default()),
+        orig.render(BlockParse::default())
+    );
 }
 
 #[test]
@@ -587,7 +573,7 @@ fn serde_originate_to_wire_format() {
             "context": "default"
         }"#;
     let orig: Originate = serde_json::from_str(json).unwrap();
-    let wire = orig.to_string();
+    let wire = orig.render(BlockParse::default());
     assert!(wire.starts_with("originate"));
     assert!(wire.contains("sofia/internal/123@example.com"));
     assert!(wire.contains("&park()"));
@@ -638,7 +624,7 @@ fn originate_target_application_wire_format() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     let orig = Originate::application(ep, Application::simple("park"));
     assert_eq!(
-        orig.to_string(),
+        orig.render(BlockParse::default()),
         "originate sofia/internal/123@example.com &park()"
     );
 }
@@ -654,7 +640,7 @@ fn originate_timeout_only_fills_positional_gaps() {
     let cmd =
         Originate::application(ep, Application::simple("park")).timeout(Duration::from_secs(30));
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199/test &park() undef undef undef undef 30"
     );
 }
@@ -669,7 +655,7 @@ fn originate_cid_num_only_fills_preceding_gaps() {
     );
     let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199/test &park() undef undef undef 5551234"
     );
 }
@@ -684,7 +670,7 @@ fn originate_context_only_fills_dialplan() {
     );
     let cmd = Originate::extension(ep, "1000").context("myctx");
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199/test 1000 undef myctx"
     );
 }
@@ -699,12 +685,10 @@ fn originate_gap_filler_round_trips() {
             .unwrap(),
     );
     let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
-    let wire = cmd.to_string();
-    let parsed: Originate = wire
-        .parse()
-        .unwrap();
+    let wire = cmd.render(BlockParse::default());
+    let parsed: Originate = Originate::parse_for(&wire, BlockParse::default()).unwrap();
     assert_eq!(parsed, cmd);
-    assert_eq!(parsed.to_string(), wire);
+    assert_eq!(parsed.render(BlockParse::default()), wire);
 }
 
 #[test]
@@ -733,7 +717,10 @@ fn serde_originate_full_round_trip_with_variables() {
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
-    assert_eq!(parsed.to_string(), orig.to_string());
+    assert_eq!(
+        parsed.render(BlockParse::default()),
+        orig.render(BlockParse::default())
+    );
 }
 
 #[test]
@@ -761,7 +748,10 @@ fn serde_originate_inline_round_trip_with_all_fields() {
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
-    assert_eq!(parsed.to_string(), orig.to_string());
+    assert_eq!(
+        parsed.render(BlockParse::default()),
+        orig.render(BlockParse::default())
+    );
 }
 
 #[test]
@@ -771,14 +761,12 @@ fn originate_context_named_inline() {
         .dialplan(DialplanType::XML)
         .unwrap()
         .context("inline");
-    let wire = orig.to_string();
+    let wire = orig.render(BlockParse::default());
     assert!(wire.contains("XML inline"), "wire: {}", wire);
-    let parsed: Originate = wire
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(&wire, BlockParse::default()).unwrap();
     // "inline" is consumed as the dialplan type, not the context
     // This is an accepted limitation of positional parsing
-    assert_eq!(parsed.to_string(), wire);
+    assert_eq!(parsed.render(BlockParse::default()), wire);
 }
 
 #[test]
@@ -788,13 +776,11 @@ fn originate_context_named_xml() {
         .dialplan(DialplanType::XML)
         .unwrap()
         .context("XML");
-    let wire = orig.to_string();
+    let wire = orig.render(BlockParse::default());
     // "XML XML" - first is dialplan, second is context
     assert!(wire.contains("XML XML"), "wire: {}", wire);
-    let parsed: Originate = wire
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), wire);
+    let parsed: Originate = Originate::parse_for(&wire, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), wire);
 }
 
 /// A dial string carries caller-id and `sip_h_*` values, so a rejection
@@ -811,8 +797,7 @@ fn errors_name_the_field_and_never_quote_the_input() {
         ("originate verto/15551234567 1000", "15551234567"),
     ];
     for (input, secret) in cases {
-        let msg = input
-            .parse::<Originate>()
+        let msg = Originate::parse_for(input, BlockParse::default())
             .expect_err(input)
             .to_string();
         assert!(!msg.contains(secret), "{input} quoted its input: {msg}");
@@ -836,8 +821,7 @@ fn errors_keep_their_source() {
         "originate ${group_call(support@example.com+Z)} 1000",
     ] {
         assert!(
-            input
-                .parse::<Originate>()
+            Originate::parse_for(input, BlockParse::default())
                 .expect_err(input)
                 .source()
                 .is_some(),
@@ -860,18 +844,16 @@ fn quoted_caller_id_round_trips_without_gaining_quotes() {
     let cmd = Originate::application(ep, Application::simple("park"))
         .cid_name("Outbound Call")
         .cid_num("555 1234");
-    let wire = cmd.to_string();
+    let wire = cmd.render(BlockParse::default());
     assert_eq!(
         wire,
         "originate loopback/9199/test &park() undef undef 'Outbound Call' '555 1234'"
     );
 
-    let parsed: Originate = wire
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(&wire, BlockParse::default()).unwrap();
     assert_eq!(parsed.caller_id_name(), Some("Outbound Call"));
     assert_eq!(parsed.caller_id_number(), Some("555 1234"));
-    assert_eq!(parsed.to_string(), wire);
+    assert_eq!(parsed.render(BlockParse::default()), wire);
 }
 
 /// The mutators are the config-driven path: deserialize a template, then
@@ -892,7 +874,7 @@ fn originate_mutators_set_and_clear_every_optional_field() {
     cmd.set_cid_num(Some("5551234"));
     cmd.set_timeout(Some(Duration::from_secs(30)));
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199/default 1000 XML public Alice 5551234 30"
     );
     assert_eq!(cmd.timeout_duration(), Some(Duration::from_secs(30)));
@@ -904,7 +886,10 @@ fn originate_mutators_set_and_clear_every_optional_field() {
     cmd.set_cid_name(None::<String>);
     cmd.set_cid_num(None::<String>);
     cmd.set_timeout(None);
-    assert_eq!(cmd.to_string(), "originate loopback/9199/default 1000");
+    assert_eq!(
+        cmd.render(BlockParse::default()),
+        "originate loopback/9199/default 1000"
+    );
 }
 
 #[test]
@@ -921,7 +906,7 @@ fn originate_mut_accessors_reach_the_endpoint_and_the_target() {
     }
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199 &playback(/tmp/test.wav)"
     );
 }
@@ -966,7 +951,7 @@ fn inline_without_commas_keeps_the_default_separator() {
     .unwrap();
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         "originate loopback/9199 answer,playback:silence_stream://300 inline"
     );
     assert_eq!(cmd.inline_delimiter(), None);
@@ -988,7 +973,7 @@ fn inline_escapes_a_separator_inside_an_argument() {
     .unwrap();
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800),park' inline"
     );
 }
@@ -1010,7 +995,7 @@ fn escaping_survives_arguments_rewritten_after_construction() {
     *apps[0].args_mut() = Some("{absolute_codec_string=G722,PCMU}sofia/gw/1".to_string());
 
     assert!(cmd
-        .to_string()
+        .render(BlockParse::default())
         .contains(r"G722\\,PCMU"));
 }
 
@@ -1025,11 +1010,9 @@ fn inline_escaped_separator_round_trips() {
     )
     .unwrap();
 
-    let rendered = cmd.to_string();
-    let parsed: Originate = rendered
-        .parse()
-        .unwrap();
-    assert_eq!(parsed.to_string(), rendered);
+    let rendered = cmd.render(BlockParse::default());
+    let parsed: Originate = Originate::parse_for(&rendered, BlockParse::default()).unwrap();
+    assert_eq!(parsed.render(BlockParse::default()), rendered);
     assert_eq!(parsed.target(), cmd.target());
 }
 
@@ -1044,7 +1027,7 @@ fn inline_with_delimiter_overrides_the_choice() {
 
     assert_eq!(cmd.inline_delimiter(), Some(';'));
     assert!(cmd
-        .to_string()
+        .render(BlockParse::default())
         .contains("m:;:answer;park"));
 }
 
@@ -1078,7 +1061,7 @@ fn inline_delimiter_refuses_what_breaks_the_hunt_split() {
         let list = originate_quote(&format!("m:{delimiter}:park"));
         let line = format!("originate loopback/9199 {list} inline");
         assert_eq!(
-            line.parse::<Originate>(),
+            Originate::parse_for(&line, BlockParse::default()),
             Err(OriginateError::InvalidInlineDelimiter(delimiter)),
             "{line:?}"
         );
@@ -1103,7 +1086,7 @@ fn inline_with_delimiter_escapes_its_own_separator() {
     .unwrap();
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         r"originate loopback/9199 'm:|:playback:a\\|b' inline"
     );
 }
@@ -1119,7 +1102,7 @@ fn inline_renders_an_argument_made_only_of_separators() {
     .unwrap();
 
     assert_eq!(
-        cmd.to_string(),
+        cmd.render(BlockParse::default()),
         r"originate loopback/9199 'playback:\\,|;~^!' inline"
     );
 }
@@ -1151,9 +1134,8 @@ fn inline_delivers_an_argument_carrying_two_quotes() {
         ),
     ];
     for (cmd, wire) in cases {
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
         assert_eq!(parsed.target(), cmd.target(), "{wire:?}");
     }
@@ -1161,9 +1143,11 @@ fn inline_delivers_an_argument_carrying_two_quotes() {
 
 #[test]
 fn parses_a_prefixed_inline_target() {
-    let parsed: Originate = "originate loopback/9199 'm:|:answer|playback:a,b' inline"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        "originate loopback/9199 'm:|:answer|playback:a,b' inline",
+        BlockParse::default(),
+    )
+    .unwrap();
 
     assert_eq!(parsed.inline_delimiter(), Some('|'));
     let OriginateTarget::InlineApplications(ref apps) = parsed.target() else {
@@ -1256,23 +1240,18 @@ fn separated_commands() -> Vec<(Originate, &'static str)> {
 #[test]
 fn argv_separator_renders_each_argument_escaped_once() {
     for (cmd, wire) in separated_commands() {
-        assert_eq!(cmd.to_string(), wire);
-        assert_eq!(
-            cmd.display_with(BlockParse::PairSplitCleans)
-                .to_string(),
-            wire
-        );
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        assert_eq!(cmd.render(BlockParse::PairSplitCleans), wire);
     }
 }
 
 #[test]
 fn argv_separator_round_trips() {
     for (cmd, wire) in separated_commands() {
-        let parsed: Originate = wire
-            .parse()
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
         assert_eq!(parsed, cmd, "{wire}");
-        assert_eq!(parsed.to_string(), wire);
+        assert_eq!(parsed.render(BlockParse::default()), wire);
     }
 }
 
@@ -1283,8 +1262,7 @@ fn argv_separator_is_absent_by_default() {
         None
     );
     assert_eq!(
-        "originate loopback/9199/test 1000"
-            .parse::<Originate>()
+        Originate::parse_for("originate loopback/9199/test 1000", BlockParse::default())
             .unwrap()
             .argv_separator(),
         None
@@ -1295,19 +1273,22 @@ fn argv_separator_is_absent_by_default() {
 /// backslash, an empty token is an empty value.
 #[test]
 fn argv_separator_parse_reads_the_switch_spellings() {
-    let parsed: Originate = r"originate ^^~loopback/9199/test~&park()~XML~~'UNDEF'~\undef"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        r"originate ^^~loopback/9199/test~&park()~XML~~'UNDEF'~\undef",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.argv_separator(), Some('~'));
     assert_eq!(parsed.dialplan_type(), Some(&DialplanType::XML));
     assert_eq!(parsed.context_str(), Some(""));
     assert_eq!(parsed.caller_id_name(), None);
     assert_eq!(parsed.caller_id_number(), Some(r"\undef"));
 
-    let parsed: Originate =
-        r"originate ^^~loopback/9199/test~&park()~undef~undef~  Lead Trail  ~\s\sx"
-            .parse()
-            .unwrap();
+    let parsed = Originate::parse_for(
+        r"originate ^^~loopback/9199/test~&park()~undef~undef~  Lead Trail  ~\s\sx",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.dialplan_type(), None);
     assert_eq!(parsed.context_str(), None);
     assert_eq!(parsed.caller_id_name(), Some("Lead Trail"));
@@ -1316,9 +1297,11 @@ fn argv_separator_parse_reads_the_switch_spellings() {
 
 #[test]
 fn argv_separator_parse_takes_the_endpoint_at_the_separator_target() {
-    let parsed: Originate = r"originate ^^~{k=\'a b\'}loopback/9199/test~&park()"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        r"originate ^^~{k=\'a b\'}loopback/9199/test~&park()",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.endpoint(), &spaced_endpoint());
 }
 
@@ -1334,9 +1317,11 @@ fn an_unusable_argv_separator_is_refused() {
     assert!(std::error::Error::source(&err).is_some());
 
     assert_eq!(
-        "originate ^^|loopback/9199/test|&park()"
-            .parse::<Originate>()
-            .unwrap_err(),
+        Originate::parse_for(
+            "originate ^^|loopback/9199/test|&park()",
+            BlockParse::default()
+        )
+        .unwrap_err(),
         OriginateError::InvalidArgvSeparator(InvalidArgvSeparator::Unusable('|'))
     );
 }
@@ -1344,11 +1329,11 @@ fn an_unusable_argv_separator_is_refused() {
 /// `originate_function` answers usage past seven arguments.
 #[test]
 fn argv_separator_parse_refuses_what_the_switch_refuses() {
-    assert!(
-        "originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra"
-            .parse::<Originate>()
-            .is_err()
-    );
+    assert!(Originate::parse_for(
+        "originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra",
+        BlockParse::default()
+    )
+    .is_err());
 }
 
 #[test]
@@ -1414,7 +1399,7 @@ fn an_undef_target_is_refused() {
         "originate ^^~loopback/9199/test~UNDEF~inline",
     ] {
         assert_eq!(
-            line.parse::<Originate>(),
+            Originate::parse_for(line, BlockParse::default()),
             Err(OriginateError::UndefPositional("target")),
             "{line}"
         );
@@ -1430,25 +1415,26 @@ fn an_undef_target_is_refused() {
             .to_string();
         assert!(msg.contains("target"), "does not name the target: {msg}");
     }
-    assert!(Originate::extension(test_endpoint(), "undefined")
-        .to_string()
-        .parse::<Originate>()
-        .is_ok());
+    let undefined =
+        Originate::extension(test_endpoint(), "undefined").render(BlockParse::default());
+    assert!(Originate::parse_for(&undefined, BlockParse::default()).is_ok());
 }
 
 /// The blank split reads its positionals by the same rules as a separator split: the
 /// third argument is strictly the dialplan, `undef` is absent, and an eighth is refused.
 #[test]
 fn blank_positionals_read_as_the_separator_split_does() {
-    assert!(
-        "originate loopback/9199/test &park() XML default a b 30 extra"
-            .parse::<Originate>()
-            .is_err()
-    );
+    assert!(Originate::parse_for(
+        "originate loopback/9199/test &park() XML default a b 30 extra",
+        BlockParse::default()
+    )
+    .is_err());
 
-    let parsed: Originate = "originate loopback/9199/test 1000 ctx"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        "originate loopback/9199/test 1000 ctx",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(
         parsed
             .dialplan_type()
@@ -1457,16 +1443,20 @@ fn blank_positionals_read_as_the_separator_split_does() {
     );
     assert_eq!(parsed.context_str(), None);
 
-    let parsed: Originate = "originate loopback/9199/test &park() undef UNDEF Alice"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        "originate loopback/9199/test &park() undef UNDEF Alice",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.dialplan_type(), None);
     assert_eq!(parsed.context_str(), None);
     assert_eq!(parsed.caller_id_name(), Some("Alice"));
 
-    let parsed: Originate = "originate loopback/9199/test &park() undef ctx"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        "originate loopback/9199/test &park() undef ctx",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.dialplan_type(), None);
     assert_eq!(parsed.context_str(), Some("ctx"));
 }
@@ -1497,14 +1487,13 @@ fn blank_split_quotes_empty_and_spaced_positionals() {
         ),
     ];
     for (cmd, wire) in cases {
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
         assert_eq!(parsed.context_str(), cmd.context_str(), "{wire}");
         assert_eq!(parsed.caller_id_name(), cmd.caller_id_name(), "{wire}");
         assert_eq!(parsed.caller_id_number(), cmd.caller_id_number(), "{wire}");
-        assert_eq!(parsed.to_string(), wire);
+        assert_eq!(parsed.render(BlockParse::default()), wire);
     }
 }
 
@@ -1546,16 +1535,17 @@ fn blank_split_delivers_a_single_quote_in_any_argument() {
         ),
     ];
     for (cmd, wire) in cases {
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
         assert_eq!(parsed, cmd, "{wire}");
     }
 
-    let parsed: Originate = r"originate loopback/9199/test &park() XML default it\'s"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        r"originate loopback/9199/test &park() XML default it\'s",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.caller_id_name(), Some("it's"));
 }
 
@@ -1592,9 +1582,8 @@ fn an_inline_argument_escapes_for_the_hunt_split() {
                 .unwrap(),
             None => cmd,
         };
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
         assert_eq!(parsed.target(), cmd.target(), "{wire:?}");
     }
@@ -1633,7 +1622,10 @@ fn inline_applications_refuse_another_dialplan() {
 #[test]
 fn a_target_originate_reads_as_something_else_is_refused() {
     assert_eq!(
-        "originate loopback/9199/test &park(a)b)".parse::<Originate>(),
+        Originate::parse_for(
+            "originate loopback/9199/test &park(a)b)",
+            BlockParse::default()
+        ),
         Err(OriginateError::ParenthesisInApplication {
             application: "park".into()
         })
@@ -1669,7 +1661,7 @@ fn a_parenthesis_refusal_points_at_the_inline_action_list() {
             "inline_applications": [{"name": "playback", "args": "tone_stream://%(500,0,800)"}]}"#;
     let originate = serde_json::from_str::<Originate>(inline).expect(inline);
     assert_eq!(
-        originate.to_string(),
+        originate.render(BlockParse::default()),
         r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800)' inline"
     );
 }
@@ -1689,9 +1681,8 @@ fn an_application_under_the_inline_dialplan_and_a_lone_ampersand_round_trip() {
         ),
     ];
     for (cmd, wire) in cases {
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
         assert_eq!(parsed, cmd, "{wire:?}");
     }
@@ -1719,9 +1710,8 @@ fn a_last_positional_ending_in_stripped_whitespace_arrives() {
         ),
     ];
     for (cmd, wire) in cases {
-        assert_eq!(cmd.to_string(), wire);
-        let parsed: Originate = wire
-            .parse()
+        assert_eq!(cmd.render(BlockParse::default()), wire);
+        let parsed: Originate = Originate::parse_for(wire, BlockParse::default())
             .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
         assert_eq!(parsed, cmd, "{wire:?}");
     }
@@ -1739,8 +1729,7 @@ fn any_dialplan_name_is_kept() {
         ),
         ("originate loopback/9199/test 1000 '' ctx", ""),
     ] {
-        let parsed: Originate = line
-            .parse()
+        let parsed: Originate = Originate::parse_for(line, BlockParse::default())
             .unwrap_or_else(|e| panic!("{line}: {e}"));
         assert_eq!(
             parsed.dialplan_type(),
@@ -1748,12 +1737,14 @@ fn any_dialplan_name_is_kept() {
             "{line}"
         );
         assert_eq!(parsed.context_str(), Some("ctx"), "{line}");
-        assert_eq!(parsed.to_string(), line);
+        assert_eq!(parsed.render(BlockParse::default()), line);
     }
 
-    let typed: Originate = "originate loopback/9199/test 1000 xml ctx"
-        .parse()
-        .unwrap();
+    let typed: Originate = Originate::parse_for(
+        "originate loopback/9199/test 1000 xml ctx",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(typed.dialplan_type(), Some(&DialplanType::XML));
     assert_eq!(DialplanType::XML.name(), "XML");
 
@@ -1761,7 +1752,7 @@ fn any_dialplan_name_is_kept() {
         .dialplan(DialplanType::named("nosuchdp").unwrap())
         .unwrap();
     assert_eq!(
-        named.to_string(),
+        named.render(BlockParse::default()),
         "originate loopback/9199/test 1000 nosuchdp"
     );
     assert_eq!(
@@ -1798,14 +1789,16 @@ fn serde_dialplan_keeps_existing_configs_and_refuses_undef() {
 /// `switch_separate_string` takes `^^ ` as picking the blank split itself.
 #[test]
 fn a_blank_argv_separator_picks_the_blank_split() {
-    let parsed: Originate = "originate ^^ loopback/9199/test &park() XML ctx"
-        .parse()
-        .unwrap();
+    let parsed: Originate = Originate::parse_for(
+        "originate ^^ loopback/9199/test &park() XML ctx",
+        BlockParse::default(),
+    )
+    .unwrap();
     assert_eq!(parsed.argv_separator(), None);
     assert_eq!(parsed.endpoint(), &test_endpoint());
     assert_eq!(parsed.context_str(), Some("ctx"));
     assert_eq!(
-        parsed.to_string(),
+        parsed.render(BlockParse::default()),
         "originate loopback/9199/test &park() XML ctx"
     );
 }
@@ -1813,7 +1806,9 @@ fn a_blank_argv_separator_picks_the_blank_split() {
 /// The switch splits any dial string holding `:_:` into enterprise threads, quoted or not.
 #[test]
 fn an_enterprise_separator_in_a_variable_value_is_refused() {
-    assert!("originate {k=x:_:y}loopback/9199/test &park()"
-        .parse::<Originate>()
-        .is_err());
+    assert!(Originate::parse_for(
+        "originate {k=x:_:y}loopback/9199/test &park()",
+        BlockParse::default()
+    )
+    .is_err());
 }

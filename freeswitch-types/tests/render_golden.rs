@@ -505,15 +505,14 @@ const ORIGINATE_CASES: &[(&str, OriginateBuilder)] = &[
 ];
 
 fn originate_case(records: &mut Vec<String>, id: &str, o: &Originate) {
-    let rendered = o.to_string();
+    let rendered = o.render(BlockParse::default());
     rec(records, format!("orig/{id}/display"), &rendered);
     roundtrip(
         records,
         format!("orig/{id}/roundtrip"),
         &rendered,
-        rendered
-            .parse::<Originate>()
-            .map(|o| o.to_string()),
+        Originate::parse_for(&rendered, BlockParse::default())
+            .map(|o| o.render(BlockParse::default())),
     );
 }
 
@@ -556,26 +555,21 @@ fn bridge_corpus(records: &mut Vec<String>) {
         .unwrap()
         .with_variables(vars);
     let block_parse = BlockParse::default();
-    let rendered = bridge
-        .display_with(block_parse)
-        .to_string();
+    let rendered = bridge.render(block_parse);
     rec(records, "bridge/basic/display", &rendered);
     roundtrip(
         records,
         "bridge/basic/roundtrip".to_string(),
         &rendered,
-        BridgeDialString::parse_with(&rendered, block_parse).map(|b| {
-            b.display_with(block_parse)
-                .to_string()
-        }),
+        BridgeDialString::parse_for(&rendered, block_parse).map(|b| b.render(block_parse)),
     );
 
     // An unescaped comma inside a channel-scope value: the leg-split comma scan protects
     // it (this stays one leg, not two), but the block's own pair split still reads it as
     // a separator, so the block fails to parse rather than the legs merging.
     let bad = "[k=a,b]sofia/internal/1000,sofia/internal/1001";
-    let repr = match bad.parse::<BridgeDialString>() {
-        Ok(b) => format!("Ok {b}"),
+    let repr = match BridgeDialString::parse_for(bad, BlockParse::default()) {
+        Ok(b) => format!("Ok {}", b.render(BlockParse::default())),
         Err(_) => "Err".to_string(),
     };
     rec(records, "bridge/unescaped-comma-in-block/parse", repr);
@@ -812,7 +806,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/originate/{id}"),
-            json_result(json, |o: &Originate| o.to_string()),
+            json_result(json, |o: &Originate| o.render(BlockParse::default())),
         );
     }
 
@@ -830,7 +824,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/bridge/{id}"),
-            json_result(json, |b: &BridgeDialString| b.to_string()),
+            json_result(json, |b: &BridgeDialString| b.render(BlockParse::default())),
         );
     }
 }

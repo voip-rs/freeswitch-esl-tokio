@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // BACKGROUND_JOB is a switch-wide event, so the Job-UUID is what makes a
     // result yours. BgJobTracker keeps that bookkeeping.
     let mut jobs: BgJobTracker<()> = BgJobTracker::new();
-    jobs.bgapi(&client, &cmd.display_with(block_parse).to_string(), ()).await?;
+    jobs.bgapi(&client, &cmd.render(block_parse), ()).await?;
 
     let call_uuid = loop {
         let Some(event) = events.try_next().await? else {
@@ -143,7 +143,7 @@ Reference: [dial strings](docs/dial-string-format.md), [codec strings](docs/code
 - **Loopback bowout detection**: `loopback_resignation()` tells a leg mod_loopback removed from a live call apart from a real teardown.
 - **Failed replies read as data**: `EslError::command_failure()` hands back the text behind `-ERR` / `-USAGE`.
 - **Channel dumps**: `parse_channel_dump()` decodes `uuid_dump` through the same parser as an event.
-- **Command builders**: all `Display`/`FromStr`, no transport coupling.
+- **Command builders**: no transport coupling; a dial string renders and parses only for a named target.
 - **Serde**: config-driven originate and bridge from YAML/JSON.
 - **Connection health**: liveness detection, command timeouts, `is_connection_error()` / `is_recoverable()`.
 - **Correct wire format**: two-part framing, percent-decoded headers, matches `mod_event_socket.c`.

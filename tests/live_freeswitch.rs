@@ -16,7 +16,8 @@ use freeswitch_esl_tokio::{
     Originate,
 };
 use live_common::{
-    connect, esl_env, kill_channel, wait_for_own_event, ChannelReaper, CONN_SEMAPHORE,
+    block_parse_under_test, connect, esl_env, kill_channel, wait_for_own_event, ChannelReaper,
+    CONN_SEMAPHORE,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -48,7 +49,7 @@ async fn live_api_originate_leaves_an_expression_unexpanded() {
             .into(),
         Application::simple("park"),
     );
-    let line = originate.to_string();
+    let line = originate.render(block_parse_under_test());
     assert_eq!(
         line,
         "originate ${group_call(nosuchgroup@example.com)} &park()"
@@ -357,7 +358,7 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
     // bgapi returns immediately; the call proceeds asynchronously and
     // FS dials our listener.
     let job = inbound
-        .bgapi(&cmd.to_string())
+        .bgapi(&cmd.render(block_parse_under_test()))
         .await
         .expect("bgapi originate")
         .job_uuid()
@@ -528,7 +529,7 @@ async fn park_and_await(event_type: EslEventType) -> freeswitch_esl_tokio::EslEv
         Application::park(),
     );
     let uuid = client
-        .api(&originate.to_string())
+        .api(&originate.render(block_parse_under_test()))
         .await
         .expect("originate: transport error")
         .api_result()

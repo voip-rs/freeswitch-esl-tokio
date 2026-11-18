@@ -50,7 +50,7 @@ sip-header, which this crate does not re-export.
   storage. Disable if you only need channel state or variable enums.
 - **`serde`** (enabled by default) — adds `Serialize`/`Deserialize` impls for
   all public types. Disable with `default-features = false` if you only need
-  wire-format parsing (`Display`/`FromStr`) without pulling in serde.
+  wire-format rendering and parsing without pulling in serde.
 - **`sdp`** — enables the `sdp` module (`CodecString`, `SdpCodecs`,
   `CodecImplementation`), pulling in `sdp-types`.
 
@@ -129,18 +129,18 @@ let cmd = Originate::application(
 let version: freeswitch_types::FreeswitchVersion = "1.10.12".parse().unwrap();
 let block_parse = BlockParse::for_version(&version).unwrap();
 
-// Rendered for that revision, producing the FreeSWITCH wire format
-let wire = cmd.display_with(block_parse).to_string();
-assert!(wire.starts_with("originate sofia/gateway/"));
+// A dial string renders only for a named parser revision
+let line = cmd.render(block_parse);
+assert!(line.starts_with("originate sofia/gateway/"));
 
-// Parsed back for the same revision
-let parsed = Originate::parse_with(&wire, block_parse).unwrap();
-assert_eq!(parsed.display_with(block_parse).to_string(), wire);
+// and parses back at the same one
+let parsed = Originate::parse_for(&line, block_parse).unwrap();
+assert_eq!(parsed, cmd);
 ```
 
 Variable values are escaped for the switch's bracket-block parser as measured on
 one build; `BlockParse::for_version` maps the FreeSWITCH version you target to
-the revision `display_with` renders for, see
+the revision `render` takes, see
 [parser revisions](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/dial-string-format.md#parser-revisions).
 
 ### Typed event accessors
@@ -188,7 +188,7 @@ let cmd: Originate = serde_json::from_str(json).unwrap();
 
 // The version belongs in the application's config, beside the connection
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
-println!("{}", cmd.display_with(BlockParse::for_version(&version).unwrap()));
+println!("{}", cmd.render(BlockParse::for_version(&version).unwrap()));
 ```
 
 ### Raw SIP message header extraction

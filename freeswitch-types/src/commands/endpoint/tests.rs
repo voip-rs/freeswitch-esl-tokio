@@ -1,6 +1,6 @@
 use super::*;
 use crate::commands::originate::{Application, Originate};
-use crate::commands::variables::VariablesType;
+use crate::commands::variables::{BlockParse, VariablesType};
 
 /// `switch_find_end_paren` counts depth, so a balanced bracket in a value leaves the block
 /// closing at its own bracket.
@@ -94,7 +94,11 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         let msg = unexpanded(kind).to_string();
         assert!(msg.contains(kind) && !msg.contains("SECRET"), "{msg}");
         let line = format!("originate {text} &park()");
-        assert_eq!(line.parse::<Originate>(), Err(unexpanded(kind)), "{line}");
+        assert_eq!(
+            Originate::parse_for(&line, BlockParse::default()),
+            Err(unexpanded(kind)),
+            "{line}"
+        );
     }
     let config = r#"{"endpoint":{"group_call":{"group":"support","domain":"example.com"}},"application":{"name":"park"}}"#;
     let refused = serde_json::from_str::<Originate>(config)
@@ -108,7 +112,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         Application::simple("park"),
     );
     assert_eq!(
-        built.to_string(),
+        built.render(BlockParse::default()),
         "originate ${group_call(support@example.com)} &park()"
     );
 }
@@ -184,12 +188,12 @@ fn whitespace_other_than_a_space_is_kept() {
 
     assert!(Variables::parse_for("\u{b}{k=v}", DialStringCarrier::Dialplan).is_err());
 
-    let bridge = crate::commands::BridgeDialString::parse_with(
+    let bridge = crate::commands::BridgeDialString::parse_for(
         "loopback/9199/test\t",
         crate::commands::BlockParse::PairSplitCleans,
     )
     .unwrap();
-    assert_eq!(bridge.to_string(), "loopback/9199/test\t");
+    assert_eq!(bridge.render(BlockParse::default()), "loopback/9199/test\t");
 }
 
 #[test]
@@ -303,7 +307,7 @@ fn parse_refuses_a_block_on_an_error_endpoint() {
         Err(OriginateError::VariablesNotSupported("error"))
     );
     assert_eq!(
-        crate::commands::BridgeDialString::parse_with(
+        crate::commands::BridgeDialString::parse_for(
             "[k=v]error/USER_BUSY",
             crate::commands::variables::BlockParse::default()
         ),

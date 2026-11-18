@@ -10,6 +10,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::reads_as_application;
+use crate::commands::BlockParse;
 use crate::commands::{Application, DialplanType, Endpoint, LoopbackEndpoint, Originate};
 use crate::switch_passes::against_the_c_at_its_revision;
 use crate::switch_passes::api_argument::STRIPPED_WHITESPACE;
@@ -451,7 +452,7 @@ fn switch_api_reading(c: Oracle, line: &str) -> ApiReading {
 /// A rendered originate, or `None` where the builder refuses the spec, and lines of stray text.
 fn api_lines() -> impl Strategy<Value = Option<String>> {
     prop_oneof![
-        3 => originate_spec().prop_map(|spec| build_originate(&spec).map(|originate| originate.to_string())),
+        3 => originate_spec().prop_map(|spec| build_originate(&spec).map(|originate| originate.render(BlockParse::default()))),
         1 => vec(text(), 0..9).prop_map(|tokens| Some(format!("originate {}", tokens.join(" ")))),
     ]
 }
@@ -495,12 +496,10 @@ fn a_parsed_originate_reads_back_the_same_through_the_switch() {
             let Some(line) = line else {
                 return Ok(());
             };
-            let Ok(parsed) = Originate::parse_with(&line, block_parse) else {
+            let Ok(parsed) = Originate::parse_for(&line, block_parse) else {
                 return Ok(());
             };
-            let rendered = parsed
-                .display_with(block_parse)
-                .to_string();
+            let rendered = parsed.render(block_parse);
             let read = |text: &str| {
                 let mut reading = switch_api_reading(c, text);
                 let (mut dial, mut hunt) = (None, None);

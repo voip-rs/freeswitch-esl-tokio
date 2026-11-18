@@ -29,7 +29,7 @@ let originate: Originate = yaml_serde::from_str(yaml)?;
 // see "FreeSWITCH version and parser revision" below for where it comes from.
 let version: FreeswitchVersion = "1.10.12".parse()?;
 let block_parse = BlockParse::for_version(&version)?;
-client.bgapi(&originate.display_with(block_parse).to_string()).await?;
+client.bgapi(&originate.render(block_parse)).await?;
 # Ok(())
 # }
 ```
@@ -80,7 +80,7 @@ freeswitch_version: "1.10.13-dev"
 block_parse: pair_split_cleans
 ```
 
-Map it with `BlockParse::for_version` when `block_parse` is absent, and render with `display_with`; see [commands.md](commands.md#the-switchs-parser-revision).
+Map it with `BlockParse::for_version` when `block_parse` is absent, and pass the result to `render`; see [commands.md](commands.md#the-switchs-parser-revision).
 
 ## How endpoint types appear in YAML
 

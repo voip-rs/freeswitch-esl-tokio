@@ -2,8 +2,6 @@
 //! toward what those passes treat specially. A render either arrives as built, or config
 //! load or parse refuses what was built.
 
-use std::str::FromStr;
-
 use freeswitch_c_oracle::{config, Oracle};
 use proptest::collection::vec;
 use proptest::option;

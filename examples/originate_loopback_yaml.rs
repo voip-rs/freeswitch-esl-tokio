@@ -64,12 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // asks the switch for, so the version is stated in the environment.
     let block_parse = block_parse::block_parse_from_env()?;
     let originate: Originate = yaml_serde::from_str(ORIGINATE_YAML)?;
-    let wire = originate
-        .display_with(block_parse)
-        .to_string();
 
     println!("=== YAML -> Originate ===");
-    println!("{wire}\n");
+    let line = originate.render(block_parse);
+    println!("{line}\n");
 
     let (client, mut events) = common::connect_from_env().await?;
 
@@ -83,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `api originate` blocks until the channel answers and returns its UUID.
     // The A leg answers once the B leg's dialplan does.
     let resp = client
-        .api(&wire)
+        .api(&line)
         .await?;
     let a_leg = resp
         .api_result()?

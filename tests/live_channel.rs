@@ -159,8 +159,7 @@ async fn live_originate_refuses_an_eighth_argument() {
         "originate ^^~loopback/9199/test~&park()~XML~test~a~b~5~extra",
     ] {
         assert!(
-            line.parse::<Originate>()
-                .is_err(),
+            Originate::parse_for(line, block_parse_under_test()).is_err(),
             "{line} parsed"
         );
         let resp = client
@@ -217,9 +216,9 @@ async fn originate_positionals(separator: Option<char>) {
     );
     assert!(
         empty_last
-            .to_string()
+            .render(block_parse_under_test())
             .ends_with(&format!("{}''", separator.unwrap_or(' '))),
-        "{empty_last}"
+        "{empty_last:?}"
     );
 
     let cases: Vec<(&str, Originate, &str, HeaderValues, VariableValues)> = vec![
@@ -322,7 +321,7 @@ async fn originate_positionals(separator: Option<char>) {
     ];
 
     for (label, cmd, app, headers, variables) in cases {
-        let line = cmd.to_string();
+        let line = cmd.render(block_parse_under_test());
         let reply = client
             .api(&line)
             .await
@@ -381,7 +380,7 @@ async fn unanswered_originate_elapsed(
     .timeout(Duration::from_secs(seconds))
     .with_argv_separator('~')
     .expect("'~' separates originate's arguments");
-    let line = cmd.to_string();
+    let line = cmd.render(block_parse_under_test());
     let started = Instant::now();
     let reply = client
         .api(&line)
@@ -685,9 +684,7 @@ async fn dial_without_waiting(
 ) -> Option<String> {
     let block_parse = block_parse_under_test();
     if carrier == DialStringCarrier::EslApi {
-        let cmd = Originate::application(endpoint.clone(), Application::park())
-            .display_with(block_parse)
-            .to_string();
+        let cmd = Originate::application(endpoint.clone(), Application::park()).render(block_parse);
         client
             .bgapi(&cmd)
             .await
@@ -699,8 +696,7 @@ async fn dial_without_waiting(
     let anchor = parked_anchor(client, "null/anchor").await;
     let dial = BridgeDialString::new(vec![vec![endpoint.clone()]])
         .expect("one leg spans no bracket")
-        .display_with(block_parse)
-        .to_string();
+        .render(block_parse);
     client
         .execute_with_options(
             "bridge",
@@ -964,8 +960,7 @@ async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
         );
         let dial = BridgeDialString::new(vec![vec![endpoint]])
             .expect("one leg spans no bracket")
-            .display_with(block_parse_under_test())
-            .to_string();
+            .render(block_parse_under_test());
 
         let mut reaper = ChannelReaper::new(&client);
         reaper.track(&anchor);
@@ -1445,7 +1440,7 @@ async fn live_channel_dump_rebuild_loop() {
     for _ in 0..2 {
         let cmd = Originate::application(test_9199(), Application::simple("park"));
         let uuid = client
-            .api(&cmd.to_string())
+            .api(&cmd.render(block_parse_under_test()))
             .await
             .expect("originate: transport error")
             .api_result()
@@ -1689,7 +1684,7 @@ async fn live_show_bootstrap_rebuilds_channel_create() {
     let mut reaper = ChannelReaper::new(&client);
     let cmd = Originate::application(test_9199(), Application::simple("park"));
     let uuid = client
-        .api(&cmd.to_string())
+        .api(&cmd.render(block_parse_under_test()))
         .await
         .expect("originate: transport error")
         .api_result()

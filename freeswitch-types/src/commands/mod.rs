@@ -3,10 +3,11 @@
 //! [`api()`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/connection/struct.EslClient.html#method.api
 //! [`bgapi()`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/connection/struct.EslClient.html#method.bgapi
 //!
-//! Each builder implements [`Display`](std::fmt::Display), producing the argument
-//! string for the corresponding FreeSWITCH API command.  The builders perform
-//! escaping and validation so callers don't need to worry about wire-format
-//! details.
+//! Each builder produces the argument string for the corresponding FreeSWITCH API
+//! command, through [`Display`](std::fmt::Display) or, where the text depends on the
+//! command carrying it and the switch reading it, through a `render` that names that
+//! target. The builders perform escaping and validation so callers don't need to
+//! worry about wire-format details.
 
 pub mod bridge;
 pub mod channel;
@@ -20,7 +21,7 @@ pub mod variables;
 #[cfg(all(test, feature = "serde"))]
 mod proptests;
 
-pub use bridge::{BridgeDialString, BridgeDialStringDisplay};
+pub use bridge::BridgeDialString;
 pub use channel::{
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer,
@@ -41,8 +42,8 @@ pub use flattened::{
     ListWarning, UnparsedLeg,
 };
 pub use originate::{
-    Application, DialplanType, Endpoint, Originate, OriginateDisplay, OriginateError,
-    OriginateTarget, ParseDialplanTypeError, Variables, VariablesType,
+    Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
+    ParseDialplanTypeError, Variables, VariablesType,
 };
 pub use variables::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,

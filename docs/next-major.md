@@ -46,18 +46,6 @@ wire. `dialplan` and config load refuse both;
 `set_dialplan` and a target swapped through `target_mut` cannot until they
 return `Result`.
 
-### Consider removing `Display` for `Variables` and `Endpoint`
-
-Both render for `DialStringCarrier::EslApi` at the default `BlockParse`, which
-is right for what this crate mostly drives but silently wrong for a block
-hand-spliced into a dialplan string or bound for a switch on another parser
-revision. Removing the impls would force `display_for(target)` at every call
-site, making a wrong target unrepresentable rather than merely unlikely.
-`Originate` and `BridgeDialString` render with the default revision the same
-way and belong in the same decision. The
-cost is ergonomic and it breaks `format!("{vars}")` everywhere, so it is worth
-weighing against how often the default is actually wrong in practice.
-
 
 ## freeswitch-esl-tokio 3.0
 

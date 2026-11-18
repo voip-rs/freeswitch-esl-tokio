@@ -7,6 +7,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use crate::commands::originate::{DialplanType, OriginateError, OriginateTarget};
+use crate::commands::BlockParse;
 use crate::commands::{Application, Endpoint, LoopbackEndpoint, Originate};
 use crate::switch_passes::originate_function::c_oracle::APP_NAMES;
 use crate::switch_passes::originate_function::parse_originate_target;
@@ -106,7 +107,7 @@ fn inline_actions_arrive_through_the_c_hunt() {
                     .with_argv_separator('~')
                     .expect("a usable argv separator");
             }
-            let line = originate.to_string();
+            let line = originate.render(BlockParse::default());
             let api = c.api_originate(
                 line.strip_prefix("originate ")
                     .unwrap_or(&line)

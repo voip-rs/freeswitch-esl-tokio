@@ -194,9 +194,7 @@ fn bridges_dial_through_the_c_passes() {
             if expression || config_refuses_bridge(&bridge) {
                 return Ok(());
             }
-            let rendered = bridge
-                .display_with(block_parse)
-                .to_string();
+            let rendered = bridge.render(block_parse);
             let dial = c.dial(
                 &c.expand(rendered.as_bytes())
                     .text,

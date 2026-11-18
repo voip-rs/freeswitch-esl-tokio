@@ -40,8 +40,8 @@ impl AppCommand {
         execute("playback", Some(file.to_string()))
     }
 
-    /// `destination`: dial string for the B-leg. Accepts `&str`,
-    /// [`BridgeDialString`](crate::commands::BridgeDialString), [`Endpoint`](crate::Endpoint), etc.
+    /// `destination`: dial string for the B-leg, such as a
+    /// [`BridgeDialString::render`](crate::commands::BridgeDialString::render) output.
     pub fn bridge(destination: impl fmt::Display) -> EslCommand {
         execute("bridge", Some(destination.to_string()))
     }

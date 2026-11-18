@@ -92,12 +92,10 @@
 //! // Escaping depends on the switch's parser revision, which the crate never
 //! // asks the switch for: name the release you target.
 //! let version: FreeswitchVersion = "1.10.12".parse().unwrap();
-//! let wire = cmd
-//!     .display_with(BlockParse::for_version(&version).unwrap())
-//!     .to_string();
+//! let line = cmd.render(BlockParse::for_version(&version).unwrap());
 //!
-//! // Use with client.api(&wire) or client.bgapi(&wire)
-//! assert!(wire.contains("sofia/gateway/my_provider/18005551234"));
+//! // Use with client.api(&line) or client.bgapi(&line)
+//! assert!(line.contains("sofia/gateway/my_provider/18005551234"));
 //! ```
 //!
 //! See the [`commands`] module for `Originate`, `UuidBridge`, `UuidTransfer`,
@@ -167,18 +165,17 @@ pub use freeswitch_types::{
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
     case_alias_key, channel_driver, normalize_header_key, AnswerState, Application, BlockParse,
-    BridgeDialString, BridgeDialStringDisplay, CallDirection, CallState, CarriedHeader,
-    ChannelState, ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString,
-    DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointFieldFault, EslArray,
-    EslArrayError, EslEvent, EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader,
-    EventSubscription, EventSubscriptionError, ExecuteOn, ExecuteOnFault, FreeswitchVersion,
-    GatewayPingStatus, GatewayRegState, GroupCallOrder, HangupCause, HeaderLookup,
-    InvalidArgvSeparator, InvalidHeaderName, LogLevel, LossyValue, LossyValues, MultipartBody,
-    MultipartBodyError, MultipartItem, Originate, OriginateDisplay, OriginateError,
-    OriginateTarget, ParseAnswerStateError, ParseBlockParseError, ParseCallDirectionError,
-    ParseCallStateError, ParseChannelStateError, ParseChannelVariableError,
-    ParseCoreMediaVariableError, ParseDialplanTypeError, ParseEventFormatError,
-    ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
+    BridgeDialString, CallDirection, CallState, CarriedHeader, ChannelState, ChannelTimetable,
+    ChannelVariable, CoreMediaVariable, DialString, DialStringCarrier, DialStringTarget,
+    DialplanType, Endpoint, EndpointFieldFault, EslArray, EslArrayError, EslEvent,
+    EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader, EventSubscription,
+    EventSubscriptionError, ExecuteOn, ExecuteOnFault, FreeswitchVersion, GatewayPingStatus,
+    GatewayRegState, GroupCallOrder, HangupCause, HeaderLookup, InvalidArgvSeparator,
+    InvalidHeaderName, LogLevel, LossyValue, LossyValues, MultipartBody, MultipartBodyError,
+    MultipartItem, Originate, OriginateError, OriginateTarget, ParseAnswerStateError,
+    ParseBlockParseError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
+    ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
     ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
     ParseHangupCauseError, ParseHeaderError, ParseHoldActionError, ParseLogLevelError,
     ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,

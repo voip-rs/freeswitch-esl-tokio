@@ -66,11 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The loopback answers on its own, so this returns before the socket app on
     // the A leg has reached our listener.
     let response = inbound
-        .api(
-            &originate
-                .display_with(block_parse)
-                .to_string(),
-        )
+        .api(&originate.render(block_parse))
         .await?;
     let call_uuid = response.api_result()?;
     println!("originated {call_uuid}");

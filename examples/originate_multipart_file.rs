@@ -91,13 +91,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     endpoint.set_variables(Some(vars))?;
     let originate = Originate::application(endpoint, Application::simple("park"));
-    let wire = originate
-        .display_with(block_parse)
-        .to_string();
-    println!("{wire}");
+    let line = originate.render(block_parse);
+    println!("{line}");
 
     // `api originate` blocks until the far end answers or refuses.
-    let uuid = api_ok(&client, &wire).await?;
+    let uuid = api_ok(&client, &line).await?;
     println!("leg {uuid} is up");
 
     // What the hook set is what mod_sofia put in the INVITE: one `type:body`
