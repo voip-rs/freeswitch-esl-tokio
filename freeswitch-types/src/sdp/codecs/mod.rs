@@ -4,7 +4,11 @@
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
 mod attrs;
+#[cfg(test)]
+mod c_oracle;
 mod media_section;
+#[cfg(test)]
+mod switch_reads;
 #[cfg(test)]
 mod testutil;
 

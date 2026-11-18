@@ -1,0 +1,447 @@
+//! `SdpCodecs::parse` against sofia-sip's own `sdp_parse`, called as the switch calls it.
+//!
+//! Where sofia refuses, the parse must carry the refusal as `SwitchRejects`; where it stops
+//! reading, `SwitchStopsReading`, and the prefix before the stop must parse to what sofia saw.
+//! Otherwise every section must match sofia's: type, port, format list, direction, and for an RTP
+//! section each payload type's name, rate, channels and fmtp. Field values sofia validates but
+//! extraction never reads (`o=`, `c=`, `b=`, `t=`, `r=`, `z=`, `k=`) are always generated
+//! well-formed, because a refusal on one of them alone is not reported.
+
+use freeswitch_c_oracle::{against_sofia, SdpMedia, SdpParse, SdpSession};
+use proptest::collection::vec;
+use proptest::prelude::*;
+use proptest::sample::select;
+use proptest::test_runner::{TestCaseError, TestCaseResult};
+
+use super::{SdpCodecEntry, SdpCodecs, SdpMediaSection};
+use crate::sdp::static_payload::canonical_iananame;
+use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
+
+/// Lines whose handling waits on a fix still to land; each fix flips its own.
+const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = true;
+const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
+const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
+const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
+
+const PAYLOAD_TYPES: &[&str] = &[
+    "0", "3", "8", "9", "13", "18", "34", "96", "97", "101", "127",
+];
+const ODD_FORMATS: &[&str] = &["1", "2", "19", "128", "*", "abc", "96x"];
+
+fn payload_type() -> impl Strategy<Value = String> {
+    prop_oneof![
+        8 => select(PAYLOAD_TYPES),
+        1 => select(ODD_FORMATS),
+    ]
+    .prop_map(str::to_owned)
+}
+
+fn rtpmap() -> impl Strategy<Value = String> {
+    let name = select(
+        &[
+            "opus",
+            "PCMU",
+            "telephone-event",
+            "CN",
+            "AMR-WB",
+            "H264",
+            "speex",
+        ][..],
+    );
+    let rate = select(&["8000", "16000", "48000", "90000"][..]);
+    let channels = select(&["", "/1", "/2"][..]);
+    (payload_type(), name, rate, channels)
+        .prop_map(|(pt, name, rate, ch)| format!("a=rtpmap:{pt} {name}/{rate}{ch}"))
+}
+
+fn fmtp() -> impl Strategy<Value = String> {
+    let params = select(&["0-16", "useinbandfec=1", "octet-align=1; mode-set=0,2", ""][..]);
+    (payload_type(), params).prop_map(|(pt, params)| format!("a=fmtp:{pt} {params}"))
+}
+
+fn direction() -> impl Strategy<Value = String> {
+    select(&["a=sendrecv", "a=sendonly", "a=recvonly", "a=inactive"][..]).prop_map(str::to_owned)
+}
+
+/// Lines that are not well-formed attributes or fields, at either level.
+fn noise() -> impl Strategy<Value = String> {
+    let mut lines = vec![
+        "junk line",
+        "ab=x",
+        "x=y",
+        " ",
+        "\t",
+        "x",
+        "=",
+        "  a=ptime:30",
+        "a=",
+        "a=:x",
+        "a=rtpmap 96 PCMU/8000",
+        "a=ptime:20",
+        "\0",
+    ];
+    if !EXCLUDE_UNREADABLE_PAYLOAD_TYPE {
+        lines.extend(["a=rtpmap:x opus/48000", "a=fmtp:y foo"]);
+    }
+    if !EXCLUDE_RTPMAP_WITHOUT_RATE {
+        lines.extend([
+            "a=rtpmap:96 opus",
+            "a=rtpmap:96 bad,name/8000",
+            "a=rtpmap:96 opus/abc",
+        ]);
+    }
+    if !EXCLUDE_ATTRIBUTE_NAME_CASE {
+        lines.extend(["a=SENDONLY", "a=RecvOnly", "a=RTPMAP:96 opus/48000/2"]);
+    }
+    select(lines).prop_map(str::to_owned)
+}
+
+fn media_line() -> impl Strategy<Value = String> {
+    let attribute = prop_oneof![
+        4 => rtpmap(),
+        2 => fmtp(),
+        1 => Just("c=IN IP4 192.0.2.2".to_owned()),
+        1 => Just("b=AS:64".to_owned()),
+        1 => Just("i=info".to_owned()),
+        1 => Just("k=prompt".to_owned()),
+        1 => Just("r=7d 1h 0 25h".to_owned()),
+        2 => noise(),
+    ];
+    if EXCLUDE_ATTRIBUTE_NAME_CASE {
+        attribute.boxed()
+    } else {
+        prop_oneof![4 => attribute, 1 => direction()].boxed()
+    }
+}
+
+fn m_line() -> impl Strategy<Value = String> {
+    let media = select(&["audio", "video", "image", "application"][..]);
+    let port = select(&["5004", "9", "65535", "0", "5004/2"][..]);
+    let proto = select(
+        &[
+            "RTP/AVP",
+            "RTP/SAVP",
+            "UDP/TLS/RTP/SAVPF",
+            "RTP",
+            "udptl",
+            "TCP/MSRP",
+            "RTP/AVP/TCP",
+        ][..],
+    );
+    (media, port, proto, vec(payload_type(), 0..4)).prop_map(|(media, port, proto, formats)| {
+        format!("m={media} {port} {proto} {}", formats.join(" "))
+            .trim_end()
+            .to_owned()
+    })
+}
+
+fn section() -> impl Strategy<Value = Vec<String>> {
+    let lines = vec(media_line(), 0..6);
+    let one_direction = proptest::option::of(direction());
+    (m_line(), lines, one_direction).prop_map(|(m, mut lines, direction)| {
+        lines.insert(0, m);
+        lines.extend(direction);
+        lines
+    })
+}
+
+fn session_lines() -> impl Strategy<Value = Vec<String>> {
+    let present = |line: &'static str| proptest::option::weighted(0.9, Just(line.to_owned()));
+    let extra = prop_oneof![
+        2 => Just("r=7d 1h 0 25h".to_owned()),
+        1 => Just("z=2882844526 -1h".to_owned()),
+        1 => Just("b=AS:64".to_owned()),
+        1 => Just("k=prompt".to_owned()),
+        1 => Just("a=ptime:20".to_owned()),
+        1 => Just("o=- 1 1 IN IP4 192.0.2.3".to_owned()),
+        1 => Just("c=IN IP4 192.0.2.3".to_owned()),
+        2 => noise(),
+    ];
+    (
+        present("o=- 0 0 IN IP4 192.0.2.1"),
+        present("s=-"),
+        present("c=IN IP4 192.0.2.1"),
+        present("t=0 0"),
+        vec((any::<prop::sample::Index>(), extra), 0..3),
+        proptest::option::of(direction()),
+    )
+        .prop_map(|(o, s, c, t, extras, direction)| {
+            let mut lines: Vec<String> = [o, s, c, t]
+                .into_iter()
+                .flatten()
+                .collect();
+            for (at, line) in extras {
+                lines.insert(at.index(lines.len() + 1), line);
+            }
+            lines.extend(direction);
+            lines
+        })
+}
+
+fn offer() -> impl Strategy<Value = String> {
+    let version = prop_oneof![
+        20 => Just("v=0"),
+        1 => Just("v=1"),
+        1 => Just(" v=0"),
+        1 => Just("v=0 "),
+    ];
+    let separator =
+        prop_oneof![8 => Just("\r\n"), 2 => Just("\n"), 1 => Just("\r"), 1 => Just("\r\n\r\n")];
+    (
+        version,
+        session_lines(),
+        vec(section(), 0..4),
+        vec(separator, 64),
+    )
+        .prop_map(|(version, session, sections, separators)| {
+            let lines = std::iter::once(version.to_owned())
+                .chain(session)
+                .chain(
+                    sections
+                        .into_iter()
+                        .flatten(),
+                );
+            lines
+                .zip(
+                    separators
+                        .into_iter()
+                        .cycle(),
+                )
+                .map(|(line, sep)| line + sep)
+                .collect()
+        })
+}
+
+/// The category the parse reports for one of sofia's refusal messages.
+fn rejection(message: &str) -> SwitchRejection {
+    let categories = [
+        ("bad line", SwitchRejection::BadLine),
+        ("unknown field", SwitchRejection::UnknownField),
+        (
+            "repeat field without time",
+            SwitchRejection::RepeatWithoutTime,
+        ),
+        ("zone field without time", SwitchRejection::ZoneWithoutTime),
+        (
+            "invalid attribute name",
+            SwitchRejection::InvalidAttributeName,
+        ),
+        (
+            "m= invalid format for RTP",
+            SwitchRejection::InvalidRtpFormat,
+        ),
+        ("m= ", SwitchRejection::InvalidMediaLine),
+        ("a=rtpmap:", SwitchRejection::InvalidRtpmap),
+        ("No o= present", SwitchRejection::MissingOrigin),
+        ("No c= on either", SwitchRejection::MissingConnection),
+    ];
+    categories
+        .iter()
+        .find(|(prefix, _)| message.starts_with(prefix))
+        .map(|&(_, category)| category)
+        .unwrap_or_else(|| panic!("sofia refused with an unmodelled message: {message:?}"))
+}
+
+fn direction_of(mode: u8) -> SdpDirection {
+    match mode {
+        0 => SdpDirection::Inactive,
+        1 => SdpDirection::SendOnly,
+        2 => SdpDirection::RecvOnly,
+        _ => SdpDirection::SendRecv,
+    }
+}
+
+fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
+    let held = c.port == 0;
+    prop_assert!(
+        ours.media_type()
+            .to_string()
+            .eq_ignore_ascii_case(&String::from_utf8_lossy(&c.type_name)),
+        "media type: sofia {:?}, ours {}",
+        String::from_utf8_lossy(&c.type_name),
+        ours.media_type()
+    );
+    prop_assert_eq!(u64::from(ours.port()), c.port);
+    let ours_formats: Vec<&[u8]> = ours
+        .formats()
+        .split_ascii_whitespace()
+        .map(str::as_bytes)
+        .collect();
+    if c.rtpmaps
+        .is_empty()
+    {
+        let c_formats: Vec<&[u8]> = c
+            .formats
+            .iter()
+            .map(Vec::as_slice)
+            .collect();
+        prop_assert_eq!(ours_formats, c_formats);
+    } else {
+        let c_pts: Vec<Vec<u8>> = c
+            .rtpmaps
+            .iter()
+            .map(|rm| {
+                rm.pt
+                    .to_string()
+                    .into_bytes()
+            })
+            .collect();
+        let c_pts: Vec<&[u8]> = c_pts
+            .iter()
+            .map(Vec::as_slice)
+            .collect();
+        prop_assert_eq!(ours_formats, c_pts);
+    }
+    if held && EXCLUDE_PORT_ZERO_ATTRIBUTES {
+        return Ok(());
+    }
+    prop_assert_eq!(ours.direction(), direction_of(c.mode), "direction");
+    // m=image is T.38 whatever its proto, as the switch reads it.
+    if ours.media_type() == &crate::sdp::SdpMediaType::Other("image".into()) {
+        return Ok(());
+    }
+    for rm in &c.rtpmaps {
+        let codec = ours
+            .entries()
+            .iter()
+            .find_map(|e| match e {
+                SdpCodecEntry::Rtp(codec) if codec.payload_type() == rm.pt => Some(codec),
+                _ => None,
+            });
+        let non_codec = ours
+            .non_codec_payloads()
+            .iter()
+            .find(|n| n.payload_type == rm.pt);
+        let unmapped = ours
+            .unmapped()
+            .iter()
+            .any(|u| u.payload_type == rm.pt);
+        let encoding = String::from_utf8_lossy(&rm.encoding);
+        let fmtp = rm
+            .fmtp
+            .as_deref()
+            .map(String::from_utf8_lossy);
+        match (codec, non_codec) {
+            _ if rm
+                .encoding
+                .is_empty() =>
+            {
+                prop_assert!(unmapped, "pt {} unnamed by sofia is not unmapped", rm.pt);
+            }
+            (Some(codec), _) => {
+                prop_assert!(
+                    codec
+                        .name()
+                        .eq_ignore_ascii_case(canonical_iananame(&encoding)),
+                    "pt {}: sofia {encoding}, ours {}",
+                    rm.pt,
+                    codec.name()
+                );
+                prop_assert_eq!(u64::from(codec.clock_rate()), rm.rate, "pt {} rate", rm.pt);
+                prop_assert_eq!(codec.fmtp(), fmtp.as_deref(), "pt {} fmtp", rm.pt);
+                if let Some(params) = &rm.params {
+                    let channels = String::from_utf8_lossy(params)
+                        .parse::<u32>()
+                        .ok();
+                    prop_assert_eq!(codec.channels(), channels, "pt {} channels", rm.pt);
+                }
+            }
+            (None, Some(non_codec)) => {
+                prop_assert_eq!(
+                    u64::from(non_codec.clock_rate),
+                    rm.rate,
+                    "pt {} rate",
+                    rm.pt
+                );
+                prop_assert_eq!(
+                    non_codec
+                        .fmtp
+                        .as_deref(),
+                    fmtp.as_deref(),
+                    "pt {} fmtp",
+                    rm.pt
+                );
+            }
+            (None, None) => prop_assert!(false, "pt {} ({encoding}) missing from ours", rm.pt),
+        }
+    }
+    Ok(())
+}
+
+fn compare(c: &SdpSession, ours: &SdpCodecs) -> TestCaseResult {
+    prop_assert_eq!(
+        ours.sections()
+            .len(),
+        c.media
+            .len(),
+        "section count"
+    );
+    for (c, ours) in c
+        .media
+        .iter()
+        .zip(ours.sections())
+    {
+        compare_section(c, ours)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn sdp_codecs_read_what_sofia_reads() {
+    against_sofia(
+        file!(),
+        "sdp_codecs_read_what_sofia_reads",
+        offer(),
+        |sofia, sdp| {
+            let ours = SdpCodecs::parse(&sdp);
+            match sofia.parse(sdp.as_bytes()) {
+                SdpParse::Refused(message) => {
+                    let message = String::from_utf8_lossy(&message);
+                    if message == "bad SDP message" {
+                        prop_assert!(ours.is_err(), "sofia: not SDP; ours parsed it");
+                        return Ok(());
+                    }
+                    let reason = rejection(&message);
+                    let ours =
+                        ours.map_err(|e| TestCaseError::fail(format!("ours failed: {e}")))?;
+                    prop_assert!(
+                        ours.warnings()
+                            .iter()
+                            .any(|w| matches!(w, SdpWarning::SwitchRejects { reason: r, .. } if *r == reason)),
+                        "sofia refused ({message}); ours warned {:?}",
+                        ours.warnings()
+                    );
+                }
+                SdpParse::Parsed(session) => {
+                    let ours =
+                        ours.map_err(|e| TestCaseError::fail(format!("ours failed: {e}")))?;
+                    let rejects: Vec<_> = ours
+                        .warnings()
+                        .iter()
+                        .filter(|w| matches!(w, SdpWarning::SwitchRejects { .. }))
+                        .collect();
+                    prop_assert!(
+                        rejects.is_empty(),
+                        "sofia accepted; ours warned {rejects:?}"
+                    );
+                    let stop = ours
+                        .warnings()
+                        .iter()
+                        .find_map(|w| match w {
+                            SdpWarning::SwitchStopsReading { offset } => Some(*offset),
+                            _ => None,
+                        });
+                    match stop {
+                        Some(offset) => {
+                            let prefix = SdpCodecs::parse(&sdp[..offset])
+                                .map_err(|e| TestCaseError::fail(format!("prefix failed: {e}")))?;
+                            compare(&session, &prefix)?;
+                        }
+                        None => compare(&session, &ours)?,
+                    }
+                }
+            }
+            Ok(())
+        },
+    );
+}
