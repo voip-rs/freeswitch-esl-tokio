@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let evt = match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => evt,
             Ok(Some(Err(e))) => {
-                gave_up = Some(format!("event stream error: {e}"));
+                gave_up = Some(format!("event stream error: {}", e.display_chain()));
                 break;
             }
             Ok(None) => {
@@ -181,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(str::to_string)
         }) {
         Ok(_) => println!("hung up {near}"),
-        Err(e) => eprintln!("could not hang up {near}: {e}"),
+        Err(e) => eprintln!("could not hang up {near}: {}", e.display_chain()),
     }
 
     client

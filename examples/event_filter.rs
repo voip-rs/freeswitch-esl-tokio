@@ -395,7 +395,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
         Err(e) => {
-            eprintln!("Failed to connect: {}", e);
+            eprintln!("Failed to connect: {}", e.display_chain());
             std::process::exit(1);
         }
     };
@@ -482,7 +482,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                eprintln!("Event error: {}", e);
+                eprintln!("Event error: {}", e.display_chain());
                 continue;
             }
         };

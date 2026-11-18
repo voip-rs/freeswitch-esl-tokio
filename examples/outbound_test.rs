@@ -125,7 +125,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Ok(Some(Err(e))) => {
-                return Err(format!("event stream error after {seen} events: {e}").into())
+                return Err(format!(
+                    "event stream error after {seen} events: {}",
+                    e.display_chain()
+                )
+                .into())
             }
             Ok(None) => return Err(format!("event stream closed after {seen} events").into()),
             Err(_) => {

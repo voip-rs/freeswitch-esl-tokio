@@ -269,7 +269,11 @@ impl ChannelTracker {
                 return None;
             }
             Err(e) => {
-                warn!("uuid_dump {} carried no result: {e}", short_uuid(uuid));
+                warn!(
+                    "uuid_dump {} carried no result: {}",
+                    short_uuid(uuid),
+                    e.display_chain()
+                );
                 self.forget(uuid);
                 return None;
             }
@@ -278,7 +282,11 @@ impl ChannelTracker {
         let mut event = match parse_channel_dump(body) {
             Ok(event) => event,
             Err(e) => {
-                warn!("uuid_dump {} did not parse: {e}", short_uuid(uuid));
+                warn!(
+                    "uuid_dump {} did not parse: {}",
+                    short_uuid(uuid),
+                    e.display_chain()
+                );
                 self.forget(uuid);
                 return None;
             }
@@ -538,7 +546,11 @@ async fn request_dump(
         .await
     {
         // That dump was the channel's only route to being readable.
-        warn!("bgapi uuid_dump {} failed: {e}", short_uuid(uuid));
+        warn!(
+            "bgapi uuid_dump {} failed: {}",
+            short_uuid(uuid),
+            e.display_chain()
+        );
         tracker.forget(uuid);
     }
 }
@@ -633,7 +645,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                error!("Event error: {e}");
+                error!("Event error: {}", e.display_chain());
                 continue;
             }
         };

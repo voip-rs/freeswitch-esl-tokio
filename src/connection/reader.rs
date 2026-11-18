@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     constants::{CONTENT_TYPE_LOG_DATA, HEADER_CONTENT_TYPE, READER_TICK_MS, SOCKET_BUF_SIZE},
-    error::{display_chain, EslError},
+    error::EslError,
     event::{EslEvent, EventFormat},
     protocol::{EslMessage, EslParser, MessageType},
 };
@@ -517,7 +517,7 @@ async fn drain_for_reexec(
         Err(e) => {
             warn!(
                 "Re-exec drain failed while reading the message body: {}",
-                display_chain(&e)
+                e.display_chain()
             );
             fail_reexec(reexec, e);
             ControlFlow::Break(None)
@@ -620,7 +620,9 @@ async fn reader_loop_inner(
                 // Need more data from socket
             }
             Err(e) => {
-                let reason = display_chain(&e);
+                let reason = e
+                    .display_chain()
+                    .to_string();
                 warn!("Parser error: {}", reason);
                 return Some(DisconnectReason::ProtocolError(reason));
             }
@@ -668,7 +670,9 @@ async fn reader_loop_inner(
                 return Some(DisconnectReason::IoError(e.to_string()));
             }
             Err(e) => {
-                let reason = display_chain(&e);
+                let reason = e
+                    .display_chain()
+                    .to_string();
                 warn!("Buffer error: {}", reason);
                 return Some(DisconnectReason::ProtocolError(reason));
             }

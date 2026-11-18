@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }) {
             Ok(value) => info!("{var} = {value}"),
             Err(e) if e.is_permission_denied() => warn!("{var}: not permitted for this ESL user"),
-            Err(e) => warn!("{var}: {e}"),
+            Err(e) => warn!("{var}: {}", e.display_chain()),
         }
     }
 
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                warn!("event error: {e}");
+                warn!("event error: {}", e.display_chain());
                 continue;
             }
         };
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some((command, job)) = jobs.try_complete(&event) {
             match job.parse_body() {
                 Ok(output) => println!("--- {command} ---\n{output}"),
-                Err(e) => warn!("{command} failed: {e}"),
+                Err(e) => warn!("{command} failed: {}", e.display_chain()),
             }
         }
     }

@@ -40,7 +40,7 @@ async fn api_ok(client: &EslClient, cmd: &str) -> Result<String, Box<dyn std::er
         .await?;
     let out = resp
         .api_result()
-        .map_err(|e| format!("{cmd}: {e}"))?;
+        .map_err(|e| format!("{cmd}: {}", e.display_chain()))?;
     Ok(out.to_string())
 }
 

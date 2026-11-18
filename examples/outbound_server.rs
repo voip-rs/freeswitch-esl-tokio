@@ -42,14 +42,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok((client, mut events)) => {
                 tokio::spawn(async move {
                     if let Err(e) = handle_call(&client, &mut events).await {
-                        error!("call failed: {e}");
+                        error!("call failed: {}", e.display_chain());
                     }
                 });
             }
             // One connection failing to come up is not a reason to stop
             // serving the rest.
             Err(e) => {
-                warn!("outbound accept failed: {e}");
+                warn!("outbound accept failed: {}", e.display_chain());
                 tokio::time::sleep(ACCEPT_BACKOFF).await;
             }
         }
@@ -111,7 +111,7 @@ async fn wait_for_answer(events: &mut EslEventStream) -> bool {
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                warn!("event error: {e}");
+                warn!("event error: {}", e.display_chain());
                 continue;
             }
         };
@@ -137,7 +137,7 @@ async fn collect_digits(client: &EslClient, events: &mut EslEventStream) -> Resu
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                warn!("event error: {e}");
+                warn!("event error: {}", e.display_chain());
                 continue;
             }
         };

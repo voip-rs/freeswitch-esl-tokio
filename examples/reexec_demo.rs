@@ -44,7 +44,7 @@ mod demo {
                 );
                 Ok(())
             }
-            Ok(Some(Err(e))) => Err(format!("{stage}: event error: {e}").into()),
+            Ok(Some(Err(e))) => Err(format!("{stage}: event error: {}", e.display_chain()).into()),
             Ok(None) => Err(format!("{stage}: event stream closed").into()),
             Err(_) => Err(format!("{stage}: no heartbeat within {HEARTBEAT_WAIT:?}").into()),
         }

@@ -83,9 +83,9 @@ async fn main() {
                 error!("access denied (ACL): {reason}");
                 std::process::exit(EX_CONFIG);
             }
-            Err(e) if e.is_connection_error() => warn!("connection lost: {e}"),
+            Err(e) if e.is_connection_error() => warn!("connection lost: {}", e.display_chain()),
             Err(e) => {
-                error!("unexpected error: {e}");
+                error!("unexpected error: {}", e.display_chain());
                 std::process::exit(1);
             }
         }
@@ -143,7 +143,7 @@ async fn run_session(
     {
         match result {
             Ok(event) => handle_event(&event),
-            Err(e) if e.is_recoverable() => warn!("recoverable event error: {e}"),
+            Err(e) if e.is_recoverable() => warn!("recoverable event error: {}", e.display_chain()),
             Err(e) => return Err(e),
         }
     }

@@ -90,7 +90,7 @@ while let Some(event) = events.try_next().await? {
     if let Some(((), result)) = bg.try_complete(&event) {
         match result.parse_body() {
             Ok(data) => println!("{}", data),
-            Err(e) => eprintln!("command failed: {}", e),
+            Err(e) => eprintln!("command failed: {}", e.display_chain()),
         }
         break;
     }
@@ -119,7 +119,7 @@ while let Some(event) = events.try_next().await? {
         // so the raw string reads as output.
         match result.parse_body() {
             Ok(dump) => println!("dump for {channel_uuid}: {dump}"),
-            Err(e) => eprintln!("dump for {channel_uuid} failed: {e}"),
+            Err(e) => eprintln!("dump for {channel_uuid} failed: {}", e.display_chain()),
         }
     }
     // ... handle other events

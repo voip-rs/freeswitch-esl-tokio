@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 biased;
                 event = events.recv() => match event {
                     Some(Ok(event)) => record(&event),
-                    Some(Err(e)) => eprintln!("event error: {e}"),
+                    Some(Err(e)) => eprintln!("event error: {}", e.display_chain()),
                     None => return arrivals,
                 },
                 _ = &mut done_rx => break,
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             match tokio::time::timeout_at(deadline, events.recv()).await {
                 Ok(Some(Ok(event))) => record(&event),
-                Ok(Some(Err(e))) => eprintln!("event error: {e}"),
+                Ok(Some(Err(e))) => eprintln!("event error: {}", e.display_chain()),
                 Ok(None) | Err(_) => break,
             }
         }

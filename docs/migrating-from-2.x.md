@@ -2,6 +2,16 @@
 
 freeswitch-esl-tokio 3.0 and freeswitch-types 3.0 replace freeswitch-esl-tokio 2.x and freeswitch-types 1.x. "2.x" below means that pair.
 
+## Log an `EslError` with its cause
+
+`EslError`'s `Display` now states only the error's own message: `{e}` prints `I/O error`, not `I/O error: connection refused`. The cause is reachable only through `source()`. Every place that logs an `EslError` with `{e}` loses the detail that makes the log actionable, so change each one when upgrading:
+
+```rust,ignore
+error!("ESL connection failed: {}", e.display_chain()); // I/O error: connection refused
+```
+
+anyhow's `{:#}` prints the same chain for an `EslError` wrapped in an `anyhow::Error`.
+
 ## SIP headers through your own sip-header
 
 freeswitch-types depends publicly on [sip-header-catalog](https://docs.rs/sip-header-catalog) alone. SIP value types and parsers stay in [sip-header](https://docs.rs/sip-header) 1.0, which you add to your own dependencies; its typed accessors reach every store here through the catalog's row trait.
@@ -135,7 +145,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AppCommand::transfer(extension, None, None)` | `AppCommand::transfer(extension)` |
 | `AppCommand::transfer(extension, Some(dialplan), None)` | `AppCommand::transfer_to_dialplan(extension, dialplan)` |
 | `AppCommand::transfer(extension, dialplan, Some(context))`, which wrote `XML` for a `None` dialplan | `AppCommand::transfer_to_context(extension, dialplan, context)`; the dialplan is named, since leaving it out lets the switch use the channel's own (or `force_transfer_dialplan`), which `XML` overrode |
-| `EslError::JsonError(String)`, `XmlError(String)` | carry the decoder's error as a boxed `#[source]` (`Box<dyn Error + Send + Sync>`); `e.source()` reaches it, `Display` still names it |
+| `EslError::JsonError(String)`, `XmlError(String)` | carry the decoder's error as a boxed `#[source]` (`Box<dyn Error + Send + Sync>`); `e.source()` reaches it; see [Log an `EslError` with its cause](#log-an-eslerror-with-its-cause) |
 | `EslError::ReexecFailed { reason }` | `ReexecFailed { reason, source }`, `source` an `Option` of the boxed error behind a timeout or a lost reader; match with `{ reason, .. }` |
 | `impl From<std::io::Error>`, `From<std::str::Utf8Error>` and `From<serde_json::Error>` for `EslError` | removed, so `?` on a foreign error no longer turns it into an `EslError`; build `EslError::Io(e)` by name, or keep your own error type |
 | `impl futures_util::Stream for EslEventStream` | removed, so futures-util's major no longer ties this crate's; loop on `try_next()`, or build a stream with your own `futures`: `futures::stream::unfold(events, \|mut events\| async move { events.try_next().await.transpose().map(\|item\| (item, events)) })`, which yields an `Err` and carries on, as the impl did |
@@ -151,3 +161,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `EslError::Utf8Error(Utf8Error)`, never built by the crate, which reported a non-UTF-8 message envelope or truncated auth reply as `ProtocolError` with the decoder error dropped | `Utf8Error { context, source }`, built for those two; `e.source()` is the `std::str::Utf8Error`, and `is_connection_error()` is `true`, as it was for the `ProtocolError` |
 | `EslError`'s `Display` for `Io`, `JsonError`, `XmlError`, `Originate`, `HeaderParse` (and the new `TransferArgument`) appended the underlying error (`IO error: connection refused`) | states only its own message (`I/O error`); the cause is `e.source()`, so print the chain (anyhow's `{:#}`, or walk `source()`) where the detail is wanted. A reader disconnect's `DisconnectReason::ProtocolError` text still carries the whole chain |
 | a `SendEvent` whose event has no event type and no `Event-Name` refused as `EslError::ProtocolError`, a connection error | `EslError::MissingField { field }`, neither a connection error nor recoverable; nothing is sent |
+| logging an `EslError` with `{e}` showed its cause | `{e}` shows only the error's own message; `e.display_chain()` writes it and every source, joined by `: ` |

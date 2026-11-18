@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let evt = match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => evt,
             Ok(Some(Err(e))) => {
-                eprintln!("event error: {e}");
+                eprintln!("event error: {}", e.display_chain());
                 continue;
             }
             Ok(None) => {
@@ -179,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(str::to_string)
         }) {
         Ok(_) => println!("\nhung up {a_leg}"),
-        Err(e) => eprintln!("\ncould not hang up {a_leg}: {e}"),
+        Err(e) => eprintln!("\ncould not hang up {a_leg}: {}", e.display_chain()),
     }
 
     client

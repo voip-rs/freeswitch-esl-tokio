@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let event = match result {
             Ok(event) => event,
             Err(e) => {
-                error!("event error: {e}");
+                error!("event error: {}", e.display_chain());
                 continue;
             }
         };

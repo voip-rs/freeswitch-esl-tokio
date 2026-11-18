@@ -196,7 +196,7 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
                         .map(str::to_string)
                 });
             if let Err(e) = armed {
-                warn!("could not arm the call deadline: {e}");
+                warn!("could not arm the call deadline: {}", e.display_chain());
             }
         }
         None => {
@@ -226,7 +226,7 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
             .api(&format!("uuid_kill {uuid}"))
             .await
         {
-            warn!("could not hang up {uuid}: {e}");
+            warn!("could not hang up {uuid}: {}", e.display_chain());
         }
     }
 
@@ -246,7 +246,7 @@ async fn wait_for_bowout(events: &mut EslEventStream, loopback_leg: &str) -> Opt
         let event = match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(event))) => event,
             Ok(Some(Err(e))) => {
-                warn!("event error: {e}");
+                warn!("event error: {}", e.display_chain());
                 continue;
             }
             Ok(None) => {

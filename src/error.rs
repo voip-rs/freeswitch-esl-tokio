@@ -291,17 +291,19 @@ esl_error_from_header_parse! {
     ParseSipStatusCodeError,
 }
 
-/// `err` and each of its sources, joined by `: `, for a log line or a
-/// `DisconnectReason` that keeps only text.
-pub(crate) fn display_chain(err: &dyn std::error::Error) -> String {
-    let mut text = err.to_string();
-    let mut source = err.source();
-    while let Some(cause) = source {
-        text.push_str(": ");
-        text.push_str(&cause.to_string());
-        source = cause.source();
+/// [`EslError::display_chain`]'s adapter.
+struct DisplayChain<'a>(&'a EslError);
+
+impl std::fmt::Display for DisplayChain<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)?;
+        let mut source = std::error::Error::source(self.0);
+        while let Some(cause) = source {
+            write!(f, ": {cause}")?;
+            source = cause.source();
+        }
+        Ok(())
     }
-    text
 }
 
 /// The failure text of an [`EslError::CommandFailed`], split by the prefix
@@ -362,6 +364,14 @@ fn peel_separator(rest: &str) -> &str {
 }
 
 impl EslError {
+    /// The message and each source, joined by `: `, for a log line.
+    ///
+    /// `Display` stops at this error's own message, because a caller that walks
+    /// `source()` itself (anyhow's `{:#}`, a tracing layer) would print the cause twice.
+    pub fn display_chain(&self) -> impl std::fmt::Display + '_ {
+        DisplayChain(self)
+    }
+
     /// Construct a generic error with a custom message.
     pub fn generic(message: impl Into<String>) -> Self {
         Self::Generic {
@@ -915,7 +925,9 @@ mod tests {
         let cause = std::error::Error::source(&err)
             .unwrap()
             .to_string();
-        let chain = display_chain(&err);
+        let chain = err
+            .display_chain()
+            .to_string();
         assert!(chain.starts_with(&err.to_string()), "{chain}");
         assert!(chain.ends_with(&cause), "{chain}");
     }

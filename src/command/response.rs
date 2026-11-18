@@ -41,7 +41,7 @@ use indexmap::IndexMap;
 /// if let Some(body) = event.body() {
 ///     match parse_api_body(body) {
 ///         Ok(data) => println!("result: {}", data),
-///         Err(e) => eprintln!("command failed: {}", e),
+///         Err(e) => eprintln!("command failed: {}", e.display_chain()),
 ///     }
 /// }
 /// # }
