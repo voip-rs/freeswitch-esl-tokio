@@ -28,6 +28,9 @@ pub enum EslArrayError {
         /// Position of the item in the array.
         index: usize,
     },
+    /// No items, or one empty item: both render a bare `ARRAY::`, which
+    /// `switch_event_add_array` drops and the switch never writes.
+    Empty,
 }
 
 impl fmt::Display for EslArrayError {
@@ -40,6 +43,7 @@ impl fmt::Display for EslArrayError {
             Self::SeparatorInItem { index } => {
                 write!(f, "array item {index} holds the |: separator")
             }
+            Self::Empty => f.write_str("array renders a bare ARRAY:: prefix"),
         }
     }
 }
@@ -101,6 +105,9 @@ impl EslArray {
     /// Create a new array from a vec of items, refusing what
     /// [`parse`](Self::parse) could not read back: see [`EslArrayError`].
     pub fn new(items: Vec<String>) -> Result<Self, EslArrayError> {
+        if items.is_empty() || items == [""] {
+            return Err(EslArrayError::Empty);
+        }
         check_item_count(items.len())?;
         for (index, item) in items
             .iter()
