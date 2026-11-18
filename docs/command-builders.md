@@ -118,8 +118,10 @@ Uses `indexmap::IndexMap` to preserve insertion order — variable order matters
 readability and debugging, and round-trip parsing should produce identical output.
 
 **Endpoint** — enum wrapping concrete structs, one per FreeSWITCH endpoint module.
-Each struct implements `Display`, `FromStr`, `Serialize`, `Deserialize`, and the
-`DialString` trait. The enum provides serde-compatible polymorphism.
+Each struct implements `Serialize`, `Deserialize` and the `DialString` trait, and
+all but `AudioEndpoint`, which does not know its module, implement `Display` and
+`FromStr`. The enum provides serde-compatible polymorphism and renders every
+endpoint.
 
 Real endpoints:
 
@@ -279,10 +281,10 @@ and variable scoping semantics.
 
 ### DialString trait
 
-Common interface for anything that formats as a FreeSWITCH dial string:
+The per-channel variables an endpoint carries in its leading block:
 
 ```rust
-pub trait DialString: fmt::Display {
+pub trait DialString {
     fn variables(&self) -> Option<&Variables>;
     fn variables_mut(&mut self) -> Option<&mut Variables>;
     fn set_variables(&mut self, vars: Option<Variables>);

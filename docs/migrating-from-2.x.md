@@ -59,3 +59,6 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `UuidSetVar { uuid, key, value }` and `UuidTransfer { uuid, destination, dialplan }` public fields | private; read them with `uuid()`, `key()`, `value()`, `destination()` and `dialplan()` |
 | `AppCommand::set_var(name, value)` returns `EslCommand` | returns `Result<EslCommand, UndeliverableVariable>` |
 | `UuidSetVar::new` and `AppCommand::set_var` accept any value | refuse a control character other than tab in a value set under a name mod_sofia sends as an outgoing SIP header (`sip_h_`, `sip_rh_`, `sip_ph_`, `sip_bye_h_`), as `Variables` already did |
+| `DialString: fmt::Display` | `DialString` carries only the variable accessors; render an endpoint through `Endpoint` |
+| `AudioEndpoint`'s `Display` (it rendered `audio`), `fmt_with_prefix` | wrap it in `Endpoint::PortAudio`, `PulseAudio` or `Alsa` and render that |
+| `AudioEndpoint::parse_with_prefix(s, prefix)` | `Endpoint::parse_for(s, carrier)`, which names the module from the text |

@@ -298,11 +298,11 @@ pub(super) fn check_field(
     fault.map_or(Ok(()), |fault| Err(undeliverable(endpoint, field, fault)))
 }
 
-/// Common interface for anything that formats as a FreeSWITCH dial string.
+/// The per-channel variables an endpoint carries in its leading block.
 ///
 /// Implemented on each concrete endpoint struct and on the [`Endpoint`] enum.
 /// Downstream crates can implement this on custom endpoint types.
-pub trait DialString: fmt::Display {
+pub trait DialString {
     /// Per-endpoint variables, if any.
     fn variables(&self) -> Option<&Variables>;
     /// Mutable access to per-endpoint variables.

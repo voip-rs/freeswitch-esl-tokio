@@ -11,21 +11,6 @@ revisited when it is finally actionable.
 
 ## freeswitch-types 3.0
 
-### `AudioEndpoint::fmt_with_prefix` should be private
-
-It takes a `&mut fmt::Formatter`, which a caller can only obtain inside a
-`Display` impl, and nothing outside the module calls it. It stays public only
-because it shipped in 1.4.0; the carrier-aware `write_with_prefix` beside it is
-already `pub(super)`. Make the public one private and drop the duplicate.
-
-### `DialString: fmt::Display` forces an invalid endpoint string
-
-The supertrait bound obliges `AudioEndpoint` to have a `Display` impl, and that
-impl has no module prefix to render, so it emits `audio` — not a FreeSWITCH
-endpoint. Its own rustdoc warns against calling it. Either drop the `Display`
-bound from `DialString`, or drop the impl and let the three `Endpoint` variants
-be the only way to render an audio endpoint.
-
 ### Endpoint fields need to refuse what the module misreads
 
 A sofia profile carrying `/`, `^` or `@` or reading `gateway`, a gateway or
