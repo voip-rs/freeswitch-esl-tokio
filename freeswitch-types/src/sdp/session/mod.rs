@@ -19,7 +19,7 @@
 //!   `b=`, `t=`, `r=`, `z=`, `k=`) are not validated, so an offer sofia refuses for one of them
 //!   alone parses here with no warning.
 
-mod scan;
+pub(crate) mod scan;
 
 use std::fmt;
 
@@ -32,6 +32,8 @@ use scan::{is_slash_token, is_token, lines, media_token, parse_ul, skip, token, 
 pub(crate) struct Attribute {
     pub(crate) attribute: String,
     pub(crate) value: Option<String>,
+    /// Where the line starts in the input.
+    pub(crate) offset: usize,
 }
 
 /// One `m=` line and the attributes below it.
@@ -201,6 +203,7 @@ impl Read {
                 |(name, value)| Attribute {
                     attribute: ascii(name),
                     value: (!value.is_empty()).then(|| ascii(value)),
+                    offset: line.offset,
                 },
             )),
             key => Self::Other(key),

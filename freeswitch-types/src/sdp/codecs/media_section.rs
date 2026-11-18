@@ -70,7 +70,7 @@ pub(super) fn parse_media_section(
     let media_maxptime = ptime_from_attrs(&media.attributes, "maxptime", &mut section.warnings)
         .or(defaults.maxptime);
 
-    let tables = attribute_tables(media)?;
+    let tables = attribute_tables(media, &mut section.warnings)?;
 
     for (at, &pt) in media
         .payloads
@@ -543,39 +543,6 @@ mod tests {
                 .len(),
             1
         );
-    }
-
-    #[test]
-    fn malformed_rtpmap_empties_its_section_but_the_section_survives() {
-        // Recovery is per-section, not per-attribute: the otherwise-fine static PCMU
-        // goes with the bad a=rtpmap. The section itself is still reported.
-        let sdp = format!(
-            "{}m=audio 5004 RTP/AVP 0\r\na=rtpmap:x PCMU/8000\r\n",
-            sdp_header()
-        );
-        let codecs = SdpCodecs::parse(&sdp).unwrap();
-        assert_eq!(
-            codecs
-                .entries()
-                .count(),
-            0
-        );
-        assert_eq!(
-            codecs
-                .warnings()
-                .len(),
-            1
-        );
-        assert!(matches!(
-            codecs.warnings()[0],
-            SdpWarning::MalformedMediaSection { .. }
-        ));
-
-        let section = &codecs.sections()[0];
-        assert_eq!(section.port(), 5004);
-        assert!(section
-            .entries()
-            .is_empty());
     }
 
     #[test]

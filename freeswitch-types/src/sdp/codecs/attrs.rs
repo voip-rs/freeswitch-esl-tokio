@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use crate::sdp::error::{SdpCodecError, SdpWarning};
 use crate::sdp::num::atoi_prefix;
 use crate::sdp::session;
+use crate::sdp::session::scan::parse_ul;
 use crate::sdp::SdpDirection;
 
 /// Cursor over an `a=rtpmap`/`a=fmtp` attribute value.
@@ -80,22 +81,29 @@ impl<'a> AttrCursor<'a> {
     }
 }
 
-/// Parse an `a=rtpmap` attribute value into `(pt, name, clock_rate, channels)`.
+/// The payload type opening an `a=rtpmap` or `a=fmtp` value and what follows it, as
+/// `parse_rtpmap` and `parse_fmtp` read it with `parse_ul` below 128; `None` drops the attribute.
+fn payload_type(value: &str) -> Option<(u8, &str)> {
+    let (pt, rest) = parse_ul(value.as_bytes(), 128)?;
+    let pt = u8::try_from(pt).ok()?;
+    // parse_ul consumed ASCII only, so the remainder starts on a char boundary.
+    value
+        .get(value.len() - rest.len()..)
+        .map(|rest| (pt, rest))
+}
+
+/// Parse an `a=rtpmap` value past its payload type into `(name, clock_rate, channels)`.
 ///
-/// Grammar: number (pt) / field stopping at `/` (name) / required `/` / number
-/// (clock rate) / optionally `/` then number (channels). The name has no
-/// charset restriction beyond "not whitespace, not `/`" — sofia's stricter
-/// `TOKEN` charset is enforced later, in `audio_codec_string`, on a path that
-/// warns and drops one codec rather than the whole media section.
+/// Grammar: field stopping at `/` (name) / required `/` / number (clock rate) /
+/// optionally `/` then number (channels). The name has no charset restriction
+/// beyond "not whitespace, not `/`" — sofia's stricter `TOKEN` charset is
+/// enforced later, in `audio_codec_string`, on a path that warns and drops one
+/// codec rather than the whole media section.
 ///
 /// Returns `Err(MalformedRtpmap)` for any structural violation (missing
-/// separator, non-numeric PT, non-numeric clock rate, non-numeric channel count).
-pub(super) fn parse_rtpmap(value: &str) -> Result<(u8, String, u32, Option<u32>), SdpCodecError> {
+/// separator, non-numeric clock rate, non-numeric channel count).
+fn parse_rtpmap(value: &str) -> Result<(String, u32, Option<u32>), SdpCodecError> {
     let mut cursor = AttrCursor::new(value);
-
-    let pt = cursor
-        .number()
-        .ok_or_else(|| SdpCodecError::MalformedRtpmap(value.to_string()))?;
 
     let name = cursor.field(&['/']);
     if name.is_empty() {
@@ -136,38 +144,26 @@ pub(super) fn parse_rtpmap(value: &str) -> Result<(u8, String, u32, Option<u32>)
         return Err(SdpCodecError::MalformedRtpmap(value.to_string()));
     }
 
-    Ok((pt, name, clock_rate, channels))
-}
-
-/// Extract `(pt, params)` from an `a=fmtp` attribute value.
-///
-/// Only the whitespace between the payload type and the params is a
-/// separator (consumed by `number`'s trailing skip); everything after that,
-/// including any trailing whitespace, is opaque `byte-string` content per
-/// RFC 8866 and is returned verbatim.
-///
-/// A non-numeric payload type is a hard error — same structural breakage as in `a=rtpmap`.
-pub(super) fn parse_fmtp_pt(value: &str) -> Result<(u8, String), SdpCodecError> {
-    let mut cursor = AttrCursor::new(value);
-    let pt = cursor
-        .number()
-        .ok_or_else(|| SdpCodecError::MalformedFmtp(value.to_string()))?;
-    Ok((
-        pt,
-        cursor
-            .remaining()
-            .to_string(),
-    ))
+    Ok((name, clock_rate, channels))
 }
 
 /// One section's `a=rtpmap` and `a=fmtp` values, keyed by payload type.
+///
+/// An `a=fmtp` value is what follows the payload type and the whitespace after it, verbatim:
+/// trailing whitespace is opaque `byte-string` content per RFC 8866, as it is to `parse_fmtp`.
 pub(super) struct AttrTables {
     pub(super) rtpmap: HashMap<u8, (String, u32, Option<u32>)>,
     pub(super) fmtp: HashMap<u8, String>,
 }
 
 /// Collect a section's rtpmap and fmtp attributes into payload-type lookup tables.
-pub(super) fn attribute_tables(media: &session::Media) -> Result<AttrTables, SdpCodecError> {
+///
+/// An attribute whose payload type is unreadable is dropped with a
+/// [`SdpWarning::PayloadAttributeIgnored`], the rest of the section kept, as sofia drops it.
+pub(super) fn attribute_tables(
+    media: &session::Media,
+    warnings: &mut Vec<SdpWarning>,
+) -> Result<AttrTables, SdpCodecError> {
     let mut tables = AttrTables {
         rtpmap: HashMap::new(),
         fmtp: HashMap::new(),
@@ -179,27 +175,30 @@ pub(super) fn attribute_tables(media: &session::Media) -> Result<AttrTables, Sdp
     // case-sensitive, so byte-exact stays the intended behaviour here; this is a
     // documented divergence, not an oversight.
     for attr in &media.attributes {
-        match attr
+        let name = attr
             .attribute
-            .as_str()
-        {
-            "rtpmap" => {
-                if let Some(val) = &attr.value {
-                    let (pt, name, rate, channels) = parse_rtpmap(val)?;
-                    tables
-                        .rtpmap
-                        .insert(pt, (name, rate, channels));
-                }
-            }
-            "fmtp" => {
-                if let Some(val) = &attr.value {
-                    let (pt, params) = parse_fmtp_pt(val)?;
-                    tables
-                        .fmtp
-                        .insert(pt, params);
-                }
-            }
-            _ => {}
+            .as_str();
+        if name != "rtpmap" && name != "fmtp" {
+            continue;
+        }
+        let value = attr
+            .value
+            .as_deref()
+            .unwrap_or_default();
+        let Some((pt, rest)) = payload_type(value) else {
+            warnings.push(SdpWarning::PayloadAttributeIgnored {
+                offset: attr.offset,
+            });
+            continue;
+        };
+        if name == "rtpmap" {
+            tables
+                .rtpmap
+                .insert(pt, parse_rtpmap(rest)?);
+        } else {
+            tables
+                .fmtp
+                .insert(pt, rest.to_string());
         }
     }
 
@@ -456,33 +455,6 @@ mod tests {
         assert!(codecs
             .warnings()
             .is_empty());
-    }
-
-    // --- malformed fmtp skips only its own section ---
-
-    #[test]
-    fn malformed_fmtp_non_numeric_pt_skips_section_with_warning() {
-        let sdp = format!(
-            "{}m=audio 5004 RTP/AVP 0\r\na=fmtp:x minptime=10\r\n",
-            sdp_header()
-        );
-        let codecs = SdpCodecs::parse(&sdp).unwrap();
-        assert_eq!(
-            codecs
-                .entries()
-                .count(),
-            0
-        );
-        assert_eq!(
-            codecs
-                .warnings()
-                .len(),
-            1
-        );
-        assert!(matches!(
-            codecs.warnings()[0],
-            SdpWarning::MalformedMediaSection { .. }
-        ));
     }
 
     // --- G7221 malformed bitrate records a warning ---
