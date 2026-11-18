@@ -466,7 +466,7 @@ impl Variables {
 const LONE_BLOCK_ENDPOINT: &str = "null/x";
 
 impl Variables {
-    /// Parse a block written for a named carrier or [`DialStringTarget`], as the switch installs
+    /// Parse a block written for a [`DialStringTarget`], as the switch installs
     /// it there: the pairs are read through a port of every pass that target applies, so a block
     /// [`render`](Self::render) wrote at the same target reads back as built.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {

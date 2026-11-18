@@ -12,7 +12,7 @@ use proptest::sample::select;
 
 use super::{DestinationEncoding, Endpoint, GroupCallOrder};
 use crate::commands::proptests::{bare_endpoint, c_reads_the_leg, fields_name_a_variable, targets};
-use crate::commands::variables::{DialStringCarrier, DialStringTarget};
+use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::switch_passes::against_the_c_at_its_revision;
 use crate::test_text::text;
 
@@ -409,7 +409,7 @@ fn endpoint_modules_read_the_fields_the_crate_holds() {
             if matches!(endpoint, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_)) {
                 let rendered = endpoint
                     .display_for(
-                        DialStringTarget::new(DialStringCarrier::Dialplan)
+                        DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED)
                             .with_block_parse(block_parse),
                     )
                     .to_string();

@@ -655,11 +655,13 @@ impl FlattenedLeg {
     /// [`VariableName`] enum of its own (e.g. a `sip_h_` passthrough).
     ///
     /// ```
-    /// use freeswitch_types::commands::{DialStringCarrier, FlattenedDialString};
+    /// use freeswitch_types::commands::{
+    ///     BlockParse, DialStringCarrier, DialStringTarget, FlattenedDialString,
+    /// };
     ///
     /// let list = FlattenedDialString::parse_for(
     ///     "[sip_h_X-Seat=42]loopback/9199/test",
-    ///     DialStringCarrier::EslApi,
+    ///     DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::PairSplitCleans),
     /// )
     /// .unwrap();
     /// let leg = list.legs().next().unwrap();

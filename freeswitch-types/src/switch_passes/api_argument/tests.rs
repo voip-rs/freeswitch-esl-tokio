@@ -1,10 +1,10 @@
 use super::*;
-use crate::commands::variables::{DialStringCarrier, DialStringTarget};
+use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::commands::{originate_quote, originate_split, originate_unquote, quote_for_uuid_setvar};
 use crate::switch_passes::{trace, untrace};
 
 fn tilde() -> DialStringTarget {
-    DialStringTarget::new(DialStringCarrier::EslApi)
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments")
 }
@@ -12,7 +12,10 @@ fn tilde() -> DialStringTarget {
 #[test]
 fn escape_argument_is_none_where_no_argument_split_runs() {
     for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
-        assert_eq!(DialStringTarget::new(carrier).escape_argument("a b"), None);
+        assert_eq!(
+            DialStringTarget::new(carrier, BlockParse::MEASURED).escape_argument("a b"),
+            None
+        );
     }
     for (text, want) in [
         ("a b", r"a\sb"),
@@ -25,7 +28,7 @@ fn escape_argument_is_none_where_no_argument_split_runs() {
         ("^^~a b", r"''^^~a\sb"),
     ] {
         assert_eq!(
-            DialStringTarget::new(DialStringCarrier::EslApi)
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
                 .escape_argument(text)
                 .as_deref(),
             Some(want),
@@ -94,7 +97,10 @@ fn a_vertical_tab_at_an_edge_survives_the_line_strip() {
     use crate::switch_passes::separate::separate;
 
     for text in ["\u{b}", "\u{b}a", "a\u{b}", "\u{b} \u{b}"] {
-        for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+        for target in [
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+            tilde(),
+        ] {
             let escaped = target
                 .escape_argument(text)
                 .expect("an API target escapes");
@@ -125,7 +131,10 @@ fn an_empty_or_caret_led_text_stays_one_argument_in_any_position() {
     use crate::switch_passes::separate::separate;
 
     for text in ["", "^^", "^^~a", "^^ y"] {
-        for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+        for target in [
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+            tilde(),
+        ] {
             let escaped = target
                 .escape_argument(text)
                 .expect("an API target escapes");
@@ -181,7 +190,7 @@ fn escape_argument_is_undone_by_the_split_cleanup() {
 
 #[test]
 fn escape_argument_is_undone_by_the_blank_split() {
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED);
     for text in [
         "a b",
         "  a  b  ",

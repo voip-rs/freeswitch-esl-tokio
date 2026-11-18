@@ -16,8 +16,8 @@ use freeswitch_esl_tokio::{
     Originate,
 };
 use live_common::{
-    block_parse_under_test, connect, esl_env, kill_channel, wait_for_own_event, ChannelReaper,
-    CONN_SEMAPHORE,
+    block_parse_under_test, connect, esl_env, kill_channel, target_under_test, wait_for_own_event,
+    ChannelReaper, CONN_SEMAPHORE,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -67,7 +67,10 @@ async fn live_api_originate_leaves_an_expression_unexpanded() {
         esl_env().port
     );
     let expanded = client
-        .api(&format!("eval {}", group.render(DialStringCarrier::EslApi)))
+        .api(&format!(
+            "eval {}",
+            group.render(target_under_test(DialStringCarrier::EslApi))
+        ))
         .await
         .unwrap();
     assert_eq!(

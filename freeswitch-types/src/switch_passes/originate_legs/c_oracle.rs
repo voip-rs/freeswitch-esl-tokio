@@ -270,7 +270,7 @@ fn a_chained_block_split_by_a_non_ascii_byte_is_refused() {
             Err(PipelineError::SplitSeparatorUnreadable)
         )
     };
-    assert!(refused(BlockParse::default()));
+    assert!(refused(BlockParse::MEASURED));
     for (tree, c) in freeswitch_c_oracle::oracles() {
         assert!(refused(tree_block_parse(tree)), "tree {tree}");
         let dial = c.dial(input.as_bytes());
@@ -314,7 +314,7 @@ fn a_range_from_an_earlier_leg_rewrites_a_later_legs_block() {
             )],
             b"sofia/gateway/]/".to_vec(),
         );
-        assert_eq!(second_leg(input, BlockParse::default()), want, "{input}");
+        assert_eq!(second_leg(input, BlockParse::MEASURED), want, "{input}");
         for (tree, c) in freeswitch_c_oracle::oracles() {
             let dial = c.dial(input.as_bytes());
             let [thread] = &dial.threads[..] else {
@@ -350,7 +350,7 @@ fn a_split_past_the_limit_keeps_the_rest_as_the_switch_does() {
             dial_list(&trace(&input), 0..input.len(), false, block_parse)
                 .map(|list| port_view(&list))
         };
-        let (_, threads) = read(BlockParse::default()).unwrap();
+        let (_, threads) = read(BlockParse::MEASURED).unwrap();
         let last = threads
             .iter()
             .flat_map(|thread| {

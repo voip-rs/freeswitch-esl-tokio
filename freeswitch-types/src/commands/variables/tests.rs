@@ -778,10 +778,10 @@ const REVISIONS: &[BlockParse] = &[BlockParse::PairSplitCleans];
 fn a_bare_carrier_is_a_target_at_the_default_revision() {
     let target = DialStringTarget::from(DialStringCarrier::Dialplan);
     assert_eq!(target.carrier(), DialStringCarrier::Dialplan);
-    assert_eq!(target.block_parse(), BlockParse::default());
-    assert_eq!(BlockParse::default(), BlockParse::PairSplitCleans);
+    assert_eq!(target.block_parse(), BlockParse::MEASURED);
+    assert_eq!(BlockParse::MEASURED, BlockParse::PairSplitCleans);
     assert_eq!(
-        DialStringTarget::new(DialStringCarrier::EslApi)
+        DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
             .with_block_parse(BlockParse::PairSplitCleans)
             .block_parse(),
         BlockParse::PairSplitCleans
@@ -799,7 +799,7 @@ fn enterprise_scope_escapes_like_default_scope() {
         (DialStringCarrier::EslApi, "a,b", r"a\,b"),
     ];
     for (carrier, value, want) in cases {
-        let target = DialStringTarget::new(carrier).with_block_parse(BlockParse::PairSplitCleans);
+        let target = DialStringTarget::new(carrier, BlockParse::PairSplitCleans);
         assert_eq!(
             escape_value(value, target, true, VariablesType::Enterprise),
             want,
@@ -812,8 +812,8 @@ fn enterprise_scope_escapes_like_default_scope() {
 /// must still read `\s` entering it.
 #[test]
 fn an_edge_space_is_escaped_for_the_pass_that_trims_it() {
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
-    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED);
+    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED);
     let cases = [
         (api, VariablesType::Default, " a b ", r"'\\\\sa b\\\\s'"),
         (
@@ -859,11 +859,11 @@ fn a_channel_value_ending_in_a_backslash_guards_the_next_comma() {
     let run = "\\".repeat(32);
     for (target, guard) in [
         (
-            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
             r"\\\'\\\'",
         ),
         (
-            DialStringTarget::new(DialStringCarrier::Dialplan),
+            DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
             r"\\'\\'",
         ),
     ] {
@@ -921,8 +921,8 @@ fn round_trips_at_every_target() {
     });
     for &block_parse in REVISIONS {
         for target in [
-            DialStringTarget::new(DialStringCarrier::EslApi),
-            DialStringTarget::new(DialStringCarrier::Dialplan),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+            DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
             tilde(),
         ] {
             let target = target.with_block_parse(block_parse);
@@ -957,7 +957,7 @@ fn refusals_do_not_depend_on_the_revision() {
             (DialStringCarrier::EslApi, r"[cid=it\\\\\\\'s]"),
             (DialStringCarrier::Dialplan, r"[cid=it\\\\\\'s]"),
         ] {
-            let target = DialStringTarget::new(carrier).with_block_parse(block_parse);
+            let target = DialStringTarget::new(carrier, block_parse);
             for block in [
                 quoted,
                 "{k=,after=sentinel}",
@@ -1060,14 +1060,14 @@ fn for_version_refuses_what_it_cannot_vouch_for() {
 }
 
 fn tilde() -> DialStringTarget {
-    DialStringTarget::new(DialStringCarrier::EslApi)
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments")
 }
 
 #[test]
 fn an_argv_separator_is_part_of_the_target() {
-    let blank = DialStringTarget::new(DialStringCarrier::EslApi);
+    let blank = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED);
     assert_eq!(blank.argv_separator(), None);
     assert_eq!(tilde().argv_separator(), Some('~'));
     assert_eq!(tilde().carrier(), DialStringCarrier::EslApi);
@@ -1084,7 +1084,7 @@ fn an_argv_separator_is_part_of_the_target() {
 fn a_carrier_splitting_no_arguments_takes_no_argv_separator() {
     for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
         assert_eq!(
-            DialStringTarget::new(carrier).with_argv_separator('~'),
+            DialStringTarget::new(carrier, BlockParse::MEASURED).with_argv_separator('~'),
             Err(InvalidArgvSeparator::WrongCarrier(carrier))
         );
     }
@@ -1098,7 +1098,7 @@ fn unusable_argv_separators_are_refused() {
         ' ', '\\', '\'', 'é', '\n', '\r', '\t', '\0', '\u{b}', 'n', 'r', 't', 's', 'N', 'R', 'T',
         'S', 'a', '0', '^', '"', ',', '|', '[', ']', '{', '}', '<', '>', '=', ':',
     ] {
-        let err = DialStringTarget::new(DialStringCarrier::EslApi)
+        let err = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
             .with_argv_separator(sep)
             .expect_err(&format!("accepted {sep:?}"));
         assert_eq!(err, InvalidArgvSeparator::Unusable(sep));
@@ -1108,7 +1108,7 @@ fn unusable_argv_separators_are_refused() {
     }
     for sep in ['~', ';', '!', '#'] {
         assert!(
-            DialStringTarget::new(DialStringCarrier::EslApi)
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
                 .with_argv_separator(sep)
                 .is_ok(),
             "refused {sep:?}"
@@ -1219,8 +1219,8 @@ fn a_key_the_switch_splits_arrives_escaped_and_round_trips() {
         r"a\=b", r"end\",
     ];
     for target in [
-        DialStringTarget::new(DialStringCarrier::EslApi),
-        DialStringTarget::new(DialStringCarrier::Dialplan),
+        DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+        DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
         tilde(),
     ] {
         for scope in [
@@ -1373,17 +1373,17 @@ fn parse_reads_a_value_as_the_switch_installs_it() {
     for (block, target, want) in [
         (
             r"{k=a\\\\\\b}",
-            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
             r"a\b",
         ),
         (
             r"{k=a\\\\b}",
-            DialStringTarget::new(DialStringCarrier::Dialplan),
+            DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
             r"a\b",
         ),
         (
             r"[^^:k=val\,ue:other=x]",
-            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
             "val,ue",
         ),
     ] {
@@ -1416,8 +1416,8 @@ fn parse_agrees_with_the_switch_port() {
         r"{k\\=x=v}",
     ];
     let targets = [
-        DialStringTarget::new(DialStringCarrier::EslApi),
-        DialStringTarget::new(DialStringCarrier::Dialplan),
+        DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+        DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
         tilde(),
     ];
     for target in targets {

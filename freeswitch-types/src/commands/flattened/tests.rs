@@ -1,5 +1,5 @@
 use super::*;
-use crate::commands::variables::{DialStringCarrier, DialStringTarget};
+use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::switch_passes::originate_legs::MAX_PEERS;
 use crate::variables::ChannelVariable;
 
@@ -259,10 +259,10 @@ impl VariableName for Key {
 
 fn argv_targets() -> [DialStringTarget; 2] {
     [
-        DialStringTarget::new(API)
+        DialStringTarget::new(API, BlockParse::MEASURED)
             .with_argv_separator('~')
             .expect("'~' separates originate's arguments"),
-        DialStringTarget::new(API).with_unchecked_argv_separator('|'),
+        DialStringTarget::new(API, BlockParse::MEASURED).with_unchecked_argv_separator('|'),
     ]
 }
 
@@ -387,7 +387,11 @@ fn argv_separator_captures_read_as_their_channel_received_them() {
 /// The blank split and every argv separator.
 fn split_targets() -> [DialStringTarget; 3] {
     let [tilde, pipe] = argv_targets();
-    [DialStringTarget::new(API), tilde, pipe]
+    [
+        DialStringTarget::new(API, BlockParse::MEASURED),
+        tilde,
+        pipe,
+    ]
 }
 
 #[test]

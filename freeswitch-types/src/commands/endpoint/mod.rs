@@ -108,7 +108,7 @@ macro_rules! impl_endpoint_parse {
     (parse_for: $($ty:ident),* $(,)?) => {
         $(
             impl $ty {
-                /// Parse a leg written for a named carrier or
+                /// Parse a leg written for a
                 /// [`DialStringTarget`](crate::commands::DialStringTarget), mirroring `render`.
                 pub fn parse_for(
                     s: &str,
@@ -481,7 +481,7 @@ impl Endpoint {
         target.argument(|f, target| self.write_for(f, target))
     }
 
-    /// Parse a dial string written for a named carrier or [`DialStringTarget`],
+    /// Parse a dial string written for a [`DialStringTarget`],
     /// mirroring [`render`](Self::render).
     ///
     /// A `sofia_contact` or `group_call` expression parses at the dialplan carrier only.

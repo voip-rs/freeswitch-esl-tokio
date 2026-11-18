@@ -55,19 +55,22 @@ impl DialStringCarrier {
 /// escaping only: the inline action list and the quote pre-scan ahead of a `[]`
 /// block are other parsers. Which revisions a FreeSWITCH version is known to run
 /// is documented in `docs/dial-string-format.md`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[non_exhaustive]
 pub enum BlockParse {
     /// Both of the block's own splits, on the separator and on `=`, run the
     /// escape-consuming cleanup.
-    #[default]
     PairSplitCleans,
 }
 
 impl BlockParse {
     const ALL: &'static [Self] = &[Self::PairSplitCleans];
+
+    /// The revision the escaping was measured against, for checks that need one before any
+    /// caller has named a target.
+    pub(crate) const MEASURED: Self = Self::PairSplitCleans;
 
     fn as_str(self) -> &'static str {
         match self {
@@ -228,11 +231,11 @@ impl fmt::Display for InvalidArgvSeparator {
 impl std::error::Error for InvalidArgvSeparator {}
 
 impl DialStringTarget {
-    /// Target `carrier` at the default [`BlockParse`].
-    pub fn new(carrier: DialStringCarrier) -> Self {
+    /// Target `carrier` on a switch running `block_parse`.
+    pub fn new(carrier: DialStringCarrier, block_parse: BlockParse) -> Self {
         Self {
             carrier,
-            block_parse: BlockParse::default(),
+            block_parse,
             argument: ArgumentPass::Blank,
         }
     }
@@ -410,8 +413,10 @@ where
     }
 }
 
+/// Unit tests name a carrier alone and read it at the measured revision.
+#[cfg(test)]
 impl From<DialStringCarrier> for DialStringTarget {
     fn from(carrier: DialStringCarrier) -> Self {
-        Self::new(carrier)
+        Self::new(carrier, BlockParse::MEASURED)
     }
 }

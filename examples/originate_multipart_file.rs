@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // asks the switch for, so the version is stated in the environment.
     let block_parse = block_parse::block_parse_from_env()?;
     // Read as it would be written on an `api originate` line.
-    let target = DialStringTarget::new(DialStringCarrier::EslApi).with_block_parse(block_parse);
+    let target = DialStringTarget::new(DialStringCarrier::EslApi, block_parse);
     let mut endpoint = Endpoint::parse_for(endpoint, target)?;
 
     let (client, _events) = common::connect_from_env().await?;

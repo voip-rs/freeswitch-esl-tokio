@@ -112,7 +112,7 @@ pub async fn create_uuid(client: &EslClient) -> String {
 /// Send `cmd` over bgapi and return the Job-UUID its BACKGROUND_JOB will carry.
 pub async fn bgapi_originate(client: &EslClient, cmd: &Originate) -> String {
     client
-        .bgapi(&cmd.render(BlockParse::default()))
+        .bgapi(&cmd.render(BlockParse::PairSplitCleans))
         .await
         .expect("bgapi originate transport error")
         .job_uuid()
@@ -583,17 +583,17 @@ pub fn carried_in(scope: VariablesType, pairs: &[(&str, &str)]) -> bool {
 }
 
 /// The revision these tests render for: `FREESWITCH_BLOCK_PARSE` names one to
-/// measure a switch against, and unset is the crate default.
+/// measure a switch against, and unset is the revision this crate measured.
 pub fn block_parse_under_test() -> BlockParse {
     match std::env::var("FREESWITCH_BLOCK_PARSE") {
         Ok(name) => name
             .parse()
             .unwrap_or_else(|e| panic!("FREESWITCH_BLOCK_PARSE: {e}")),
-        Err(std::env::VarError::NotPresent) => BlockParse::default(),
+        Err(std::env::VarError::NotPresent) => BlockParse::PairSplitCleans,
         Err(e) => panic!("FREESWITCH_BLOCK_PARSE: {e}"),
     }
 }
 
 pub fn target_under_test(carrier: DialStringCarrier) -> DialStringTarget {
-    DialStringTarget::new(carrier).with_block_parse(block_parse_under_test())
+    DialStringTarget::new(carrier, block_parse_under_test())
 }

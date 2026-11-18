@@ -452,7 +452,7 @@ fn switch_api_reading(c: Oracle, line: &str) -> ApiReading {
 /// A rendered originate, or `None` where the builder refuses the spec, and lines of stray text.
 fn api_lines() -> impl Strategy<Value = Option<String>> {
     prop_oneof![
-        3 => originate_spec().prop_map(|spec| build_originate(&spec).map(|originate| originate.render(BlockParse::default()))),
+        3 => originate_spec().prop_map(|spec| build_originate(&spec).map(|originate| originate.render(BlockParse::MEASURED))),
         1 => vec(text(), 0..9).prop_map(|tokens| Some(format!("originate {}", tokens.join(" ")))),
     ]
 }

@@ -55,13 +55,13 @@ fn block_separator() -> impl Strategy<Value = Option<char>> {
 }
 
 fn block_parses() -> Vec<BlockParse> {
-    match BlockParse::default() {
+    match BlockParse::MEASURED {
         BlockParse::PairSplitCleans => vec![BlockParse::PairSplitCleans],
     }
 }
 
 fn api_targets() -> Vec<DialStringTarget> {
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED);
     let separated = ['~', '!'].map(|sep| {
         api.with_argv_separator(sep)
             .expect("a usable argv separator")
@@ -81,8 +81,14 @@ pub(crate) fn targets() -> Vec<DialStringTarget> {
 /// Every carrier and argument split, at `block_parse`.
 pub(crate) fn targets_at(block_parse: BlockParse) -> Vec<DialStringTarget> {
     let mut carriers = api_targets();
-    carriers.push(DialStringTarget::new(DialStringCarrier::Dialplan));
-    carriers.push(DialStringTarget::new(DialStringCarrier::Direct));
+    carriers.push(DialStringTarget::new(
+        DialStringCarrier::Dialplan,
+        BlockParse::MEASURED,
+    ));
+    carriers.push(DialStringTarget::new(
+        DialStringCarrier::Direct,
+        BlockParse::MEASURED,
+    ));
     carriers
         .into_iter()
         .map(|target| target.with_block_parse(block_parse))

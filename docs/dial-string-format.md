@@ -1029,7 +1029,7 @@ These two lines are the ESL carriers of [Parse depth](#parse-depth), and each
 typed builder names its own: `Originate` renders for the API carrier,
 `BridgeDialString` for the dialplan one, and both take only a
 [parser revision](#parser-revisions). A bare `Variables` or `Endpoint` has no
-carrier of its own, so `render` and `parse_for` take a `DialStringCarrier` or a
+carrier of its own, so `render` and `parse_for` take a
 `DialStringTarget`, which carries carrier and revision together; a block
 rendered at the API carrier and spliced into a dialplan string by hand is
 escaped one level too deep.

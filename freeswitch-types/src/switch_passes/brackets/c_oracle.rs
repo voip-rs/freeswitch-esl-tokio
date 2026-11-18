@@ -127,7 +127,7 @@ fn a_block_event_folds_names_by_case() {
     };
     let pair = |key: &[u8], value: &[u8]| -> Pair { (key.to_vec(), value.to_vec()) };
     let want = vec![pair(b"K", b"2"), pair(b"gone", b"x"), pair(b"kept", b"y")];
-    assert_eq!(port(BlockParse::default()), want);
+    assert_eq!(port(BlockParse::MEASURED), want);
     for (tree, c) in freeswitch_c_oracle::oracles() {
         assert_eq!(port(tree_block_parse(tree)), want, "tree {tree}");
         let read = c

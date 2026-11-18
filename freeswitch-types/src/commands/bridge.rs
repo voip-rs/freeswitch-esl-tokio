@@ -40,13 +40,13 @@ pub struct BridgeDialString {
 
 impl BridgeDialString {
     /// Create a new bridge dial string with the given failover groups, refusing what
-    /// [`parse_for`](Self::parse_for) refuses at the default [`BlockParse`].
+    /// [`parse_for`](Self::parse_for) refuses at the revision the escaping was measured against.
     pub fn new(groups: Vec<Vec<Endpoint>>) -> Result<Self, OriginateError> {
         let bridge = Self {
             variables: None,
             groups,
         };
-        bridge.check_legs(BlockParse::default())?;
+        bridge.check_legs(BlockParse::MEASURED)?;
         Ok(bridge)
     }
 
@@ -99,7 +99,7 @@ impl BridgeDialString {
     }
 
     fn write_with(&self, f: &mut fmt::Formatter<'_>, block_parse: BlockParse) -> fmt::Result {
-        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
+        let target = DialStringTarget::new(CARRIER, block_parse);
         if let Some(vars) = &self.variables {
             if !vars.is_empty() {
                 write!(f, "{}", vars.display_for(target))?;
@@ -129,7 +129,7 @@ impl BridgeDialString {
     /// Parse a dial string written for a switch running `block_parse`, mirroring
     /// [`render`](Self::render).
     pub fn parse_for(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
-        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
+        let target = DialStringTarget::new(CARRIER, block_parse);
         let s = s.trim_matches(' ');
         if s.is_empty() {
             return Err(OriginateError::ParseError(
@@ -264,7 +264,7 @@ impl BridgeDialString {
         {
             return Err(too_many(Some(group)));
         }
-        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
+        let target = DialStringTarget::new(CARRIER, block_parse);
         match self
             .groups
             .iter()
@@ -473,7 +473,7 @@ mod tests {
             .with_variables(vars.clone());
 
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             r"{cid=it\\\\\\'s}sofia/gateway/gw/18005551234"
         );
         assert_eq!(vars.render(DialStringCarrier::EslApi), r"{cid=it\\\\\\\'s}");
@@ -497,8 +497,8 @@ mod tests {
             .into()]])
         .unwrap();
 
-        let rendered = bridge.render(BlockParse::default());
-        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::default())
+        let rendered = bridge.render(BlockParse::MEASURED);
+        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, bridge, "rendered {rendered}");
     }
@@ -510,7 +510,7 @@ mod tests {
     fn per_endpoint_quoted_value_is_refused() {
         let err = BridgeDialString::parse_for(
             r"[cid=it\\\\\\'s]sofia/gateway/gw/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap_err()
         .to_string();
@@ -528,7 +528,7 @@ mod tests {
                 .into()]])
             .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/my_provider/18005551234"
         );
     }
@@ -545,7 +545,7 @@ mod tests {
         ]])
         .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234"
         );
     }
@@ -562,7 +562,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/primary/18005551234|sofia/gateway/backup/18005551234"
         );
     }
@@ -584,7 +584,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/primary/1234,sofia/gateway/secondary/1234|sofia/gateway/backup/1234"
         );
     }
@@ -601,7 +601,7 @@ mod tests {
             .unwrap()
             .with_variables(vars);
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "{hangup_after_bridge=true}sofia/internal/1000@domain"
         );
     }
@@ -623,7 +623,7 @@ mod tests {
         ]])
         .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "[leg_timeout=30]sofia/gateway/gw1/1234,sofia/gateway/gw2/1234"
         );
     }
@@ -638,7 +638,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/primary/1234|error/USER_BUSY"
         );
     }
@@ -651,10 +651,7 @@ mod tests {
             .unwrap()
             .into()]])
         .unwrap();
-        assert_eq!(
-            bridge.render(BlockParse::default()),
-            "loopback/9199/default"
-        );
+        assert_eq!(bridge.render(BlockParse::MEASURED), "loopback/9199/default");
     }
 
     // === FromStr ===
@@ -663,7 +660,7 @@ mod tests {
     fn from_str_single_endpoint() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "sofia/gateway/my_provider/18005551234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -682,7 +679,7 @@ mod tests {
     fn from_str_simultaneous_ring() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "sofia/gateway/primary/1234,sofia/gateway/secondary/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -698,7 +695,7 @@ mod tests {
     fn from_str_sequential_failover() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "sofia/gateway/primary/1234|sofia/gateway/backup/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -715,7 +712,7 @@ mod tests {
     fn from_str_mixed() {
         let bridge = BridgeDialString::parse_for(
             "sofia/gateway/primary/1234,sofia/gateway/secondary/1234|sofia/gateway/backup/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -732,7 +729,7 @@ mod tests {
     fn from_str_with_global_variables() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "{hangup_after_bridge=true}sofia/internal/1000@domain",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert!(bridge
@@ -758,7 +755,7 @@ mod tests {
     fn from_str_with_per_endpoint_variables() {
         let bridge = BridgeDialString::parse_for(
             "[leg_timeout=30]sofia/gateway/gw1/1234,sofia/gateway/gw2/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -784,7 +781,7 @@ mod tests {
     fn from_str_with_enterprise_global_variables() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "<originate_timeout=60>sofia/internal/1000@domain",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert_eq!(
@@ -803,7 +800,7 @@ mod tests {
     fn from_str_leaves_a_channel_block_on_its_endpoint() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             "[leg_timeout=30]sofia/gateway/gw1/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap();
         assert!(bridge
@@ -818,8 +815,8 @@ mod tests {
     fn from_str_round_trip_single() {
         let input = "sofia/gateway/my_provider/18005551234";
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for(input, BlockParse::default()).unwrap();
-        assert_eq!(bridge.render(BlockParse::default()), input);
+            BridgeDialString::parse_for(input, BlockParse::MEASURED).unwrap();
+        assert_eq!(bridge.render(BlockParse::MEASURED), input);
     }
 
     #[test]
@@ -827,16 +824,16 @@ mod tests {
         let input =
             "sofia/gateway/primary/1234,sofia/gateway/secondary/1234|sofia/gateway/backup/1234";
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for(input, BlockParse::default()).unwrap();
-        assert_eq!(bridge.render(BlockParse::default()), input);
+            BridgeDialString::parse_for(input, BlockParse::MEASURED).unwrap();
+        assert_eq!(bridge.render(BlockParse::MEASURED), input);
     }
 
     #[test]
     fn from_str_round_trip_with_global_vars() {
         let input = "{hangup_after_bridge=true}sofia/internal/1000@domain";
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for(input, BlockParse::default()).unwrap();
-        assert_eq!(bridge.render(BlockParse::default()), input);
+            BridgeDialString::parse_for(input, BlockParse::MEASURED).unwrap();
+        assert_eq!(bridge.render(BlockParse::MEASURED), input);
     }
 
     // === Serde ===
@@ -880,13 +877,13 @@ mod tests {
 
     #[test]
     fn from_str_empty_string_rejected() {
-        let result = BridgeDialString::parse_for("", BlockParse::default());
+        let result = BridgeDialString::parse_for("", BlockParse::MEASURED);
         assert!(result.is_err());
     }
 
     #[test]
     fn from_str_whitespace_only_rejected() {
-        let result = BridgeDialString::parse_for("   ", BlockParse::default());
+        let result = BridgeDialString::parse_for("   ", BlockParse::MEASURED);
         assert!(result.is_err());
     }
 
@@ -894,7 +891,7 @@ mod tests {
     fn from_str_empty_groups_from_trailing_pipe() {
         // "ep1|" should parse as one group (empty trailing group is skipped)
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for("sofia/gateway/gw1/1234|", BlockParse::default()).unwrap();
+            BridgeDialString::parse_for("sofia/gateway/gw1/1234|", BlockParse::MEASURED).unwrap();
         assert_eq!(
             bridge
                 .groups()
@@ -906,7 +903,7 @@ mod tests {
     #[test]
     fn from_str_empty_variable_block() {
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for("{}sofia/gateway/gw1/1234", BlockParse::default()).unwrap();
+            BridgeDialString::parse_for("{}sofia/gateway/gw1/1234", BlockParse::MEASURED).unwrap();
         assert!(bridge
             .variables()
             .is_none());
@@ -922,7 +919,7 @@ mod tests {
     fn from_str_mismatched_bracket_rejected() {
         let result = BridgeDialString::parse_for(
             "{unclosed=true sofia/gateway/gw1/1234",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         );
         assert!(result.is_err());
     }
@@ -944,8 +941,8 @@ mod tests {
                 .into()],
         ])
         .unwrap();
-        let rendered = bridge.render(BlockParse::default());
-        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::default())
+        let rendered = bridge.render(BlockParse::MEASURED);
+        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, bridge, "rendered {rendered}");
     }
@@ -992,11 +989,11 @@ mod tests {
     #[test]
     fn a_comma_head_the_scan_rewrites_round_trips() {
         let bridge = BridgeDialString::new(vec![bracket_around_block(',', "undef")]).unwrap();
-        let rendered = bridge.render(BlockParse::default());
-        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::default())
+        let rendered = bridge.render(BlockParse::MEASURED);
+        let back: BridgeDialString = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(
-            back.render(BlockParse::default()),
+            back.render(BlockParse::MEASURED),
             r"portaudio/[\\\\\\\\,[v0=undef]sofia/gateway/]/"
         );
         let json = serde_json::to_value(&bridge).unwrap();
@@ -1018,11 +1015,11 @@ mod tests {
             .join(",");
         assert!(
             matches!(
-                BridgeDialString::parse_for(&rendered, BlockParse::default()),
+                BridgeDialString::parse_for(&rendered, BlockParse::MEASURED),
                 Err(OriginateError::BracketSpansLegs { group: 0 })
             ),
             "{rendered}: {:?}",
-            BridgeDialString::parse_for(&rendered, BlockParse::default())
+            BridgeDialString::parse_for(&rendered, BlockParse::MEASURED)
         );
         assert_eq!(
             BridgeDialString::new(vec![group.clone()]),
@@ -1055,7 +1052,7 @@ mod tests {
     #[test]
     fn a_group_past_the_leg_limit_is_refused_as_the_limit() {
         let over = joined(&loopbacks(MAX_PEERS + 1), ",");
-        let err = BridgeDialString::parse_for(&over, BlockParse::default()).unwrap_err();
+        let err = BridgeDialString::parse_for(&over, BlockParse::MEASURED).unwrap_err();
         assert_eq!(
             err,
             OriginateError::TooManyLegs {
@@ -1070,12 +1067,12 @@ mod tests {
         );
         let at = joined(&loopbacks(MAX_PEERS), ",");
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for(&at, BlockParse::default()).unwrap();
+            BridgeDialString::parse_for(&at, BlockParse::MEASURED).unwrap();
         assert_eq!(bridge.groups()[0].len(), MAX_PEERS);
 
         let second = format!("loopback/a|{over}");
         assert_eq!(
-            BridgeDialString::parse_for(&second, BlockParse::default()),
+            BridgeDialString::parse_for(&second, BlockParse::MEASURED),
             Err(OriginateError::TooManyLegs {
                 group: Some(1),
                 max: MAX_PEERS
@@ -1086,7 +1083,7 @@ mod tests {
     #[test]
     fn groups_past_the_limit_are_refused_as_the_limit() {
         let over = joined(&loopbacks(MAX_PEERS + 1), "|");
-        let err = BridgeDialString::parse_for(&over, BlockParse::default()).unwrap_err();
+        let err = BridgeDialString::parse_for(&over, BlockParse::MEASURED).unwrap_err();
         assert_eq!(
             err,
             OriginateError::TooManyLegs {
@@ -1100,7 +1097,7 @@ mod tests {
             "{err}"
         );
         let bridge: BridgeDialString =
-            BridgeDialString::parse_for(&joined(&loopbacks(MAX_PEERS), "|"), BlockParse::default())
+            BridgeDialString::parse_for(&joined(&loopbacks(MAX_PEERS), "|"), BlockParse::MEASURED)
                 .unwrap();
         assert_eq!(
             bridge
@@ -1135,7 +1132,7 @@ mod tests {
     fn parse_reads_blocks_as_the_switch_installs_them() {
         let bridge: BridgeDialString = BridgeDialString::parse_for(
             r"{k=a\\\\b}[j=c\\\\\\\\d]loopback/9199/test",
-            BlockParse::default(),
+            BlockParse::MEASURED,
         )
         .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(
@@ -1164,7 +1161,7 @@ mod tests {
         }"#;
         let bridge: BridgeDialString = serde_json::from_str(json).unwrap();
         assert_eq!(
-            bridge.render(BlockParse::default()),
+            bridge.render(BlockParse::MEASURED),
             "sofia/gateway/my_gw/18005551234"
         );
     }

@@ -101,11 +101,11 @@ proptest! {
         let Some(originate) = build_originate(&spec) else {
             return Ok(());
         };
-        let rendered = originate.render(BlockParse::default());
+        let rendered = originate.render(BlockParse::MEASURED);
         let want = intended(&spec, &originate);
         let got = switch_view(&rendered);
         let delivered = got.as_ref() == Ok(&want);
-        let parsed = Originate::parse_for(&rendered, BlockParse::default());
+        let parsed = Originate::parse_for(&rendered, BlockParse::MEASURED);
         let refused = serde_json::to_value(&originate)
             .and_then(serde_json::from_value::<Originate>)
             .is_err()
@@ -115,7 +115,7 @@ proptest! {
             "{spec:?}: rendered {rendered:?}, switch reads {got:?}, want {want:?}"
         );
         if delivered {
-            let rerendered = parsed.map(|parsed| parsed.render(BlockParse::default()));
+            let rerendered = parsed.map(|parsed| parsed.render(BlockParse::MEASURED));
             prop_assert_eq!(
                 rerendered.as_deref().map(switch_view),
                 Ok(Ok(want)),
@@ -127,7 +127,7 @@ proptest! {
     #[test]
     fn an_escaped_argument_is_one_argument(text in text()) {
         for carrier in [DialStringCarrier::Dialplan, DialStringCarrier::Direct] {
-            prop_assert_eq!(DialStringTarget::new(carrier).escape_argument(&text), None);
+            prop_assert_eq!(DialStringTarget::new(carrier, BlockParse::MEASURED).escape_argument(&text), None);
         }
         for target in api_targets() {
             let escaped = target
@@ -222,8 +222,8 @@ proptest! {
         if config_refuses_bridge(&bridge) {
             return Ok(());
         }
-        let rendered = bridge.render(BlockParse::default());
-        let parsed = BridgeDialString::parse_for(&rendered, BlockParse::default());
+        let rendered = bridge.render(BlockParse::MEASURED);
+        let parsed = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED);
         prop_assert_eq!(
             parsed.as_ref().map(bridge_view),
             Ok(bridge_view(&bridge)),

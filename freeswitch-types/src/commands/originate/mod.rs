@@ -237,7 +237,7 @@ impl Originate {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn with_argv_separator(mut self, sep: char) -> Result<Self, OriginateError> {
-        Self::argv_target(BlockParse::default(), sep)?;
+        Self::argv_target(BlockParse::MEASURED, sep)?;
         self.argv_separator = Some(sep);
         Ok(self)
     }
@@ -482,7 +482,7 @@ impl Originate {
     }
 
     fn dial_target(block_parse: BlockParse) -> DialStringTarget {
-        DialStringTarget::new(DialStringCarrier::EslApi).with_block_parse(block_parse)
+        DialStringTarget::new(DialStringCarrier::EslApi, block_parse)
     }
 
     fn argv_target(block_parse: BlockParse, sep: char) -> Result<DialStringTarget, OriginateError> {

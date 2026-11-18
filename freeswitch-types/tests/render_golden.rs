@@ -91,12 +91,12 @@ fn hostile(name: &str) -> &'static str {
 /// The four render targets asked for: blank-split and dialplan carriers, plus the API
 /// carrier with each of the two argv separators the task names.
 fn targets() -> Vec<(&'static str, DialStringTarget)> {
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::PairSplitCleans);
     vec![
         ("api", api),
         (
             "dialplan",
-            DialStringTarget::new(DialStringCarrier::Dialplan),
+            DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::PairSplitCleans),
         ),
         (
             "api-tilde",
@@ -505,14 +505,14 @@ const ORIGINATE_CASES: &[(&str, OriginateBuilder)] = &[
 ];
 
 fn originate_case(records: &mut Vec<String>, id: &str, o: &Originate) {
-    let rendered = o.render(BlockParse::default());
+    let rendered = o.render(BlockParse::PairSplitCleans);
     rec(records, format!("orig/{id}/display"), &rendered);
     roundtrip(
         records,
         format!("orig/{id}/roundtrip"),
         &rendered,
-        Originate::parse_for(&rendered, BlockParse::default())
-            .map(|o| o.render(BlockParse::default())),
+        Originate::parse_for(&rendered, BlockParse::PairSplitCleans)
+            .map(|o| o.render(BlockParse::PairSplitCleans)),
     );
 }
 
@@ -554,7 +554,7 @@ fn bridge_corpus(records: &mut Vec<String>) {
     let bridge = BridgeDialString::new(vec![vec![ep1, ep2], vec![ep3]])
         .unwrap()
         .with_variables(vars);
-    let block_parse = BlockParse::default();
+    let block_parse = BlockParse::PairSplitCleans;
     let rendered = bridge.render(block_parse);
     rec(records, "bridge/basic/display", &rendered);
     roundtrip(
@@ -568,8 +568,8 @@ fn bridge_corpus(records: &mut Vec<String>) {
     // it (this stays one leg, not two), but the block's own pair split still reads it as
     // a separator, so the block fails to parse rather than the legs merging.
     let bad = "[k=a,b]sofia/internal/1000,sofia/internal/1001";
-    let repr = match BridgeDialString::parse_for(bad, BlockParse::default()) {
-        Ok(b) => format!("Ok {}", b.render(BlockParse::default())),
+    let repr = match BridgeDialString::parse_for(bad, BlockParse::PairSplitCleans) {
+        Ok(b) => format!("Ok {}", b.render(BlockParse::PairSplitCleans)),
         Err(_) => "Err".to_string(),
     };
     rec(records, "bridge/unescaped-comma-in-block/parse", repr);
@@ -681,8 +681,8 @@ fn flattened_corpus(records: &mut Vec<String>) {
         .collect();
     names.sort();
 
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
-    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::PairSplitCleans);
+    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::PairSplitCleans);
     let argv = api
         .with_argv_separator('~')
         .expect("~ is a usable argv separator");
@@ -743,7 +743,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/vars/{id}"),
-            json_result(json, |v: &Variables| v.render(DialStringCarrier::EslApi)),
+            json_result(json, |v: &Variables| v.render(api_at_measured())),
         );
     }
 
@@ -772,7 +772,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/endpoint/{id}"),
-            json_result(json, |e: &Endpoint| e.render(DialStringCarrier::EslApi)),
+            json_result(json, |e: &Endpoint| e.render(api_at_measured())),
         );
     }
 
@@ -799,7 +799,7 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/originate/{id}"),
-            json_result(json, |o: &Originate| o.render(BlockParse::default())),
+            json_result(json, |o: &Originate| o.render(BlockParse::PairSplitCleans)),
         );
     }
 
@@ -817,7 +817,9 @@ fn serde_config_corpus(records: &mut Vec<String>) {
         rec(
             records,
             format!("serde/bridge/{id}"),
-            json_result(json, |b: &BridgeDialString| b.render(BlockParse::default())),
+            json_result(json, |b: &BridgeDialString| {
+                b.render(BlockParse::PairSplitCleans)
+            }),
         );
     }
 }
@@ -861,4 +863,9 @@ fn render_golden() {
         actual, expected,
         "golden mismatch; rerun with GOLDEN_UPDATE=1 to update {path} after confirming the change is intended"
     );
+}
+
+/// The API carrier at the one revision this corpus pins.
+fn api_at_measured() -> DialStringTarget {
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::PairSplitCleans)
 }

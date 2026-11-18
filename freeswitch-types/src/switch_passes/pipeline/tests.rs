@@ -385,10 +385,10 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
     let targets = [
         API.into(),
         DIALPLAN.into(),
-        DialStringTarget::new(API)
+        DialStringTarget::new(API, BlockParse::MEASURED)
             .with_argv_separator('~')
             .expect("'~' separates originate's arguments"),
-        DialStringTarget::new(API).with_unchecked_argv_separator('|'),
+        DialStringTarget::new(API, BlockParse::MEASURED).with_unchecked_argv_separator('|'),
     ];
     for scope in [
         VariablesType::Default,
@@ -552,7 +552,7 @@ fn nested_vars_are_opted_into_per_thread() {
 fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     let mut buffer = CBuffer::new(&trace(r"{\}k=v}"));
     let Parsed { block, next, .. } =
-        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::default()).unwrap();
+        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::MEASURED).unwrap();
     assert_eq!(next, 3);
     assert_eq!(untrace(buffer.c_str(next)), "k");
     assert_eq!(
@@ -566,7 +566,7 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
 
     let mut buffer = CBuffer::new(&trace(r"{x\\,k=v}"));
     let Parsed { block, .. } =
-        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::default()).unwrap();
+        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::MEASURED).unwrap();
     assert_eq!(
         block
             .pairs
@@ -579,12 +579,12 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
 
     let mut buffer = CBuffer::new(&trace("<^^>=>"));
     let Parsed { block, next, .. } =
-        parse_block(&mut buffer, 0, '<', '>', ',', BlockParse::default()).unwrap();
+        parse_block(&mut buffer, 0, '<', '>', ',', BlockParse::MEASURED).unwrap();
     assert_eq!(untrace(buffer.c_str(next)), "");
     assert!(block.rewrites_following_text);
 
     let bare = |input: &str| {
-        dial_list(&trace(input), 0..input.len(), false, BlockParse::default())
+        dial_list(&trace(input), 0..input.len(), false, BlockParse::MEASURED)
             .unwrap_or_else(|e| panic!("{input:?}: {e:?}"))
     };
     let list = bare("<\\>\t>,[[]");
@@ -598,7 +598,7 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
                 &trace(refused),
                 0..refused.len(),
                 false,
-                BlockParse::default()
+                BlockParse::MEASURED
             ),
             Err(PipelineError::SplitSeparatorUnreadable),
             "{refused:?}"

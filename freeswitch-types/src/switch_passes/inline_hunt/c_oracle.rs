@@ -107,7 +107,7 @@ fn inline_actions_arrive_through_the_c_hunt() {
                     .with_argv_separator('~')
                     .expect("a usable argv separator");
             }
-            let line = originate.render(BlockParse::default());
+            let line = originate.render(BlockParse::MEASURED);
             let api = c.api_originate(
                 line.strip_prefix("originate ")
                     .unwrap_or(&line)

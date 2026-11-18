@@ -23,8 +23,8 @@ use freeswitch_esl_tokio::FreeswitchVersion;
 // Escaping depends on the command carrying the dial string and on the switch's
 // parser revision, which the crate never asks the switch for: name both.
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
-let target = DialStringTarget::new(DialStringCarrier::EslApi)
-    .with_block_parse(BlockParse::for_version(&version).unwrap());
+let target =
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::for_version(&version).unwrap());
 
 // Direct SIP profile routing
 let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
@@ -164,8 +164,10 @@ A list the switch expanded, such as a `group_call` result, can carry values with
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
 
-let target = DialStringTarget::new(DialStringCarrier::EslApi)
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let target = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::for_version(&version).unwrap())
     .with_argv_separator('~')
     .unwrap(); // '~' is a usable separator
 let expanded = "[sip_h_X-Seat=desk one]user/1001@pbx.example.com,error/USER_NOT_REGISTERED";
@@ -183,8 +185,11 @@ On a plain line, a target with no separator escapes the list for the blank split
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
 
-let target = DialStringTarget::new(DialStringCarrier::EslApi);
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let target =
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::for_version(&version).unwrap());
 let expanded = "[sip_h_X-Seat=desk one]user/1001@pbx.example.com,error/USER_NOT_REGISTERED";
 
 let escaped = target.escape_argument(expanded).unwrap(); // the API carrier escapes
@@ -206,8 +211,8 @@ use freeswitch_esl_tokio::commands::*;
 use freeswitch_esl_tokio::{ChannelVariable, FreeswitchVersion};
 
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
-let target = DialStringTarget::new(DialStringCarrier::EslApi)
-    .with_block_parse(BlockParse::for_version(&version).unwrap());
+let target =
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::for_version(&version).unwrap());
 
 let hook = ExecuteOn::lua("/run/app/load_multipart.lua", ["/run/app/call-42.xml"]).unwrap();
 let mut vars = Variables::new(VariablesType::Default);

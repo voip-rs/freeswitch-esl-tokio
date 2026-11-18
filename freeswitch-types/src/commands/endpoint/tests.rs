@@ -79,9 +79,9 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         ("${group_call(SECRET@example.com+A)}", "group_call"),
     ] {
         for target in [
-            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
             tilde(),
-            DialStringTarget::new(DialStringCarrier::Direct),
+            DialStringTarget::new(DialStringCarrier::Direct, BlockParse::MEASURED),
         ] {
             let refused = Endpoint::parse_for(text, target);
             assert_eq!(refused, Err(unexpanded(kind)), "{text} at {target:?}");
@@ -95,7 +95,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         assert!(msg.contains(kind) && !msg.contains("SECRET"), "{msg}");
         let line = format!("originate {text} &park()");
         assert_eq!(
-            Originate::parse_for(&line, BlockParse::default()),
+            Originate::parse_for(&line, BlockParse::MEASURED),
             Err(unexpanded(kind)),
             "{line}"
         );
@@ -112,7 +112,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         Application::simple("park"),
     );
     assert_eq!(
-        built.render(BlockParse::default()),
+        built.render(BlockParse::MEASURED),
         "originate ${group_call(support@example.com)} &park()"
     );
 }
@@ -163,7 +163,7 @@ fn a_target_and_its_bare_carrier_agree() {
     use crate::commands::variables::{BlockParse, DialStringTarget};
 
     let input = r"{a=it\\\\\\'s}sofia/internal/1000@example.com";
-    let target = DialStringTarget::new(DialStringCarrier::Dialplan)
+    let target = DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED)
         .with_block_parse(BlockParse::PairSplitCleans);
     let by_target = Endpoint::parse_for(input, target).unwrap();
     let by_carrier = Endpoint::parse_for(input, DialStringCarrier::Dialplan).unwrap();
@@ -193,7 +193,7 @@ fn whitespace_other_than_a_space_is_kept() {
         crate::commands::BlockParse::PairSplitCleans,
     )
     .unwrap();
-    assert_eq!(bridge.render(BlockParse::default()), "loopback/9199/test\t");
+    assert_eq!(bridge.render(BlockParse::MEASURED), "loopback/9199/test\t");
 }
 
 #[test]
@@ -309,7 +309,7 @@ fn parse_refuses_a_block_on_an_error_endpoint() {
     assert_eq!(
         crate::commands::BridgeDialString::parse_for(
             "[k=v]error/USER_BUSY",
-            crate::commands::variables::BlockParse::default()
+            crate::commands::variables::BlockParse::MEASURED
         ),
         Err(OriginateError::VariablesNotSupported("error"))
     );
@@ -551,7 +551,7 @@ fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
 
 #[test]
 fn every_endpoint_type_round_trips_at_an_argv_separator() {
-    let target = DialStringTarget::new(DialStringCarrier::EslApi)
+    let target = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments");
     let mut vars = Variables::new(VariablesType::Default);
@@ -633,7 +633,7 @@ fn every_endpoint_type_round_trips_at_an_argv_separator() {
 
 #[test]
 fn an_endpoint_cut_by_its_argv_separator_is_refused() {
-    let target = DialStringTarget::new(DialStringCarrier::EslApi)
+    let target = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments");
     assert!(Endpoint::parse_for("loopback/9199/test~error/USER_BUSY", target).is_err());
@@ -730,7 +730,7 @@ fn from_error_endpoint() {
 // --- Endpoint text through the leg splits ---
 
 fn tilde() -> DialStringTarget {
-    DialStringTarget::new(DialStringCarrier::EslApi)
+    DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
         .with_argv_separator('~')
         .expect("'~' separates originate's arguments")
 }
@@ -739,8 +739,8 @@ fn tilde() -> DialStringTarget {
 /// value with the leg separators added.
 #[test]
 fn endpoint_text_is_escaped_for_the_leg_splits() {
-    let api = DialStringTarget::new(DialStringCarrier::EslApi);
-    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
+    let api = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED);
+    let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED);
     let separators: Endpoint = LoopbackEndpoint::new("a,b")
         .unwrap()
         .with_context("c|d")
@@ -857,8 +857,8 @@ fn hostile_fields_arrive_and_round_trip_at_every_target() {
     use crate::switch_passes::pipeline;
 
     let targets = [
-        DialStringTarget::new(DialStringCarrier::EslApi),
-        DialStringTarget::new(DialStringCarrier::Dialplan),
+        DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+        DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
         tilde(),
     ];
     for field in HOSTILE_FIELDS {
@@ -1057,10 +1057,10 @@ fn empty_fields_the_module_reads_as_written_round_trip() {
     ];
     for ep in cases {
         for target in [
-            DialStringTarget::new(DialStringCarrier::EslApi),
-            DialStringTarget::new(DialStringCarrier::Dialplan),
+            DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED),
+            DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED),
             tilde(),
-            DialStringTarget::new(DialStringCarrier::Direct),
+            DialStringTarget::new(DialStringCarrier::Direct, BlockParse::MEASURED),
         ] {
             let rendered = ep
                 .display_for(target)
