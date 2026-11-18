@@ -39,3 +39,9 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 
 - sip-header 1.0 parses through traits: `SipHeaderAddr::parse(s)` with `HeaderParse` in scope, never `s.parse::<SipHeaderAddr>()`.
 - Every sip-header accessor returns `Result<Option<T>, ParseError>`; list and auth accessors that returned a bare `Vec` are wrapped too.
+
+## Command builders
+
+| 2.x | 3.0 |
+|---|---|
+| `commands::parse_originate_target(s, dialplan)` | parse the whole line as an `Originate`, whose target is read the way `originate_function` reads it |

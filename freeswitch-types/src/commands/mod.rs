@@ -50,7 +50,6 @@ pub use variables::{
 };
 
 use crate::switch_passes::api_argument::{self, clean_argument, split_line};
-use crate::switch_passes::originate_function;
 
 /// Wrap a token in single quotes for originate command strings.
 ///
@@ -98,19 +97,4 @@ pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, Origin
         .into_iter()
         .map(|argument| line[argument.raw].to_string())
         .collect())
-}
-
-/// Parse the target argument of an originate command.
-///
-/// Determines whether the target is a dialplan extension or application(s), in the order
-/// `originate_function` decides it:
-///
-/// - If string is `&` and more: parse as XML app → `Application`, whatever the dialplan
-/// - If dialplan is `Inline`: parse as inline apps → `InlineApplications`
-/// - Otherwise: bare string → `Extension`
-pub fn parse_originate_target(
-    s: &str,
-    dialplan: Option<&DialplanType>,
-) -> Result<OriginateTarget, OriginateError> {
-    originate_function::parse_originate_target(s, dialplan)
 }

@@ -183,16 +183,6 @@ Every other pair on the type is `x()`/`x_mut()`; this reader is the odd one.
 Its siblings `ParseSipPassthroughError` and `EslArrayError` set the two
 conventions; this one follows neither.
 
-### `parse_originate_target` should be `pub(crate)`
-
-Public, re-exported nowhere, one caller inside `Originate::from_str`.
-
-### `originate_split` should be `pub(crate)`
-
-Public, re-exported nowhere, one caller inside `Originate::parse_with`. A caller
-wanting the argument split already has it through `Originate`.
-
-
 ### `FilterDelete { header: "all" }` duplicates `FilterDeleteAll`
 
 Both emit the same wire; the first warns at runtime that its `value` is
