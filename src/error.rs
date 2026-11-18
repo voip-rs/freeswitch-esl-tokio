@@ -201,6 +201,14 @@ pub enum EslError {
         /// The header as given.
         header: String,
     },
+
+    /// A caller-supplied field held a line break, which would inject a command,
+    /// or a NUL, which would cut one short. Nothing was sent.
+    #[error("{field} must not contain a line break or NUL")]
+    WireTerminatorInField {
+        /// Which field; the value is not kept, since it may be a credential.
+        field: &'static str,
+    },
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -348,6 +356,7 @@ impl EslError {
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
+            EslError::WireTerminatorInField { .. } => false,
         }
     }
 
@@ -400,6 +409,7 @@ impl EslError {
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
+            EslError::WireTerminatorInField { .. } => false,
         }
     }
 
@@ -727,6 +737,13 @@ mod tests {
             (EslError::auth_failed("bad password"), false, false),
             (
                 EslError::from(ParseChannelStateError("CS_NONSENSE".into())),
+                false,
+                false,
+            ),
+            (
+                EslError::WireTerminatorInField {
+                    field: "api command",
+                },
                 false,
                 false,
             ),

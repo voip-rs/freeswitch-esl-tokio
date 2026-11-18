@@ -43,11 +43,9 @@ impl fmt::Debug for Secret {
 
 /// Refuse a user-provided string carrying a line break, which injects a
 /// command, or a NUL, which cuts one short.
-fn validate_wire_text(s: &str, context: &str) -> EslResult<()> {
+fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
     if contains_wire_terminator(s) {
-        return Err(EslError::ProtocolError {
-            message: format!("{} must not contain a line break or NUL", context),
-        });
+        return Err(EslError::WireTerminatorInField { field });
     }
     Ok(())
 }
@@ -1018,6 +1016,10 @@ mod tests {
             let err = cmd
                 .to_wire_format()
                 .unwrap_err();
+            assert!(
+                matches!(err, EslError::WireTerminatorInField { field: f } if f == field),
+                "{err}"
+            );
             assert!(!err.is_connection_error(), "{err}");
             assert!(!err.is_recoverable(), "{err}");
             let shown = err.to_string();
