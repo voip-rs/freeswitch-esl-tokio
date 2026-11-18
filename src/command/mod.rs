@@ -783,20 +783,26 @@ mod tests {
         assert!(wire.ends_with("hello world"));
     }
 
-    /// The special-cased header and the dedicated variant emit one wire form;
-    /// both are pinned here so a change to either shows as a diff on the other.
+    /// mod_event_socket compares the header to `all` with `strcasecmp` and
+    /// clears every filter, whatever value follows.
+    #[test]
+    fn filter_delete_refuses_the_all_header_in_any_case() {
+        for header in ["all", "ALL", "All"] {
+            for value in [None, Some("CHANNEL_CREATE".to_string())] {
+                let err = EslCommand::FilterDelete {
+                    header: header.to_string(),
+                    value: value.clone(),
+                }
+                .to_wire_format()
+                .expect_err(header);
+                assert!(!err.is_recoverable(), "{header} {value:?}: {err}");
+                assert!(!err.is_connection_error(), "{header} {value:?}: {err}");
+            }
+        }
+    }
+
     #[test]
     fn test_filter_delete_all_wire_format() {
-        let by_header = EslCommand::FilterDelete {
-            header: "all".to_string(),
-            value: None,
-        };
-        assert_eq!(
-            by_header
-                .to_wire_format()
-                .unwrap(),
-            "filter delete all\n\n"
-        );
         assert_eq!(
             EslCommand::FilterDeleteAll
                 .to_wire_format()
