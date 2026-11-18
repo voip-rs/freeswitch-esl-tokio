@@ -8,6 +8,7 @@
 //! - **Recoverable errors** ([`EslError::is_recoverable`]) -- the command failed
 //!   but the connection is still usable (e.g., timeout, command rejected).
 
+use crate::app::dptools::TransferArgumentError;
 use crate::commands::OriginateError;
 use crate::constants::{REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
 use freeswitch_types::variables::ParseLoopbackLegError;
@@ -219,6 +220,11 @@ pub enum EslError {
         /// How the switch would misread it.
         fault: FilterHeaderFault,
     },
+
+    /// An [`AppCommand`](crate::AppCommand) `transfer` argument the switch would
+    /// misread.
+    #[error("transfer argument refused: {0}")]
+    TransferArgument(#[from] TransferArgumentError),
 }
 
 /// How mod_event_socket would misread a filter header.
@@ -390,6 +396,7 @@ impl EslError {
             EslError::FilterDeleteAllHeader { .. } => false,
             EslError::WireTerminatorInField { .. } => false,
             EslError::UnsplittableFilterHeader { .. } => false,
+            EslError::TransferArgument(_) => false,
         }
     }
 
@@ -444,6 +451,7 @@ impl EslError {
             EslError::FilterDeleteAllHeader { .. } => false,
             EslError::WireTerminatorInField { .. } => false,
             EslError::UnsplittableFilterHeader { .. } => false,
+            EslError::TransferArgument(_) => false,
         }
     }
 

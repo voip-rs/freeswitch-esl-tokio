@@ -211,7 +211,7 @@ mod guide {
     }
 }
 
-pub use app::dptools::AppCommand;
+pub use app::dptools::{AppCommand, TransferArgumentError, TransferField};
 pub use bgjob::{BgJobResult, BgJobTracker};
 pub use command::{
     parse_api_body, parse_channel_dump, parse_channel_dump_with_options, ChannelDumpOptions,

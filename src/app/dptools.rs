@@ -1,5 +1,7 @@
 //! FreeSWITCH dptools application commands (`answer`, `hangup`, `playback`, etc.).
 
+use std::fmt;
+
 use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
@@ -67,13 +69,19 @@ impl AppCommand {
     ///
     /// The switch takes `force_transfer_dialplan` and `force_transfer_context`
     /// first, then the caller profile's, with `inline` falling back to `XML`.
-    pub fn transfer(extension: &str) -> EslCommand {
-        execute("transfer", Some(extension.to_string()))
+    pub fn transfer(extension: &str) -> Result<EslCommand, TransferArgumentError> {
+        transfer_command(&[(TransferField::Extension, extension)])
     }
 
     /// Transfer the channel to `extension` under `dialplan`, keeping its context.
-    pub fn transfer_to_dialplan(extension: &str, dialplan: DialplanType) -> EslCommand {
-        execute("transfer", Some(format!("{extension} {dialplan}")))
+    pub fn transfer_to_dialplan(
+        extension: &str,
+        dialplan: DialplanType,
+    ) -> Result<EslCommand, TransferArgumentError> {
+        transfer_command(&[
+            (TransferField::Extension, extension),
+            (TransferField::Dialplan, dialplan.name()),
+        ])
     }
 
     /// Transfer the channel to `extension` in `context` under `dialplan`.
@@ -84,12 +92,65 @@ impl AppCommand {
         extension: &str,
         dialplan: DialplanType,
         context: &str,
-    ) -> EslCommand {
-        execute(
-            "transfer",
-            Some(format!("{extension} {dialplan} {context}")),
-        )
+    ) -> Result<EslCommand, TransferArgumentError> {
+        transfer_command(&[
+            (TransferField::Extension, extension),
+            (TransferField::Dialplan, dialplan.name()),
+            (TransferField::Context, context),
+        ])
     }
+}
+
+/// A `transfer` argument field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TransferField {
+    /// The destination extension, first.
+    Extension,
+    /// The dialplan name, second.
+    Dialplan,
+    /// The context, third.
+    Context,
+}
+
+impl fmt::Display for TransferField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            TransferField::Extension => "extension",
+            TransferField::Dialplan => "dialplan",
+            TransferField::Context => "context",
+        })
+    }
+}
+
+/// A `transfer` argument the switch would read as something else.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum TransferArgumentError {
+    /// `transfer_function` splits its argument on blanks, honouring `'` quotes and
+    /// `\` escapes, and this field would not come back as itself.
+    #[error("transfer {field} {value:?} does not survive the switch's argument split")]
+    Unsplittable {
+        /// Which field.
+        field: TransferField,
+        /// The field as given.
+        value: String,
+    },
+    /// `-bleg` or `-both` in any case, which `transfer_function` reads as the
+    /// leg to transfer rather than as an extension.
+    #[error("transfer extension {extension:?} is read as a leg selector")]
+    LegSelector {
+        /// The extension as given.
+        extension: String,
+    },
+}
+
+fn transfer_command(fields: &[(TransferField, &str)]) -> Result<EslCommand, TransferArgumentError> {
+    let args: Vec<&str> = fields
+        .iter()
+        .map(|(_, value)| *value)
+        .collect();
+    Ok(execute("transfer", Some(args.join(" "))))
 }
 
 #[cfg(test)]
@@ -105,19 +166,19 @@ mod tests {
 
     #[test]
     fn transfer_extension_only() {
-        let cmd = AppCommand::transfer("1000");
+        let cmd = AppCommand::transfer("1000").unwrap();
         assert_eq!(extract_args(&cmd), Some("1000"));
     }
 
     #[test]
     fn transfer_with_dialplan() {
-        let cmd = AppCommand::transfer_to_dialplan("1000", DialplanType::XML);
+        let cmd = AppCommand::transfer_to_dialplan("1000", DialplanType::XML).unwrap();
         assert_eq!(extract_args(&cmd), Some("1000 XML"));
     }
 
     #[test]
     fn transfer_with_dialplan_and_context() {
-        let cmd = AppCommand::transfer_to_context("1000", DialplanType::XML, "myctx");
+        let cmd = AppCommand::transfer_to_context("1000", DialplanType::XML, "myctx").unwrap();
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
 

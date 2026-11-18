@@ -361,7 +361,7 @@ async fn run_ivr(
                 fallback,
                 DialplanType::XML,
                 context,
-            ))
+            )?)
             .await?
             .check()?;
         return Ok(format!(
@@ -396,7 +396,7 @@ async fn run_ivr(
                 fallback,
                 DialplanType::XML,
                 context,
-            ))
+            )?)
             .await?
             .check()?;
         return Ok(format!(
@@ -412,7 +412,7 @@ async fn run_ivr(
                     fallback,
                     DialplanType::XML,
                     context,
-                ))
+                )?)
                 .await?
                 .check()?;
             Ok(format!("digit {digit}; transferred to {fallback}"))
