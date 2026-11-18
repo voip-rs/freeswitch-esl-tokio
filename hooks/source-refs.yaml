@@ -4,6 +4,10 @@ freeswitch:
   commit: c2c59645f6911a76589e5008c4d73349ded44b65
   tag: v1.11.1
   block_parse: pair_split_cleans
+sofia_sip:
+  commit: ad36ac8f755308e8b87f98a505e83d4e408e5cc3
+  tag: v1.13.18
+  fetch: https://github.com/freeswitch/sofia-sip
 trees:
 - name: master
   commit: b3ba603f495b58baad52af1307136584b1eb76e3

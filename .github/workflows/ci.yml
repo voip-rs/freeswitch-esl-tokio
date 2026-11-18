@@ -58,6 +58,17 @@ jobs:
             done
           echo "FREESWITCH_SOURCE=$src" >>"$GITHUB_ENV"
 
+      # The C oracle compiles sofia-sip's sdp_parse from the commit the index pins under sofia_sip.
+      - name: Fetch sofia-sip source
+        run: |
+          read -r commit remote < <(awk '/^sofia_sip:/ { s = 1; next } /^[a-z]/ { s = 0 }
+               s && $1 == "commit:" { c = $2 } s && $1 == "fetch:" { f = $2 }
+               END { print c, f }' hooks/source-refs.yaml)
+          src="$RUNNER_TEMP/sofia-sip"
+          git init --quiet "$src"
+          git -C "$src" fetch --quiet --depth 1 "$remote" "$commit"
+          echo "SOFIA_SIP_SOURCE=$src" >>"$GITHUB_ENV"
+
       - name: Check feature combinations
         run: scripts/check-feature-matrix.sh
 
