@@ -308,8 +308,11 @@ motivation and production lessons behind these decisions.
   not `&EslEvent`. Callers store headers in `HashMap`, not `EslEvent`.
 - **Transport only**: `EslClient` sends strings, returns `EslResponse`.
   No response parsing. Future wrapper crate owns typed command-and-response.
-- **Command builders are `Display`/`FromStr`**: no transport dependency.
-  Round-trip testable without a FreeSWITCH connection.
+- **Command builders are strings with no transport dependency**: a value whose
+  encoding depends on its carrier (`Variables`, `Endpoint`, `Originate`,
+  `BridgeDialString`) has no `Display`/`FromStr` and goes through
+  `render(target)` / `parse_for(s, target)`; the rest are `Display`/`FromStr`.
+  Round-trip (`render` then `parse_for`) testable without a FreeSWITCH connection.
 - **No automatic reconnection**: the library classifies errors
   (`is_connection_error()` / `is_recoverable()`), the caller decides
   what to do. `is_recoverable()` returns `false` for

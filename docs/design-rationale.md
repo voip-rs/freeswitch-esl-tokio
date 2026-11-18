@@ -267,23 +267,19 @@ spelling, so each is its own variant and normalization never folds one into the
 other. A `HeaderLookup` accessor unions them where the caller wants the field
 rather than the key.
 
-## Command builders as pure Display types
+## A carrier-dependent value renders only for a named target
 
-Command builders in `commands/`, `app/`, and `variables/` implement `Display`
-and `FromStr` with no dependency on `EslClient`. They produce strings,
-`EslClient` calls `.to_string()`. This enables:
-
-- Unit testing without a FreeSWITCH connection
-- Round-trip testing (`parse` ↔ `to_string`)
-- Reuse in contexts beyond this library (logging, debugging, CLI tools)
-
-`Display` alone cannot serve a value whose escaping depends on the command
-carrying it. A variable block passes through the switch's tokenizer a differing
-number of times depending on which command took it, and each pass consumes one
-level of escaping, so a render that cannot name its destination is right for one
-carrier and quietly wrong for the rest. Such a value names its target, and its
-bare `Display` is the shorthand for one carrier rather than the only form. Where
-the command names its own argument separator, that split joins the target and is
+Command builders in `commands/`, `app/`, and `variables/` produce and parse
+strings with no dependency on `EslClient`, so they round-trip without a switch
+and serve contexts beyond this library. A builder whose text is the same
+wherever it is sent implements `Display` and `FromStr`. A value whose escaping
+depends on the command carrying it implements neither: a variable block passes
+through the switch's tokenizer a differing number of times depending on which
+command took it, and each pass consumes one level of escaping, so a render that
+cannot name its destination is right for one carrier and quietly wrong for the
+rest. Such a value renders and parses only for a named target, and a type whose
+carrier is fixed takes only what that carrier leaves open. Where the command
+names its own argument separator, that split joins the target and is
 escaped once, at the edge of the rendered argument. The
 target includes the switch's parser revision, taken from a version the
 application states rather than one read off the connection, and a version the
