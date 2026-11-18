@@ -358,3 +358,25 @@ fn static_payload_types_carry_sofias_well_known_names() {
         .collect();
     assert_eq!(cn, [(crate::sdp::NonCodecKind::ComfortNoise, 19, 8000)]);
 }
+
+// parse_rtpmap and parse_fmtp bind to the first m= entry carrying the payload type.
+#[test]
+fn a_repeated_payload_type_takes_its_attributes_on_the_first_entry_only() {
+    let codecs =
+        parse("m=audio 5004 RTP/AVP 9 9\r\na=rtpmap:9 opus/8000\r\na=fmtp:9 useinbandfec=1\r\n");
+    let named: Vec<_> = codecs
+        .audio()
+        .map(|c| (c.name(), c.fmtp()))
+        .collect();
+    assert_eq!(named, [("opus", Some("useinbandfec=1")), ("G722", None)]);
+
+    let codecs = parse("m=audio 5004 RTP/AVP 96 96\r\na=rtpmap:96 opus/48000/2\r\n");
+    assert_eq!(names(&codecs), ["opus"]);
+    assert_eq!(
+        codecs
+            .unmapped()
+            .map(|u| u.payload_type)
+            .collect::<Vec<_>>(),
+        [96]
+    );
+}

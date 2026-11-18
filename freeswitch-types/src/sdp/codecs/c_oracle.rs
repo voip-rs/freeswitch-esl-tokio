@@ -22,7 +22,7 @@ const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = true;
 const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = true;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = true;
 const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
-const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = true;
+const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = false;
 
 const PAYLOAD_TYPES: &[&str] = &[
@@ -326,34 +326,52 @@ fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
     if ours.media_type() == &crate::sdp::SdpMediaType::Other("image".into()) {
         return Ok(());
     }
+    // Each list keeps format-list order, so sofia's entries for one payload type, taken by the
+    // list their kind lands in, pair with ours in order even where the type repeats.
+    let mut codecs: Vec<_> = ours
+        .entries()
+        .iter()
+        .filter_map(|e| match e {
+            SdpCodecEntry::Rtp(codec) => Some(codec),
+            _ => None,
+        })
+        .map(Some)
+        .collect();
+    let mut non_codecs: Vec<_> = ours
+        .non_codec_payloads()
+        .iter()
+        .map(Some)
+        .collect();
+    let mut unmapped: Vec<_> = ours
+        .unmapped()
+        .iter()
+        .map(Some)
+        .collect();
     for rm in &c.rtpmaps {
-        let codec = ours
-            .entries()
-            .iter()
-            .find_map(|e| match e {
-                SdpCodecEntry::Rtp(codec) if codec.payload_type() == rm.pt => Some(codec),
-                _ => None,
-            });
-        let non_codec = ours
-            .non_codec_payloads()
-            .iter()
-            .find(|n| n.payload_type == rm.pt);
-        let unmapped = ours
-            .unmapped()
-            .iter()
-            .any(|u| u.payload_type == rm.pt);
         let encoding = String::from_utf8_lossy(&rm.encoding);
         let fmtp = rm
             .fmtp
             .as_deref()
             .map(String::from_utf8_lossy);
+        let negotiated_apart =
+            encoding.eq_ignore_ascii_case("telephone-event") || encoding.eq_ignore_ascii_case("CN");
+        let (codec, non_codec) = if rm
+            .encoding
+            .is_empty()
+        {
+            let found = take(&mut unmapped, rm.pt, |u| u.payload_type);
+            prop_assert!(
+                found.is_some(),
+                "pt {} unnamed by sofia is not unmapped",
+                rm.pt
+            );
+            continue;
+        } else if negotiated_apart {
+            (None, take(&mut non_codecs, rm.pt, |n| n.payload_type))
+        } else {
+            (take(&mut codecs, rm.pt, |c| c.payload_type()), None)
+        };
         match (codec, non_codec) {
-            _ if rm
-                .encoding
-                .is_empty() =>
-            {
-                prop_assert!(unmapped, "pt {} unnamed by sofia is not unmapped", rm.pt);
-            }
             (Some(codec), _) => {
                 prop_assert!(
                     codec
@@ -392,6 +410,13 @@ fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
         }
     }
     Ok(())
+}
+
+/// The first item of `list` not yet paired that carries payload type `pt`, taken out of it.
+fn take<T: Copy>(list: &mut [Option<T>], pt: u8, of: impl Fn(T) -> u8) -> Option<T> {
+    list.iter_mut()
+        .find(|item| item.is_some_and(|item| of(item) == pt))
+        .and_then(Option::take)
 }
 
 fn compare(c: &SdpSession, ours: &SdpCodecs) -> TestCaseResult {
