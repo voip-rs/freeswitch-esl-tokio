@@ -18,14 +18,21 @@ Each endpoint type is a concrete struct implementing the `DialString` trait. The
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
+
+// Escaping depends on the command carrying the dial string and on the switch's
+// parser revision, which the crate never asks the switch for: name both.
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let target = DialStringTarget::new(DialStringCarrier::EslApi)
+    .with_block_parse(BlockParse::for_version(&version).unwrap());
 
 // Direct SIP profile routing
 let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com"));
-assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
+assert_eq!(ep.display_for(target).to_string(), "sofia/internal/1000@example.com");
 
 // SIP gateway routing
 let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
-assert_eq!(ep.to_string(), "sofia/gateway/my_provider/18005551234");
+assert_eq!(ep.display_for(target).to_string(), "sofia/gateway/my_provider/18005551234");
 
 // Parse from wire format
 let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
@@ -38,9 +45,14 @@ let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
 ```rust,no_run
 # use freeswitch_esl_tokio::{EslClient, EslError};
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
 # #[tokio::main]
-# async fn main() -> Result<(), EslError> {
+# async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # let (client, _events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+
+// The parser revision of the switch the commands are rendered for
+let version: FreeswitchVersion = "1.10.12".parse()?;
+let block_parse = BlockParse::for_version(&version)?;
 
 let gw = || Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
 
@@ -55,11 +67,12 @@ let ext_cmd = Originate::extension(gw(), "1000")
     .dialplan(DialplanType::Xml).unwrap()
     .context("default");
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
-client.bgapi(&cmd.to_string()).await?;
+let wire = cmd.display_with(block_parse).to_string();
+client.bgapi(&wire).await?;
 
-// Round-trip: parse <-> display
-let parsed: Originate = cmd.to_string().parse().unwrap();
-assert_eq!(parsed.to_string(), cmd.to_string());
+// Round-trip: parse <-> display, both for the same revision
+let parsed = Originate::parse_with(&wire, block_parse).unwrap();
+assert_eq!(parsed.display_with(block_parse).to_string(), wire);
 # let _ = ext_cmd;
 # Ok(())
 # }
@@ -69,6 +82,10 @@ With an argument separator, spaces and quotes in any argument need no quoting: e
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
+
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let block_parse = BlockParse::for_version(&version).unwrap();
 
 let cmd = Originate::application(
     Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default")),
@@ -79,7 +96,7 @@ let cmd = Originate::application(
 .unwrap(); // '~' is a usable separator
 
 assert_eq!(
-    cmd.to_string(),
+    cmd.display_with(block_parse).to_string(),
     "originate ^^~loopback/9199/default~&socket(127.0.0.1:8040 async full)~undef~undef~Front Desk"
 );
 ```
@@ -91,9 +108,13 @@ assert_eq!(
 ```rust,no_run
 # use freeswitch_esl_tokio::{EslClient, EslError, AppCommand};
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
 # #[tokio::main]
-# async fn main() -> Result<(), EslError> {
+# async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # let (client, _events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+
+let version: FreeswitchVersion = "1.10.12".parse()?;
+let block_parse = BlockParse::for_version(&version)?;
 
 // Try primary and secondary simultaneously, then failover to backup
 let bridge = BridgeDialString::new(vec![
@@ -106,7 +127,7 @@ let bridge = BridgeDialString::new(vec![
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
 // Use with the bridge dptools application
-client.send_command(AppCommand::bridge(bridge)).await?;
+client.send_command(AppCommand::bridge(bridge.display_with(block_parse))).await?;
 # Ok(())
 # }
 ```
@@ -129,7 +150,7 @@ let cmd = Originate::application(
 let version: FreeswitchVersion = "1.10.12".parse().unwrap();
 let parse = BlockParse::for_version(&version).unwrap();
 let wire = cmd.display_with(parse).to_string();
-assert_eq!(wire, cmd.to_string());
+assert_eq!(wire, "originate sofia/gateway/my_provider/18005551234 &park()");
 
 let dev: FreeswitchVersion = "1.10.13-dev".parse().unwrap();
 assert!(BlockParse::for_version(&dev).is_err());
@@ -182,13 +203,17 @@ A large or free-text value — a PIDF-LO for `sip_multipart`, say — is set on 
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
-use freeswitch_esl_tokio::ChannelVariable;
+use freeswitch_esl_tokio::{ChannelVariable, FreeswitchVersion};
+
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let target = DialStringTarget::new(DialStringCarrier::EslApi)
+    .with_block_parse(BlockParse::for_version(&version).unwrap());
 
 let hook = ExecuteOn::lua("/run/app/load_multipart.lua", ["/run/app/call-42.xml"]).unwrap();
 let mut vars = Variables::new(VariablesType::Default);
 vars.insert(ChannelVariable::ExecuteOnOriginate.as_str(), hook.to_string());
 assert_eq!(
-    vars.to_string(),
+    vars.display_for(target).to_string(),
     "{execute_on_originate='lua /run/app/load_multipart.lua /run/app/call-42.xml'}"
 );
 ```

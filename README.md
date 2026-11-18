@@ -54,7 +54,12 @@ use freeswitch_esl_tokio::*;
 use freeswitch_esl_tokio::commands::*;
 
 #[tokio::main]
-async fn main() -> Result<(), EslError> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Escaping depends on the switch's parser revision, which the crate never
+    // asks the switch for: name the release this application targets.
+    let version: FreeswitchVersion = "1.10.12".parse()?;
+    let block_parse = BlockParse::for_version(&version)?;
+
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
     // No CHANNEL_CREATE: it fires before the reply carries the UUID to match on.
@@ -79,7 +84,7 @@ async fn main() -> Result<(), EslError> {
     // BACKGROUND_JOB is a switch-wide event, so the Job-UUID is what makes a
     // result yours. BgJobTracker keeps that bookkeeping.
     let mut jobs: BgJobTracker<()> = BgJobTracker::new();
-    jobs.bgapi(&client, &cmd.to_string(), ()).await?;
+    jobs.bgapi(&client, &cmd.display_with(block_parse).to_string(), ()).await?;
 
     let call_uuid = loop {
         let Some(event) = events.try_next().await? else {

@@ -15,10 +15,14 @@ tests, so the wire strings quoted below cannot drift from what the code emits:
 | [`examples/originate_loopback_scoped_vars.yaml`](../examples/originate_loopback_scoped_vars.yaml) | `live_freeswitch.rs` | Per-leg variables |
 
 ```sh
-ESL_PORT=8022 cargo run --example originate_loopback_yaml
-ESL_PORT=8022 cargo run --example originate_loopback_bowout
+ESL_PORT=8022 FREESWITCH_VERSION=1.10.12 cargo run --example originate_loopback_yaml
+ESL_PORT=8022 FREESWITCH_VERSION=1.10.12 cargo run --example originate_loopback_bowout
 cargo test --test live_freeswitch -- --ignored
 ```
+
+`FREESWITCH_VERSION` is the release the switch runs, which picks the parser
+revision the originate is escaped for; a development build names one with
+`ESL_BLOCK_PARSE=pair_split_cleans` instead.
 
 The live tests need `mod_loopback`, `mod_dptools`, and extension `9199` in
 context `test` (`answer` then `echo`).

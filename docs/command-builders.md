@@ -10,14 +10,16 @@ scope brackets.
 ## Design
 
 Pure `Display`/`FromStr` types with no transport coupling. They produce and parse
-strings. `EslClient` just calls `.to_string()`.
+strings; the caller renders one and hands `EslClient` the text.
 
 ```rust
+let block_parse = BlockParse::for_version(&"1.10.12".parse()?)?;
 let cmd = Originate::application(endpoint, app).timeout(Duration::from_secs(30));
-client.bgapi(&cmd.to_string()).await?;
+let wire = cmd.display_with(block_parse).to_string();
+client.bgapi(&wire).await?;
 
-let parsed: Originate = cmd.to_string().parse()?;
-assert_eq!(cmd.to_string(), parsed.to_string());
+let parsed = Originate::parse_with(&wire, block_parse)?;
+assert_eq!(wire, parsed.display_with(block_parse).to_string());
 ```
 
 ### Why Display/FromStr, not a trait on EslClient
@@ -315,6 +317,6 @@ Key design choices:
 
 ## What This Does Not Cover
 
-- Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.to_string())`)
+- Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.display_with(block_parse).to_string())`)
 - Modelling a command's output schema (`status`, `sofia status`, `show` rows)
 - SIP URI type (future extension point)

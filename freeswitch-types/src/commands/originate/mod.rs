@@ -223,6 +223,8 @@ impl Originate {
     ///
     /// ```
     /// # use freeswitch_types::commands::*;
+    /// # use freeswitch_types::FreeswitchVersion;
+    /// let block_parse = BlockParse::for_version(&"1.10.12".parse::<FreeswitchVersion>()?)?;
     /// let cmd = Originate::application(
     ///     Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default")),
     ///     Application::new("socket", Some("127.0.0.1:8040 async full")),
@@ -231,10 +233,10 @@ impl Originate {
     /// .with_argv_separator('~')?;
     ///
     /// assert_eq!(
-    ///     cmd.to_string(),
+    ///     cmd.display_with(block_parse).to_string(),
     ///     "originate ^^~loopback/9199/default~&socket(127.0.0.1:8040 async full)~undef~undef~Front Desk"
     /// );
-    /// # Ok::<(), OriginateError>(())
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn with_argv_separator(mut self, sep: char) -> Result<Self, OriginateError> {
         Self::argv_target(BlockParse::default(), sep)?;

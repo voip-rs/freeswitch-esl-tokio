@@ -7,12 +7,13 @@
 //! Lua loader there can read the document from a file and set the variable
 //! itself. The block then carries two paths and nothing else.
 //!
-//! Usage: cargo run --example originate_multipart_file -- <endpoint> <script> <document>
+//! Usage: FREESWITCH_VERSION=1.10.12 cargo run --example originate_multipart_file -- <endpoint> <script> <document>
 //!   <endpoint>  a dial string such as sofia/internal/1000@pbx.example.com;
 //!               never a loopback, which the hook wedges in CS_INIT
 //!   <script>    examples/load_multipart.lua, at the path FreeSWITCH sees it
 //!   <document>  the XML to carry, at the path FreeSWITCH sees it
-//!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars.
+//!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars; FREESWITCH_VERSION
+//!   (or ESL_BLOCK_PARSE for a dev build) is the parser revision rendered for.
 //!   Requires FreeSWITCH with `mod_lua`.
 //!
 //! Both paths are opened by FreeSWITCH, in its mount namespace and under its
@@ -20,6 +21,8 @@
 //! INVITE goes out without the part. The `lua` API check below runs the loader
 //! through the switch first for exactly that reason.
 
+#[path = "common/block_parse.rs"]
+mod block_parse;
 mod common;
 
 use freeswitch_esl_tokio::commands::{ExecuteOn, UuidGetVar, UuidKill};
@@ -63,6 +66,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("usage: originate_multipart_file <endpoint> <script> <document>".into());
     };
     let mut endpoint: Endpoint = endpoint.parse()?;
+    // Escaping depends on the switch's parser revision, which the crate never
+    // asks the switch for, so the version is stated in the environment.
+    let block_parse = block_parse::block_parse_from_env()?;
 
     let (client, _events) = common::connect_from_env().await?;
 
@@ -83,10 +89,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     endpoint.set_variables(Some(vars));
     let originate = Originate::application(endpoint, Application::simple("park"));
-    println!("{originate}");
+    let wire = originate
+        .display_with(block_parse)
+        .to_string();
+    println!("{wire}");
 
     // `api originate` blocks until the far end answers or refuses.
-    let uuid = api_ok(&client, &originate.to_string()).await?;
+    let uuid = api_ok(&client, &wire).await?;
     println!("leg {uuid} is up");
 
     // What the hook set is what mod_sofia put in the INVITE: one `type:body`

@@ -10,10 +10,13 @@
 //!
 //! Needs FreeSWITCH with `mod_loopback` and extension 9199 in context `test`
 //! (echo, auto-hangup after ~8s). Configure the inbound connection with
-//! ESL_HOST / ESL_PORT / ESL_PASSWORD.
+//! ESL_HOST / ESL_PORT / ESL_PASSWORD, and the parser revision the originate
+//! renders for with FREESWITCH_VERSION (ESL_BLOCK_PARSE for a dev build).
 //!
-//! Usage: ESL_PORT=8022 cargo run --example outbound_test
+//! Usage: ESL_PORT=8022 FREESWITCH_VERSION=1.10.12 cargo run --example outbound_test
 
+#[path = "common/block_parse.rs"]
+mod block_parse;
 mod common;
 
 use freeswitch_esl_tokio::commands::endpoint::LoopbackEndpoint;
@@ -32,6 +35,9 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
+    // Escaping depends on the switch's parser revision, which the crate never
+    // asks the switch for, so the version is stated in the environment.
+    let block_parse = block_parse::block_parse_from_env()?;
 
     // Port 0 lets the kernel pick, so concurrent runs do not collide.
     let listener = TcpListener::bind("[::]:0").await?;
@@ -60,7 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The loopback answers on its own, so this returns before the socket app on
     // the A leg has reached our listener.
     let response = inbound
-        .api(&originate.to_string())
+        .api(
+            &originate
+                .display_with(block_parse)
+                .to_string(),
+        )
         .await?;
     let call_uuid = response.api_result()?;
     println!("originated {call_uuid}");

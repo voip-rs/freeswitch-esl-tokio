@@ -31,8 +31,10 @@
 //! unavailable and nothing switch-side bounds a child that wedges rather than
 //! exits. The parent arms `sched_hangup` on the real uuid for that.
 //!
-//! Usage: cargo run --example outbound_ivr_supervised
+//! Usage: FREESWITCH_VERSION=1.10.12 cargo run --example outbound_ivr_supervised
 //!   ESL_HOST / ESL_PORT / ESL_PASSWORD select the switch.
+//!   FREESWITCH_VERSION parser revision the originate renders for (required;
+//!                      ESL_BLOCK_PARSE names one outright for a dev build)
 //!   IVR_ENDPOINT       loopback destination (default `app=bridge:null/farend`)
 //!   IVR_FALLBACK_EXT   extension the child transfers to (default `9199`)
 //!   IVR_CONTEXT        context for that transfer (default `test`)
@@ -40,6 +42,8 @@
 //!   IVR_ABANDON=1      parent closes the supervision pipe after originating,
 //!                      so the child takes the unsupervised path
 
+#[path = "common/block_parse.rs"]
+mod block_parse;
 mod common;
 
 use freeswitch_esl_tokio::commands::LoopbackEndpoint;
@@ -105,6 +109,9 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint =
         std::env::var("IVR_ENDPOINT").unwrap_or_else(|_| "app=bridge:null/farend".to_string());
     let abandon = std::env::var("IVR_ABANDON").is_ok();
+    // Escaping depends on the switch's parser revision, which the crate never
+    // asks the switch for; resolved before the child is spawned.
+    let block_parse = block_parse::block_parse_from_env()?;
 
     let mut child = tokio::process::Command::new(std::env::current_exe()?)
         .arg(CHILD_ARG)
@@ -160,10 +167,13 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
         Endpoint::Loopback(LoopbackEndpoint::new(&endpoint).with_variables(vars)),
         Application::new("socket", Some(addr.as_str())),
     );
-    info!("originate: {originate}");
+    let wire = originate
+        .display_with(block_parse)
+        .to_string();
+    info!("originate: {wire}");
 
     let loopback_leg = client
-        .api(&originate.to_string())
+        .api(&wire)
         .await?
         .api_result()?
         .to_string();

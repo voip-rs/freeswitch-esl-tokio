@@ -101,12 +101,18 @@ let cmd = Originate::application(
 .cid_num("5551234")
 .timeout(Duration::from_secs(30));
 
-// All builders implement Display, producing the FreeSWITCH wire format
-assert!(cmd.to_string().starts_with("originate sofia/gateway/"));
+// Escaping depends on the switch's parser revision, which the crate never asks
+// the switch for: name the release you target.
+let version: freeswitch_types::FreeswitchVersion = "1.10.12".parse().unwrap();
+let block_parse = BlockParse::for_version(&version).unwrap();
 
-// All builders implement FromStr for round-trip parsing
-let parsed: Originate = cmd.to_string().parse().unwrap();
-assert_eq!(parsed.to_string(), cmd.to_string());
+// Rendered for that revision, producing the FreeSWITCH wire format
+let wire = cmd.display_with(block_parse).to_string();
+assert!(wire.starts_with("originate sofia/gateway/"));
+
+// Parsed back for the same revision
+let parsed = Originate::parse_with(&wire, block_parse).unwrap();
+assert_eq!(parsed.display_with(block_parse).to_string(), wire);
 ```
 
 Variable values are escaped for the switch's bracket-block parser as measured on
@@ -147,7 +153,7 @@ impl HeaderLookup for MyHeaders {
 All builder types implement `Serialize`/`Deserialize` for config-driven usage:
 
 ```rust
-use freeswitch_types::Originate;
+use freeswitch_types::{BlockParse, FreeswitchVersion, Originate};
 
 let json = r#"{
     "endpoint": {"sofia_gateway": {"gateway": "carrier", "destination": "18005551234"}},
@@ -155,7 +161,10 @@ let json = r#"{
     "timeout_secs": 30
 }"#;
 let cmd: Originate = serde_json::from_str(json).unwrap();
-println!("{}", cmd);
+
+// The version belongs in the application's config, beside the connection
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+println!("{}", cmd.display_with(BlockParse::for_version(&version).unwrap()));
 ```
 
 ### Raw SIP message header extraction

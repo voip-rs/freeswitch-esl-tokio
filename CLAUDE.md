@@ -329,7 +329,9 @@ See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for details.
   via `originate_quote()`/`originate_unquote()` in `commands/mod.rs`; with
   `Originate::with_argv_separator` the `^^<sep>` line bypasses both and escapes
   each argument for that split instead
-- `cargo run --example outbound_test` exercises outbound against a live switch named by `ESL_PORT`
+- `cargo run --example outbound_test` exercises outbound against a live switch
+  named by `ESL_PORT`; it renders for the revision `FREESWITCH_VERSION` names, or
+  `ESL_BLOCK_PARSE` on a dev build
 
 ## Examples — Write for the New User
 

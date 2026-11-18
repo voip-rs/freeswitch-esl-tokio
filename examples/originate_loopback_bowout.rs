@@ -10,9 +10,12 @@
 //! gets its bridge from the `app=bridge:null/farend` destination form; the A
 //! leg gets its own from the `&bridge(null/nearend)` originate target.
 //!
-//! Usage: cargo run --example originate_loopback_bowout
-//!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars.
+//! Usage: FREESWITCH_VERSION=1.10.12 cargo run --example originate_loopback_bowout
+//!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars; FREESWITCH_VERSION
+//!   (or ESL_BLOCK_PARSE for a dev build) is the parser revision rendered for.
 
+#[path = "common/block_parse.rs"]
+mod block_parse;
 mod common;
 
 use freeswitch_esl_tokio::commands::UuidKill;
@@ -30,10 +33,16 @@ const BOWOUT_DEADLINE: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Escaping depends on the switch's parser revision, which the crate never
+    // asks the switch for, so the version is stated in the environment.
+    let block_parse = block_parse::block_parse_from_env()?;
     let originate: Originate = yaml_serde::from_str(BOWOUT_YAML)?;
+    let wire = originate
+        .display_with(block_parse)
+        .to_string();
 
     println!("=== YAML -> Originate ===");
-    println!("{}\n", originate);
+    println!("{wire}\n");
 
     let (client, mut events) = common::connect_from_env().await?;
 
@@ -50,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let resp = client
-        .api(&originate.to_string())
+        .api(&wire)
         .await?;
     let a_leg = resp
         .api_result()?

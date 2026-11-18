@@ -12,7 +12,7 @@ timeout_secs: 30
 ```
 
 ```rust,no_run
-# use freeswitch_esl_tokio::{EslClient, Originate};
+# use freeswitch_esl_tokio::{BlockParse, EslClient, FreeswitchVersion, Originate};
 # #[tokio::main]
 # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # let (client, _events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
@@ -25,7 +25,11 @@ timeout_secs: 30
 # timeout_secs: 30
 # "#;
 let originate: Originate = yaml_serde::from_str(yaml)?;
-client.bgapi(&originate.to_string()).await?;
+// The switch's parser revision, which the crate never asks the switch for;
+// see "FreeSWITCH version and parser revision" below for where it comes from.
+let version: FreeswitchVersion = "1.10.12".parse()?;
+let block_parse = BlockParse::for_version(&version)?;
+client.bgapi(&originate.display_with(block_parse).to_string()).await?;
 # Ok(())
 # }
 ```

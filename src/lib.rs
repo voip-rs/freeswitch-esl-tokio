@@ -78,7 +78,7 @@
 //!
 //! ```rust
 //! use std::time::Duration;
-//! use freeswitch_esl_tokio::{Originate, Endpoint, Application};
+//! use freeswitch_esl_tokio::{Application, BlockParse, Endpoint, FreeswitchVersion, Originate};
 //! use freeswitch_esl_tokio::commands::SofiaGateway;
 //!
 //! let cmd = Originate::application(
@@ -89,8 +89,15 @@
 //! .cid_num("5551234")
 //! .timeout(Duration::from_secs(30));
 //!
-//! // Use with client.api(&cmd.to_string()) or client.bgapi(&cmd.to_string())
-//! assert!(cmd.to_string().contains("sofia/gateway/my_provider/18005551234"));
+//! // Escaping depends on the switch's parser revision, which the crate never
+//! // asks the switch for: name the release you target.
+//! let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+//! let wire = cmd
+//!     .display_with(BlockParse::for_version(&version).unwrap())
+//!     .to_string();
+//!
+//! // Use with client.api(&wire) or client.bgapi(&wire)
+//! assert!(wire.contains("sofia/gateway/my_provider/18005551234"));
 //! ```
 //!
 //! See the [`commands`] module for `Originate`, `UuidBridge`, `UuidTransfer`,
