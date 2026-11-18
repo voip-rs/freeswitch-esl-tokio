@@ -47,27 +47,44 @@ impl DialStringCarrier {
     }
 }
 
-/// Which revision of the switch's bracket-block parser a dial string is rendered
-/// for.
-///
-/// How many escape-consuming passes a block meets is the switch's to change, and
-/// every escaped quote and backslash depends on it. It covers `{}`, `<>` and `[]`
-/// escaping only: the inline action list and the quote pre-scan ahead of a `[]`
-/// block are other parsers. Which revisions a FreeSWITCH version is known to run
-/// is documented in `docs/dial-string-format.md`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-#[non_exhaustive]
-pub enum BlockParse {
-    /// Both of the block's own splits, on the separator and on `=`, run the
-    /// escape-consuming cleanup.
-    PairSplitCleans,
+/// Declares `BlockParse` and its `ALL` from one variant list, so a check run at every revision
+/// cannot miss one.
+macro_rules! block_parse_revisions {
+    (
+        $(#[$meta:meta])*
+        pub enum BlockParse { $( $(#[$vmeta:meta])* $variant:ident, )+ }
+    ) => {
+        $(#[$meta])*
+        pub enum BlockParse { $( $(#[$vmeta])* $variant, )+ }
+
+        impl BlockParse {
+            /// Every revision, in declaration order.
+            pub(crate) const ALL: &'static [Self] = &[$(Self::$variant,)+];
+        }
+    };
+}
+
+block_parse_revisions! {
+    /// Which revision of the switch's bracket-block parser a dial string is rendered
+    /// for.
+    ///
+    /// How many escape-consuming passes a block meets is the switch's to change, and
+    /// every escaped quote and backslash depends on it. It covers `{}`, `<>` and `[]`
+    /// escaping only: the inline action list and the quote pre-scan ahead of a `[]`
+    /// block are other parsers. Which revisions a FreeSWITCH version is known to run
+    /// is documented in `docs/dial-string-format.md`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+    #[non_exhaustive]
+    pub enum BlockParse {
+        /// Both of the block's own splits, on the separator and on `=`, run the
+        /// escape-consuming cleanup.
+        PairSplitCleans,
+    }
 }
 
 impl BlockParse {
-    const ALL: &'static [Self] = &[Self::PairSplitCleans];
-
     /// The revision the escaping was measured against, for checks that need one before any
     /// caller has named a target.
     pub(crate) const MEASURED: Self = Self::PairSplitCleans;

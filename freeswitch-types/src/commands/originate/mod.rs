@@ -237,6 +237,7 @@ impl Originate {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn with_argv_separator(mut self, sep: char) -> Result<Self, OriginateError> {
+        // Only the separator is checked here, which no revision changes.
         Self::argv_target(BlockParse::MEASURED, sep)?;
         self.argv_separator = Some(sep);
         Ok(self)

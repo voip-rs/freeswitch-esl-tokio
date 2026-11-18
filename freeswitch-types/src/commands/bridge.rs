@@ -39,14 +39,16 @@ pub struct BridgeDialString {
 }
 
 impl BridgeDialString {
-    /// Create a new bridge dial string with the given failover groups, refusing what
-    /// [`parse_for`](Self::parse_for) refuses at the revision the escaping was measured against.
+    /// Create a new bridge dial string, refusing what [`parse_for`](Self::parse_for) refuses at
+    /// any [`BlockParse`].
     pub fn new(groups: Vec<Vec<Endpoint>>) -> Result<Self, OriginateError> {
         let bridge = Self {
             variables: None,
             groups,
         };
-        bridge.check_legs(BlockParse::MEASURED)?;
+        BlockParse::ALL
+            .iter()
+            .try_for_each(|&block_parse| bridge.check_legs(block_parse))?;
         Ok(bridge)
     }
 
