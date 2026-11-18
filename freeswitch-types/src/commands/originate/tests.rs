@@ -418,6 +418,25 @@ fn dialplan_type_named_resolves_known_names() {
     );
 }
 
+/// `originate_function` reads `undef` in any case as an absent argument, so it names no
+/// dialplan.
+#[test]
+fn dialplan_type_refuses_undef() {
+    for name in ["undef", "UNDEF", "Undef"] {
+        assert_eq!(
+            DialplanType::named(name),
+            Err(ParseDialplanTypeError(name.into()))
+        );
+        assert!(name
+            .parse::<DialplanType>()
+            .is_err());
+        let msg = serde_json::from_str::<DialplanType>(&format!("\"{name}\""))
+            .unwrap_err()
+            .to_string();
+        assert!(msg.contains("undef"), "{msg}");
+    }
+}
+
 // --- Serde ---
 
 #[test]
