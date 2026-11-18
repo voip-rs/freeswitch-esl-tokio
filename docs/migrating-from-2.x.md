@@ -62,3 +62,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `DialString: fmt::Display` | `DialString` carries only the variable accessors; render an endpoint through `Endpoint` |
 | `AudioEndpoint`'s `Display` (it rendered `audio`), `fmt_with_prefix` | wrap it in `Endpoint::PortAudio`, `PulseAudio` or `Alsa` and render that |
 | `AudioEndpoint::parse_with_prefix(s, prefix)` | `Endpoint::parse_for(s, carrier)`, which names the module from the text |
+| `"…".parse::<SofiaContact>()`, `"…".parse::<GroupCall>()`, which always failed at the API carrier | `Endpoint::parse_for(s, DialStringCarrier::Dialplan)` |

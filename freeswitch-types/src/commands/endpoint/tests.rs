@@ -99,14 +99,6 @@ fn an_expression_is_refused_where_nothing_expands_it() {
         let line = format!("originate {text} &park()");
         assert_eq!(line.parse::<Originate>(), Err(unexpanded(kind)), "{line}");
     }
-    assert_eq!(
-        "${sofia_contact(1000@example.com)}".parse::<SofiaContact>(),
-        Err(unexpanded("sofia_contact"))
-    );
-    assert_eq!(
-        "${group_call(support@example.com)}".parse::<GroupCall>(),
-        Err(unexpanded("group_call"))
-    );
     let config = r#"{"endpoint":{"group_call":{"group":"support","domain":"example.com"}},"application":{"name":"park"}}"#;
     let refused = serde_json::from_str::<Originate>(config)
         .expect_err("an Originate config dials over the API")

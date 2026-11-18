@@ -18,7 +18,9 @@ wire_enum! {
 }
 
 /// Runtime expression resolving directory group members:
-/// `${group_call(group@domain[+order])}`.
+/// `${group_call(group@domain[+order])}`. Parse one with
+/// [`Endpoint::parse_for`](super::Endpoint::parse_for) at
+/// [`DialStringCarrier::Dialplan`](crate::commands::variables::DialStringCarrier::Dialplan).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::GroupCall"))]
@@ -64,8 +66,6 @@ impl_dial_string_with_variables!(GroupCall, write_expression, |this| match &this
     Some(o) => format!("${{group_call({}@{}+{o})}}", this.group, this.domain),
     None => format!("${{group_call({}@{})}}", this.group, this.domain),
 });
-
-impl_endpoint_parse!(expression_from_str: GroupCall => "group_call");
 
 impl GroupCall {
     /// Refuse what `group_call_function` splits, the order at its first `+` and then the domain

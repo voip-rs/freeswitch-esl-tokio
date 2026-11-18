@@ -119,9 +119,11 @@ readability and debugging, and round-trip parsing should produce identical outpu
 
 **Endpoint** — enum wrapping concrete structs, one per FreeSWITCH endpoint module.
 Each struct implements `Serialize`, `Deserialize` and the `DialString` trait, and
-all but `AudioEndpoint`, which does not know its module, implement `Display` and
-`FromStr`. The enum provides serde-compatible polymorphism and renders every
-endpoint.
+all but `AudioEndpoint`, which does not know its module, implement `Display`.
+All but `AudioEndpoint`, `SofiaContact` and `GroupCall` implement `FromStr` at the
+API carrier, which never expands an expression; parse those through
+`Endpoint::parse_for`. The enum provides serde-compatible polymorphism and
+renders every endpoint.
 
 Real endpoints:
 

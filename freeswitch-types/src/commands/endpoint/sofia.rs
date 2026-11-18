@@ -53,7 +53,9 @@ pub struct SofiaGateway {
 /// `${sofia_contact([profile/]user@domain)}`.
 ///
 /// The library produces the expression string; a dialplan application or the
-/// `expand` API evaluates it, and `originate` over the API never does.
+/// `expand` API evaluates it, and `originate` over the API never does. Parse one
+/// with [`Endpoint::parse_for`](super::Endpoint::parse_for) at
+/// [`DialStringCarrier::Dialplan`](crate::commands::variables::DialStringCarrier::Dialplan).
 ///
 /// The special profile `"*"` makes FreeSWITCH iterate over every loaded
 /// SIP profile to find the user's registration, instead of searching a
@@ -437,7 +439,6 @@ impl SofiaContact {
 }
 
 impl_endpoint_parse!(from_str: SofiaEndpoint, SofiaGateway);
-impl_endpoint_parse!(expression_from_str: SofiaContact => "sofia_contact");
 
 impl_endpoint_parse!(config:
     SofiaEndpoint {

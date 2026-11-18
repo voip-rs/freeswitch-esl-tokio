@@ -104,25 +104,6 @@ macro_rules! impl_endpoint_parse {
             }
         )*
     };
-    (expression_from_str: $($ty:ident => $kind:literal),* $(,)?) => {
-        $(
-            impl ::std::str::FromStr for $ty {
-                type Err = $crate::commands::originate::OriginateError;
-
-                /// Refused once parsed: `FromStr` reads the API carrier, which never expands it.
-                fn from_str(s: &str) -> Result<Self, Self::Err> {
-                    $crate::commands::endpoint::parse_leg(
-                        s,
-                        $crate::commands::variables::DialStringCarrier::EslApi.into(),
-                        Self::parse_bare,
-                    )?;
-                    Err($crate::commands::originate::OriginateError::UnexpandedExpression {
-                        endpoint: $kind,
-                    })
-                }
-            }
-        )*
-    };
     (config: $($ty:ident { $($required:ident: $rty:ty,)* ; $($optional:ident: $oty:ty,)* })*) => {
         #[cfg(feature = "serde")]
         mod config {
