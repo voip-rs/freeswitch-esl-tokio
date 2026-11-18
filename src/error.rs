@@ -847,4 +847,35 @@ mod tests {
             .downcast_ref::<serde_json::Error>()
             .is_some());
     }
+
+    /// Display states the variant's own message; the cause is reached through
+    /// `source()`, so a chain printer does not show it twice.
+    #[test]
+    fn display_leaves_the_cause_to_source() {
+        use std::error::Error;
+        let cases = vec![
+            EslError::Io(std::io::Error::other("inner-cause")),
+            EslError::JsonError("inner-cause".into()),
+            EslError::XmlError("inner-cause".into()),
+            utf8_error(),
+            EslError::Originate(OriginateError::ParseError("inner-cause".into())),
+            EslError::from(ParseChannelStateError("CS_INNER_CAUSE".into())),
+            EslError::from(
+                crate::AppCommand::transfer("inner cause").expect_err("a space is refused"),
+            ),
+            #[cfg(unix)]
+            EslError::ReexecFailed {
+                reason: "teardown already called".into(),
+                source: Some("inner-cause".into()),
+            },
+        ];
+        for err in cases {
+            let cause = err
+                .source()
+                .unwrap_or_else(|| panic!("{err:?} has no source"))
+                .to_string();
+            let shown = err.to_string();
+            assert!(!shown.contains(&cause), "{shown:?} repeats {cause:?}");
+        }
+    }
 }
