@@ -4,8 +4,9 @@
 use crate::{
     constants::{FILTER_DELETE_ALL, HEADER_TERMINATOR, LINE_TERMINATOR},
     error::{EslError, EslResult},
-    event::EslEvent,
+    event::{EslEvent, EventFormat},
     headers::EventHeader,
+    LogLevel,
 };
 pub(crate) use freeswitch_types::wire_safety::contains_wire_terminator;
 use indexmap::IndexMap;
@@ -215,8 +216,8 @@ pub enum EslCommand {
     },
     /// Subscribe to events.
     Events {
-        /// Event format (`plain`, `json`, `xml`).
-        format: String,
+        /// Event format.
+        format: EventFormat,
         /// Space-separated event names or `ALL`.
         events: String,
     },
@@ -249,8 +250,8 @@ pub enum EslCommand {
     Exit,
     /// Enable log forwarding at the given level.
     Log {
-        /// Log level (e.g. `"debug"`, `"warning"`).
-        level: String,
+        /// Lowest severity forwarded.
+        level: LogLevel,
     },
     /// Disable log forwarding.
     NoLog,
@@ -263,8 +264,8 @@ pub enum EslCommand {
     },
     /// Subscribe to session events (outbound: no uuid, inbound: with uuid).
     MyEvents {
-        /// Event format (`plain`, `json`, `xml`).
-        format: String,
+        /// Event format.
+        format: EventFormat,
         /// Channel UUID for inbound mode; omit for outbound.
         uuid: Option<String>,
     },
@@ -365,10 +366,7 @@ impl EslCommand {
             }
             EslCommand::Api { command } => validate_wire_text(command, "api command"),
             EslCommand::BgApi { command } => validate_wire_text(command, "bgapi command"),
-            EslCommand::Events { format, events } => {
-                validate_wire_text(format, "event format")?;
-                validate_wire_text(events, "event list")
-            }
+            EslCommand::Events { events, .. } => validate_wire_text(events, "event list"),
             EslCommand::Filter { header, value } => {
                 validate_wire_text(header, "filter header")?;
                 validate_wire_text(value, "filter value")
@@ -389,17 +387,13 @@ impl EslCommand {
                     None => Ok(()),
                 }
             }
-            EslCommand::Log { level } => validate_wire_text(level, "log level"),
             EslCommand::SendEvent { event } => {
                 validate_wire_text(&Self::sendevent_name(event)?, "sendevent event name")
             }
-            EslCommand::MyEvents { format, uuid } => {
-                validate_wire_text(format, "myevents format")?;
-                match uuid {
-                    Some(u) => validate_wire_text(u, "myevents uuid"),
-                    None => Ok(()),
-                }
-            }
+            EslCommand::MyEvents { uuid, .. } => match uuid {
+                Some(u) => validate_wire_text(u, "myevents uuid"),
+                None => Ok(()),
+            },
             EslCommand::NixEvent { events } => validate_wire_text(events, "nixevent list"),
             EslCommand::FilterDelete { header, value } => {
                 validate_wire_text(header, "filter delete header")?;
@@ -415,6 +409,7 @@ impl EslCommand {
             }
             EslCommand::GetVar { name } => validate_wire_text(name, "getvar name"),
             EslCommand::Exit
+            | EslCommand::Log { .. }
             | EslCommand::NoLog
             | EslCommand::NoOp
             | EslCommand::Linger { .. }
@@ -440,9 +435,10 @@ impl EslCommand {
             )),
             EslCommand::Api { command } => Ok(Self::format_simple_command("api", &[command])),
             EslCommand::BgApi { command } => Ok(Self::format_simple_command("bgapi", &[command])),
-            EslCommand::Events { format, events } => {
-                Ok(Self::format_simple_command("event", &[format, events]))
-            }
+            EslCommand::Events { format, events } => Ok(Self::format_simple_command(
+                "event",
+                &[format.as_str(), events],
+            )),
             EslCommand::Filter { header, value } => {
                 Ok(Self::format_simple_command("filter", &[header, value]))
             }
@@ -486,7 +482,7 @@ impl EslCommand {
                 .to_wire_format()
             }
             EslCommand::Exit => Ok(Self::format_simple_command("exit", &[])),
-            EslCommand::Log { level } => Ok(Self::format_simple_command("log", &[level])),
+            EslCommand::Log { level } => Ok(Self::format_simple_command("log", &[level.as_str()])),
             EslCommand::NoLog => Ok(Self::format_simple_command("nolog", &[])),
             EslCommand::NoOp => Ok(Self::format_simple_command("noop", &[])),
             EslCommand::SendEvent { event } => Self::build_from_event(
@@ -494,8 +490,8 @@ impl EslCommand {
                 event,
             ),
             EslCommand::MyEvents { format, uuid } => Ok(match uuid {
-                Some(u) => Self::format_simple_command("myevents", &[u, format]),
-                None => Self::format_simple_command("myevents", &[format]),
+                Some(u) => Self::format_simple_command("myevents", &[u, format.as_str()]),
+                None => Self::format_simple_command("myevents", &[format.as_str()]),
             }),
             EslCommand::Linger { timeout } => Ok(match timeout {
                 Some(d) => Self::format_simple_command(
@@ -598,7 +594,7 @@ mod tests {
             ),
             (
                 EslCommand::Events {
-                    format: "plain".to_string(),
+                    format: EventFormat::Plain,
                     events: "ALL".to_string(),
                 },
                 "event plain ALL\n\n",
@@ -612,14 +608,14 @@ mod tests {
             ),
             (
                 EslCommand::MyEvents {
-                    format: "plain".to_string(),
+                    format: EventFormat::Plain,
                     uuid: None,
                 },
                 "myevents plain\n\n",
             ),
             (
                 EslCommand::MyEvents {
-                    format: "json".to_string(),
+                    format: EventFormat::Json,
                     uuid: Some("abc-123".to_string()),
                 },
                 "myevents abc-123 json\n\n",
@@ -670,7 +666,7 @@ mod tests {
             ),
             (
                 EslCommand::Log {
-                    level: "debug".to_string(),
+                    level: LogLevel::Debug,
                 },
                 "log debug\n\n",
             ),

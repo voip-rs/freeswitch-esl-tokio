@@ -6,9 +6,11 @@ wire_enum! {
     ///
     /// Names and numbers are `LEVELS[]` / `switch_log_level_t`, read by
     /// `switch_log_str2level`. The switch compares them case-insensitively and
-    /// also accepts the bare number; this enum speaks the canonical lowercase
-    /// form, and the numbered `DEBUG1`..`DEBUG10` levels, which have no name in
-    /// `LEVELS[]`, are not variants.
+    /// also accepts a bare number (a negative one reads as 0, one past 64 as 63,
+    /// and 64 itself is refused); this enum speaks the canonical lowercase form.
+    /// A number past 7 receives what `Debug` does: no message is delivered above
+    /// 7, since `switch_log_meta_vprintf` hands the `DEBUG1`..`DEBUG10` levels on
+    /// at level 1 once the core debug level admits them.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     #[repr(i8)]
     pub enum LogLevel {

@@ -13,7 +13,7 @@ use freeswitch_esl_tokio::connection::AuthMethod;
 use freeswitch_esl_tokio::{
     parse_api_body, Application, ConnectionStatus, DialStringCarrier, DisconnectReason, Endpoint,
     EslClient, EslConnectOptions, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
-    Originate,
+    LogLevel, Originate,
 };
 use live_common::{
     block_parse_under_test, connect, esl_env, kill_channel, target_under_test, wait_for_own_event,
@@ -455,7 +455,7 @@ async fn live_log_events_have_log_type() {
 
     // Enable log forwarding at DEBUG level to generate log traffic
     let resp = client
-        .log("DEBUG")
+        .log(LogLevel::Debug)
         .await
         .unwrap();
     assert!(

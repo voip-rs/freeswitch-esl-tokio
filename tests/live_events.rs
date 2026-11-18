@@ -8,7 +8,7 @@
 mod live_common;
 
 use freeswitch_esl_tokio::{
-    EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
+    EslCommand, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
     EventSubscription, HeaderLookup, ReplyStatus,
 };
 use live_common::{
@@ -209,11 +209,10 @@ async fn live_reply_status_ok() {
 async fn live_reply_status_err() {
     let (client, _events, _permit) = connect().await;
 
-    // log with an invalid level triggers -ERR from FreeSWITCH.
-    // log() returns the raw EslResponse (not through send_command_ok),
-    // so we can inspect the reply status directly.
+    // divert_events needs a session, so inbound gets -ERR; send_command keeps
+    // the raw EslResponse that divert_events() would turn into an Err.
     let resp = client
-        .log("BOGUS_LEVEL_12345")
+        .send_command(EslCommand::DivertEvents { on: true })
         .await
         .expect("send_command should not fail at transport level");
 

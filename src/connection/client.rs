@@ -11,6 +11,7 @@ use crate::{
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     headers::EventHeader,
+    LogLevel,
 };
 
 use super::{ConnectionStatus, EslClient, EslEventStream};
@@ -248,9 +249,7 @@ impl EslClient {
     ) -> EslResult<()> {
         if let Some(events_str) = sub.to_event_string() {
             let cmd = EslCommand::Events {
-                format: sub
-                    .format()
-                    .to_string(),
+                format: sub.format(),
                 events: events_str,
             };
             self.send_command_ok(cmd)
@@ -325,7 +324,7 @@ impl EslClient {
         events: &str,
     ) -> EslResult<SwallowedEventTypes> {
         let cmd = EslCommand::Events {
-            format: format.to_string(),
+            format,
             events: events.to_string(),
         };
 
@@ -545,10 +544,7 @@ impl EslClient {
     /// Subscribes to all channel-related events for the attached session.
     /// In outbound mode, FreeSWITCH already knows the session UUID.
     pub async fn myevents(&self, format: EventFormat) -> EslResult<()> {
-        let cmd = EslCommand::MyEvents {
-            format: format.to_string(),
-            uuid: None,
-        };
+        let cmd = EslCommand::MyEvents { format, uuid: None };
         self.send_command_ok(cmd)
             .await
     }
@@ -559,7 +555,7 @@ impl EslClient {
     /// Use this in inbound mode where no session is attached to the socket.
     pub async fn myevents_uuid(&self, uuid: &str, format: EventFormat) -> EslResult<()> {
         let cmd = EslCommand::MyEvents {
-            format: format.to_string(),
+            format,
             uuid: Some(uuid.to_string()),
         };
         self.send_command_ok(cmd)
@@ -750,8 +746,7 @@ impl EslClient {
 
     /// Enable FreeSWITCH log forwarding at the given level.
     ///
-    /// Log messages stream as events with `Content-Type: log/data`. The level
-    /// is a [`LogLevel`](crate::LogLevel) or its wire spelling.
+    /// Log messages stream as events with `Content-Type: log/data`.
     ///
     /// ```rust,no_run
     /// # use freeswitch_esl_tokio::{EslClient, EslError, LogLevel};
@@ -760,13 +755,8 @@ impl EslClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn log(&self, level: impl AsRef<str>) -> EslResult<EslResponse> {
-        let cmd = EslCommand::Log {
-            level: level
-                .as_ref()
-                .to_string(),
-        };
-        self.send_command(cmd)
+    pub async fn log(&self, level: LogLevel) -> EslResult<EslResponse> {
+        self.send_command(EslCommand::Log { level })
             .await
     }
 
