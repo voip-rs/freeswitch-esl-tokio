@@ -31,7 +31,7 @@ const PERMISSION_DENIED_PAYLOAD: &str = "permission denied";
 #[non_exhaustive]
 pub enum EslError {
     /// IO error from underlying TCP operations
-    #[error("IO error: {0}")]
+    #[error("I/O error")]
     Io(#[source] std::io::Error),
 
     /// Connection is not established or lost
@@ -90,11 +90,11 @@ pub enum EslError {
     },
 
     /// A JSON event body the decoder refused.
-    #[error("JSON parsing error: {0}")]
+    #[error("JSON event body did not decode")]
     JsonError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// An XML event body the decoder refused.
-    #[error("XML parsing error: {0}")]
+    #[error("XML event body did not decode")]
     XmlError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// Bytes the framing reads as text were not UTF-8: the stream is no longer
@@ -184,7 +184,7 @@ pub enum EslError {
     },
 
     /// Originate command builder error
-    #[error("Originate error: {0}")]
+    #[error("originate command refused")]
     Originate(#[from] OriginateError),
 
     /// Re-exec teardown failed
@@ -199,7 +199,7 @@ pub enum EslError {
     },
 
     /// A typed header accessor rejected a value that was present on the wire.
-    #[error("header parse error: {0}")]
+    #[error("header value did not parse")]
     HeaderParse(#[from] ParseHeaderError),
 
     /// `FilterDelete` named the header `all`, which mod_event_socket reads in
@@ -230,7 +230,7 @@ pub enum EslError {
 
     /// An [`AppCommand`](crate::AppCommand) `transfer` argument the switch would
     /// misread.
-    #[error("transfer argument refused: {0}")]
+    #[error("transfer argument refused")]
     TransferArgument(#[from] TransferArgumentError),
 }
 
@@ -282,6 +282,19 @@ esl_error_from_header_parse! {
     ParsePriorityError,
     ParseTimetableError,
     ParseSipStatusCodeError,
+}
+
+/// `err` and each of its sources, joined by `: `, for a log line or a
+/// `DisconnectReason` that keeps only text.
+pub(crate) fn display_chain(err: &dyn std::error::Error) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 /// The failure text of an [`EslError::CommandFailed`], split by the prefix
@@ -877,5 +890,17 @@ mod tests {
             let shown = err.to_string();
             assert!(!shown.contains(&cause), "{shown:?} repeats {cause:?}");
         }
+    }
+
+    /// The reader keeps only text for a disconnect, so it writes the chain.
+    #[test]
+    fn display_chain_carries_every_cause() {
+        let err = utf8_error();
+        let cause = std::error::Error::source(&err)
+            .unwrap()
+            .to_string();
+        let chain = display_chain(&err);
+        assert!(chain.starts_with(&err.to_string()), "{chain}");
+        assert!(chain.ends_with(&cause), "{chain}");
     }
 }
