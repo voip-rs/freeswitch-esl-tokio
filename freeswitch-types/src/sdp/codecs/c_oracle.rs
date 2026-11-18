@@ -21,7 +21,7 @@ use crate::sdp::{SdpDirection, SdpWarning, SwitchRejection};
 const EXCLUDE_UNREADABLE_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_RTPMAP_WITHOUT_RATE: bool = false;
 const EXCLUDE_ATTRIBUTE_NAME_CASE: bool = false;
-const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = true;
+const EXCLUDE_PORT_ZERO_ATTRIBUTES: bool = false;
 const EXCLUDE_REPEATED_PAYLOAD_TYPE: bool = false;
 const EXCLUDE_SOFIA_ONLY_STATIC_NAMES: bool = false;
 

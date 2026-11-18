@@ -529,3 +529,38 @@ fn attribute_names_match_in_any_case_and_the_last_direction_wins() {
         codecs.warnings()
     );
 }
+
+// parse_media_attr returns before reading any attribute of a port-0 section, and post_session
+// forces it inactive.
+#[test]
+fn a_port_zero_section_carries_only_what_the_switch_reads_there() {
+    let codecs = parse(
+        "m=audio 0 RTP/AVP 0 96 101\r\na=rtpmap:96 opus/48000/2\r\na=rtpmap:101 telephone-event/8000\r\na=rtpmap:x junk\r\na=sendrecv\r\n",
+    );
+    let section = &codecs.sections()[0];
+    let names: Vec<_> = rtp_codec(section.entries())
+        .iter()
+        .map(|c| {
+            c.name()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(names, ["PCMU"]);
+    let unmapped: Vec<_> = section
+        .unmapped()
+        .iter()
+        .map(|u| u.payload_type)
+        .collect();
+    assert_eq!(unmapped, [96, 101]);
+    assert!(section
+        .non_codec_payloads()
+        .is_empty());
+    assert_eq!(section.direction(), SdpDirection::Inactive);
+    assert!(
+        codecs
+            .warnings()
+            .is_empty(),
+        "{:?}",
+        codecs.warnings()
+    );
+}
