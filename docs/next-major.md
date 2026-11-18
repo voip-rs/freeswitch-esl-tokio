@@ -32,12 +32,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `SipPassthroughHeader::is_array_header` answers `false` for unknown headers
-
-An unknown header name is neither single- nor multi-valued; `bool` cannot say
-so, and a custom `X-*` header carrying a comma list is reported single-valued.
-Return `Option<bool>`.
-
 ### `UuidHold.off: bool` should be `HoldAction`
 
 `ConferenceHold` spells hold-versus-unhold with the `HoldAction` wire enum;

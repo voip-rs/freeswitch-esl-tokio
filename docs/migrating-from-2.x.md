@@ -90,3 +90,9 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Originate::extension(ep, ext)`, `Originate::application(ep, app)` return `Originate` | return `Result<Originate, OriginateError>` |
 | `with_context`, `with_cid_name`, `with_cid_num` (2.x `context`, `cid_name`, `cid_num`) return `Originate` | return `Result<Originate, OriginateError>`; `with_timeout` and the `without_*` builders stay infallible |
 | the constructors and builders accept what config load refuses | refuse it with the same `OriginateError`: `undef` in any case as the target, context or caller id (`UndefPositional`), an extension opening `&` and more (`ExtensionReadsAsApplication`), an `&name(args)` application whose name carries a parenthesis or whose arguments carry `)` (`ParenthesisInApplication`; `Application::new` still accepts it for `Originate::inline`), an extension under `inline` or inline applications under another dialplan, and a `SofiaContact` or `GroupCall` endpoint (`UnexpandedExpression`) |
+
+## Events and headers
+
+| 2.x | 3.0 |
+|---|---|
+| `SipPassthroughHeader::is_array_header()` returns `bool`, `false` for a header the catalog does not register | returns `Option<bool>`: `None` for an unregistered `sip_i_` header, which arrives as an `ARRAY::` value whenever the message repeats it; `Some(false)` for every other prefix |

@@ -395,10 +395,18 @@ impl SipPassthroughHeader {
     ///
     /// Only meaningful for the `Invite` prefix — FreeSWITCH stores incoming SIP
     /// headers that may repeat in `ARRAY::val1|:val2` format. For other
-    /// prefixes (which are write-only), this always returns `false`.
-    pub fn is_array_header(&self) -> bool {
-        self.prefix == SipHeaderPrefix::Invite
-            && SipHeader::parse_name(&self.canonical_name).is_ok_and(|h| h.may_repeat())
+    /// prefixes (which are write-only), this always returns `Some(false)`.
+    ///
+    /// `None` for an `Invite` header the catalog does not register: mod_sofia
+    /// pushes every repeat of an unknown header, so whether it arrives as an
+    /// array depends on the message, not the name.
+    pub fn is_array_header(&self) -> Option<bool> {
+        if self.prefix != SipHeaderPrefix::Invite {
+            return Some(false);
+        }
+        SipHeader::parse_name(&self.canonical_name)
+            .ok()
+            .map(|h| h.may_repeat())
     }
 }
 
@@ -770,30 +778,76 @@ mod tests {
 
     #[test]
     fn is_array_header_invite_multi_valued() {
-        assert!(SipPassthroughHeader::invite(SipHeader::Via).is_array_header());
-        assert!(SipPassthroughHeader::invite(SipHeader::CallInfo).is_array_header());
-        assert!(SipPassthroughHeader::invite(SipHeader::PAssertedIdentity).is_array_header());
-        assert!(SipPassthroughHeader::invite(SipHeader::RecordRoute).is_array_header());
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::Via).is_array_header(),
+            Some(true)
+        );
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::CallInfo).is_array_header(),
+            Some(true)
+        );
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::PAssertedIdentity).is_array_header(),
+            Some(true)
+        );
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::RecordRoute).is_array_header(),
+            Some(true)
+        );
     }
 
     #[test]
     fn is_array_header_invite_single_valued() {
-        assert!(!SipPassthroughHeader::invite(SipHeader::From).is_array_header());
-        assert!(!SipPassthroughHeader::invite(SipHeader::CallId).is_array_header());
-        assert!(!SipPassthroughHeader::invite(SipHeader::ContentType).is_array_header());
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::From).is_array_header(),
+            Some(false)
+        );
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::CallId).is_array_header(),
+            Some(false)
+        );
+        assert_eq!(
+            SipPassthroughHeader::invite(SipHeader::ContentType).is_array_header(),
+            Some(false)
+        );
     }
 
     #[test]
     fn is_array_header_non_invite_always_false() {
-        assert!(!SipPassthroughHeader::request(SipHeader::Via).is_array_header());
-        assert!(!SipPassthroughHeader::response(SipHeader::CallInfo).is_array_header());
+        assert_eq!(
+            SipPassthroughHeader::request(SipHeader::Via).is_array_header(),
+            Some(false)
+        );
+        assert_eq!(
+            SipPassthroughHeader::response(SipHeader::CallInfo).is_array_header(),
+            Some(false)
+        );
+        assert_eq!(
+            SipPassthroughHeader::request_raw("X-Custom")
+                .unwrap()
+                .is_array_header(),
+            Some(false)
+        );
     }
 
     #[test]
-    fn is_array_header_raw_unknown() {
-        assert!(!SipPassthroughHeader::invite_raw("X-Custom")
-            .unwrap()
-            .is_array_header());
+    fn is_array_header_raw_unknown_is_unknown() {
+        assert_eq!(
+            SipPassthroughHeader::invite_raw("X-Custom")
+                .unwrap()
+                .is_array_header(),
+            None
+        );
+    }
+
+    #[test]
+    fn is_array_header_raw_known_name_resolves_through_the_catalog() {
+        assert_eq!(
+            SipPassthroughHeader::invite_raw("Call-Info")
+                .unwrap()
+                .is_array_header(),
+            Some(true)
+        );
     }
 
     // --- extract_from ---
