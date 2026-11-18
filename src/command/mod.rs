@@ -927,7 +927,8 @@ mod tests {
         let err = cmd
             .to_wire_format()
             .unwrap_err();
-        assert!(matches!(err, EslError::ProtocolError { .. }));
+        assert!(!err.is_connection_error(), "{err}");
+        assert!(!err.is_recoverable(), "{err}");
     }
 
     #[test]

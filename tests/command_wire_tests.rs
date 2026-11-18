@@ -231,15 +231,18 @@ async fn test_noevents_command() {
 
 /// A refused command writes nothing: the next command is the first thing the
 /// switch reads, and the client is still connected.
-#[tokio::test]
-async fn a_refused_line_break_puts_nothing_on_the_wire() {
+async fn refusal_sends_nothing<F, Fut>(refused: F)
+where
+    F: FnOnce(EslClient) -> Fut,
+    Fut: std::future::Future<Output = Result<freeswitch_esl_tokio::EslResponse, EslError>>,
+{
     let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
-    let err = client
-        .api("status\n\nevent plain ALL")
+    let err = refused(client.clone())
         .await
         .unwrap_err();
     assert!(!err.is_connection_error(), "{err}");
+    assert!(!err.is_recoverable(), "{err}");
     assert!(client.is_connected());
 
     let (result, sent) = tokio::join!(client.api("status"), async {
@@ -260,6 +263,26 @@ async fn a_refused_line_break_puts_nothing_on_the_wire() {
             .unwrap(),
         "UP"
     );
+}
+
+#[tokio::test]
+async fn a_refused_line_break_puts_nothing_on_the_wire() {
+    refusal_sends_nothing(|client| async move {
+        client
+            .api("status\n\nevent plain ALL")
+            .await
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_sendevent_without_a_name_puts_nothing_on_the_wire() {
+    refusal_sends_nothing(|client| async move {
+        client
+            .sendevent(EslEvent::new())
+            .await
+    })
+    .await;
 }
 
 #[tokio::test]
