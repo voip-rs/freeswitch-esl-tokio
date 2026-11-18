@@ -229,6 +229,39 @@ async fn test_noevents_command() {
     .await;
 }
 
+/// A refused command writes nothing: the next command is the first thing the
+/// switch reads, and the client is still connected.
+#[tokio::test]
+async fn a_refused_line_break_puts_nothing_on_the_wire() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    let err = client
+        .api("status\n\nevent plain ALL")
+        .await
+        .unwrap_err();
+    assert!(!err.is_connection_error(), "{err}");
+    assert!(client.is_connected());
+
+    let (result, sent) = tokio::join!(client.api("status"), async {
+        let sent = mock
+            .read_command()
+            .await
+            .unwrap();
+        mock.reply_api("UP")
+            .await
+            .unwrap();
+        sent
+    });
+    assert_eq!(sent, "api status\n\n");
+    assert_eq!(
+        result
+            .unwrap()
+            .api_result()
+            .unwrap(),
+        "UP"
+    );
+}
+
 #[tokio::test]
 async fn test_filter_delete_command() {
     wire_round_trip(

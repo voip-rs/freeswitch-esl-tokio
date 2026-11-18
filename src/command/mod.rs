@@ -989,6 +989,43 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// The caller's own input is at fault, so the connection stays usable and
+    /// resending the same command cannot succeed. The value may be a secret.
+    #[test]
+    fn a_line_break_in_caller_input_is_neither_a_connection_fault_nor_retryable() {
+        let cases = [
+            (
+                EslCommand::Api {
+                    command: "status\n\nevent plain ALL".to_string(),
+                },
+                "api command",
+            ),
+            (
+                EslCommand::Auth {
+                    password: Secret("hunter2\0".to_string()),
+                },
+                "password",
+            ),
+            (
+                EslCommand::Filter {
+                    header: "Event-Name\r".to_string(),
+                    value: "CHANNEL_CREATE".to_string(),
+                },
+                "filter header",
+            ),
+        ];
+        for (cmd, field) in cases {
+            let err = cmd
+                .to_wire_format()
+                .unwrap_err();
+            assert!(!err.is_connection_error(), "{err}");
+            assert!(!err.is_recoverable(), "{err}");
+            let shown = err.to_string();
+            assert!(shown.contains(field), "{shown}");
+            assert!(!shown.contains("hunter2"), "{shown}");
+        }
+    }
+
     /// The switch reads a command as a C string, so a NUL cuts it short.
     #[test]
     fn nul_rejected_at_the_wire() {
