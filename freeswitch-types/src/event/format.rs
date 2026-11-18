@@ -43,11 +43,14 @@ mod tests {
     }
 
     #[test]
-    fn test_event_format_from_str_case_insensitive() {
-        assert_eq!("PLAIN".parse::<EventFormat>(), Ok(EventFormat::Plain));
-        assert_eq!("Json".parse::<EventFormat>(), Ok(EventFormat::Json));
-        assert_eq!("XML".parse::<EventFormat>(), Ok(EventFormat::Xml));
-        assert_eq!("Xml".parse::<EventFormat>(), Ok(EventFormat::Xml));
+    fn test_event_format_from_str_rejects_wrong_case() {
+        for s in ["PLAIN", "Json", "XML", "Xml"] {
+            assert!(
+                s.parse::<EventFormat>()
+                    .is_err(),
+                "{s}"
+            );
+        }
     }
 
     #[test]
