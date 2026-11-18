@@ -24,9 +24,9 @@ use sip_header_catalog::{RowError, SipHeader, SipHeaderField, SipHeaderRows};
 /// The rejected name stays on the field; `Display` names only what was wrong
 /// with it, since a header name a caller supplied can carry subscriber identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidHeaderName(pub String);
+pub struct InvalidHeaderNameError(pub String);
 
-impl std::fmt::Display for InvalidHeaderName {
+impl std::fmt::Display for InvalidHeaderNameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self
             .0
@@ -43,7 +43,7 @@ impl std::fmt::Display for InvalidHeaderName {
     }
 }
 
-impl std::error::Error for InvalidHeaderName {}
+impl std::error::Error for InvalidHeaderNameError {}
 
 /// FreeSWITCH SIP header passthrough variable prefix.
 ///
@@ -226,9 +226,9 @@ fn canonical_from_suffix(prefix: SipHeaderPrefix, suffix: &str) -> String {
     }
 }
 
-fn validate_header_name(name: &str) -> Result<(), InvalidHeaderName> {
+fn validate_header_name(name: &str) -> Result<(), InvalidHeaderNameError> {
     if name.is_empty() || crate::wire_safety::contains_wire_terminator(name) {
-        return Err(InvalidHeaderName(name.to_string()));
+        return Err(InvalidHeaderNameError(name.to_string()));
     }
     Ok(())
 }
@@ -278,7 +278,7 @@ impl SipPassthroughHeader {
     pub fn new_raw(
         prefix: SipHeaderPrefix,
         name: impl Into<String>,
-    ) -> Result<Self, InvalidHeaderName> {
+    ) -> Result<Self, InvalidHeaderNameError> {
         let canonical = name.into();
         validate_header_name(&canonical)?;
         let wire = build_wire(prefix, &canonical);
@@ -295,7 +295,7 @@ impl SipPassthroughHeader {
     }
 
     /// Incoming INVITE header from raw name.
-    pub fn invite_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn invite_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::Invite, name)
     }
 
@@ -305,7 +305,7 @@ impl SipPassthroughHeader {
     }
 
     /// Outgoing request header from raw name.
-    pub fn request_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn request_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::Request, name)
     }
 
@@ -315,7 +315,7 @@ impl SipPassthroughHeader {
     }
 
     /// Outgoing response header from raw name.
-    pub fn response_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn response_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::Response, name)
     }
 
@@ -325,7 +325,7 @@ impl SipPassthroughHeader {
     }
 
     /// Provisional response header from raw name.
-    pub fn provisional_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn provisional_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::Provisional, name)
     }
 
@@ -335,7 +335,7 @@ impl SipPassthroughHeader {
     }
 
     /// BYE request header from raw name.
-    pub fn bye_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn bye_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::Bye, name)
     }
 
@@ -345,7 +345,7 @@ impl SipPassthroughHeader {
     }
 
     /// Suppress header on BYE from raw name.
-    pub fn no_bye_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderName> {
+    pub fn no_bye_raw(name: impl Into<String>) -> Result<Self, InvalidHeaderNameError> {
         Self::new_raw(SipHeaderPrefix::NoBye, name)
     }
 

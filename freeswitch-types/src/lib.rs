@@ -101,11 +101,11 @@ pub use sofia::{
 #[cfg(feature = "esl")]
 pub use variables::EslHeaders;
 pub use variables::{
-    CarriedHeader, ChannelVariable, CoreMediaVariable, EslArray, EslArrayError, InvalidHeaderName,
-    MultipartBody, MultipartBodyError, MultipartItem, ParseChannelVariableError,
-    ParseCoreMediaVariableError, ParseReadResultError, ParseSipHangupDispositionError,
-    ParseSipPassthroughError, ReadResult, RtpStatUnit, SipHangupDisposition, SipHeaderPrefix,
-    SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
+    CarriedHeader, ChannelVariable, CoreMediaVariable, EslArray, EslArrayError,
+    InvalidHeaderNameError, MultipartBody, MultipartBodyError, MultipartItem,
+    ParseChannelVariableError, ParseCoreMediaVariableError, ParseReadResultError,
+    ParseSipHangupDispositionError, ParseSipPassthroughError, ReadResult, RtpStatUnit,
+    SipHangupDisposition, SipHeaderPrefix, SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
 };
 pub use version::{FreeswitchVersion, ParseFreeswitchVersionError};
 

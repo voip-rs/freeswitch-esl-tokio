@@ -171,7 +171,7 @@ pub use freeswitch_types::{
     EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader, EventSubscription,
     EventSubscriptionError, ExecuteOn, ExecuteOnFault, FreeswitchVersion, GatewayPingStatus,
     GatewayRegState, GroupCallOrder, HangupCause, HeaderLookup, InvalidArgvSeparator,
-    InvalidHeaderName, LogLevel, LossyValue, LossyValues, MultipartBody, MultipartBodyError,
+    InvalidHeaderNameError, LogLevel, LossyValue, LossyValues, MultipartBody, MultipartBodyError,
     MultipartItem, Originate, OriginateError, OriginateTarget, ParseAnswerStateError,
     ParseBlockParseError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,

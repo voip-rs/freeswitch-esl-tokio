@@ -28,7 +28,7 @@ pub use loopback::{
 };
 pub use sip_multipart::{MultipartBody, MultipartBodyError, MultipartItem};
 pub use sip_passthrough::{
-    InvalidHeaderName, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,
+    InvalidHeaderNameError, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,
 };
 pub use sofia::{
     CarriedHeader, ParseSipHangupDispositionError, ParseSofiaVariableError, SipHangupDisposition,

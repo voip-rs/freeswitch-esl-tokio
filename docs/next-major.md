@@ -32,11 +32,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `InvalidHeaderName` should follow the `Parse*Error` / `*Error` naming
-
-Its siblings `ParseSipPassthroughError` and `EslArrayError` set the two
-conventions; this one follows neither.
-
 ### `FilterDelete { header: "all" }` duplicates `FilterDeleteAll`
 
 Both emit the same wire; the first warns at runtime that its `value` is
