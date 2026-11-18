@@ -678,6 +678,9 @@ impl EslClient {
     ///
     /// Without a value, removes all filters for the given header.
     /// With a value, removes only the filter matching that header+value pair.
+    /// A header spelled `all` in any case is refused with
+    /// [`FilterDeleteAllHeader`](EslError::FilterDeleteAllHeader); use
+    /// [`filter_delete_all`](Self::filter_delete_all).
     pub async fn filter_delete_raw(&self, header: &str, value: Option<&str>) -> EslResult<()> {
         let cmd = EslCommand::FilterDelete {
             header: header.to_string(),

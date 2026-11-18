@@ -20,11 +20,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `FilterDelete { header: "all" }` duplicates `FilterDeleteAll`
-
-Both emit the same wire; the first warns at runtime that its `value` is
-ignored. Reject `"all"` in `FilterDelete` or drop the special case.
-
 ### `getvar` should be `getvar_raw`
 
 Its `Ok` may be the `-ERR`-shaped filler the switch returns for an unset

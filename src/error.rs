@@ -190,6 +190,14 @@ pub enum EslError {
     /// A typed header accessor rejected a value that was present on the wire.
     #[error("header parse error: {0}")]
     HeaderParse(#[from] ParseHeaderError),
+
+    /// `FilterDelete` named the header `all`, which mod_event_socket reads in
+    /// any case as delete-all and drops the value; send `FilterDeleteAll`.
+    #[error("filter delete header {header:?} deletes every filter; use FilterDeleteAll")]
+    FilterDeleteAllHeader {
+        /// The header as given.
+        header: String,
+    },
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -342,6 +350,7 @@ impl EslError {
             EslError::Generic { .. } => false,
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
+            EslError::FilterDeleteAllHeader { .. } => false,
         }
     }
 
@@ -393,6 +402,7 @@ impl EslError {
             // still alive — caller can keep using it.
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
+            EslError::FilterDeleteAllHeader { .. } => false,
         }
     }
 

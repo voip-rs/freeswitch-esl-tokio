@@ -129,3 +129,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | 2.x | 3.0 |
 |---|---|
 | `EslClient::subscribe_events_raw(format, events)` and `nixevent_raw(events)` return `EslResult<()>` | return `EslResult<SwallowedEventTypes>`, `#[must_use]`: the event types placed after `CUSTOM`, which the switch read as subclass names while answering `+OK`. `.await?.into_result()?` refuses them, `is_empty()` and `iter()` read them; an existing `.await?;` keeps compiling and warns |
+| `EslCommand::FilterDelete { header: "all", .. }` and `filter_delete_raw("all", value)` send `filter delete all`, warning when a value is dropped | refused in any case with `EslError::FilterDeleteAllHeader`; send `EslCommand::FilterDeleteAll` or call `filter_delete_all()` |

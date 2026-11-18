@@ -2,7 +2,7 @@
 
 // qual:allow(coupling, sdp) reason: "channel dumps reuse the protocol decoder"
 use crate::{
-    constants::{HEADER_TERMINATOR, LINE_TERMINATOR},
+    constants::{FILTER_DELETE_ALL, HEADER_TERMINATOR, LINE_TERMINATOR},
     error::{EslError, EslResult},
     event::EslEvent,
     headers::EventHeader,
@@ -12,7 +12,6 @@ use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
-use tracing::warn;
 
 mod response;
 pub use response::{
@@ -287,7 +286,9 @@ pub enum EslCommand {
     NoEvents,
     /// Remove event filters.
     FilterDelete {
-        /// Header name to remove filter from, or `"all"`.
+        /// Header name to remove filter from. `all` in any case is refused
+        /// with [`EslError::FilterDeleteAllHeader`]: send
+        /// [`FilterDeleteAll`](Self::FilterDeleteAll).
         header: String,
         /// Specific value to remove, or `None` for all values.
         value: Option<String>,
@@ -305,8 +306,6 @@ pub enum EslCommand {
     /// Request channel data in outbound mode.
     Connect,
     /// Remove all event filters.
-    ///
-    /// Prefer this over `FilterDelete { header: "all", .. }`.
     FilterDeleteAll,
 }
 
@@ -404,6 +403,11 @@ impl EslCommand {
             EslCommand::NixEvent { events } => validate_wire_text(events, "nixevent list"),
             EslCommand::FilterDelete { header, value } => {
                 validate_wire_text(header, "filter delete header")?;
+                if header.eq_ignore_ascii_case(FILTER_DELETE_ALL) {
+                    return Err(EslError::FilterDeleteAllHeader {
+                        header: header.clone(),
+                    });
+                }
                 match value {
                     Some(v) => validate_wire_text(v, "filter delete value"),
                     None => Ok(()),
@@ -507,26 +511,14 @@ impl EslCommand {
                 Ok(Self::format_simple_command("nixevent", &[events]))
             }
             EslCommand::NoEvents => Ok(Self::format_simple_command("noevents", &[])),
-            EslCommand::FilterDelete { header, value } => {
-                if header == "all" {
-                    if value.is_some() {
-                        warn!(
-                            "FilterDelete with header=\"all\" ignores value; use FilterDeleteAll \
-                             for delete-all or FilterDelete with a specific header to delete by \
-                             value"
-                        );
-                    }
-                    Ok(Self::format_simple_command("filter", &["delete", "all"]))
-                } else {
-                    Ok(match value {
-                        Some(v) => Self::format_simple_command("filter", &["delete", header, v]),
-                        None => Self::format_simple_command("filter", &["delete", header]),
-                    })
-                }
-            }
-            EslCommand::FilterDeleteAll => {
-                Ok(Self::format_simple_command("filter", &["delete", "all"]))
-            }
+            EslCommand::FilterDelete { header, value } => Ok(match value {
+                Some(v) => Self::format_simple_command("filter", &["delete", header, v]),
+                None => Self::format_simple_command("filter", &["delete", header]),
+            }),
+            EslCommand::FilterDeleteAll => Ok(Self::format_simple_command(
+                "filter",
+                &["delete", FILTER_DELETE_ALL],
+            )),
             EslCommand::DivertEvents { on } => {
                 let arg = if *on { "on" } else { "off" };
                 Ok(Self::format_simple_command("divert_events", &[arg]))
@@ -795,6 +787,10 @@ mod tests {
                 }
                 .to_wire_format()
                 .expect_err(header);
+                assert!(
+                    matches!(&err, EslError::FilterDeleteAllHeader { header: h } if h == header),
+                    "{err}"
+                );
                 assert!(!err.is_recoverable(), "{header} {value:?}: {err}");
                 assert!(!err.is_connection_error(), "{header} {value:?}: {err}");
             }

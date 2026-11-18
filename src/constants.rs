@@ -71,3 +71,7 @@ pub const READER_TICK_MS: u64 = 2000;
 /// Maximum time (ms) to drain an in-progress message body during re-exec teardown
 #[cfg(unix)]
 pub const REEXEC_DRAIN_TIMEOUT_MS: u64 = 5000;
+
+/// The `filter delete` header mod_event_socket reads, in any case, as
+/// "every filter".
+pub const FILTER_DELETE_ALL: &str = "all";
