@@ -142,3 +142,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `EslClient::connect_with_user(host, port, user, password)`, `connect_with_user_and_options(.., options)`, deprecated since 2.5 | `EslClient::connect_with_auth(host, port, AuthMethod::user(user, password), options)`, with `EslConnectOptions::default()` for the first |
 | `EslCommand::Events { format: String, .. }`, `MyEvents { format: String, .. }` | `format: EventFormat` |
 | `EslCommand::Log { level: String }`, `EslClient::log(level: impl AsRef<str>)` | `Log { level: LogLevel }`, `log(LogLevel)`; a number the switch also takes is one of these levels, and any past 7 receives what `LogLevel::Debug` does |
+| `EslCommand::DivertEvents { on: bool }`, `EslClient::divert_events(bool)` | `DivertEvents { mode: DivertMode }`, `divert_events(DivertMode::On)` / `DivertMode::Off` |

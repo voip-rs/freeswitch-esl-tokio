@@ -215,7 +215,7 @@ pub use app::dptools::AppCommand;
 pub use bgjob::{BgJobResult, BgJobTracker};
 pub use command::{
     parse_api_body, parse_channel_dump, parse_channel_dump_with_options, ChannelDumpOptions,
-    CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus, Secret,
+    CommandBuilder, DivertMode, EslCommand, EslResponse, ExecuteOptions, ReplyStatus, Secret,
 };
 pub use connection::{
     AuthMethod, ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,

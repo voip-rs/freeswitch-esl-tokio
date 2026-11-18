@@ -6,7 +6,7 @@ use tokio::time::timeout;
 use tracing::{debug, info};
 
 use crate::{
-    command::{EslCommand, EslResponse, ExecuteOptions},
+    command::{DivertMode, EslCommand, EslResponse, ExecuteOptions},
     constants::{REPLY_COMMAND_NOT_FOUND, UNDEF_VALUE},
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
@@ -693,11 +693,8 @@ impl EslClient {
     }
 
     /// Redirect session events to the ESL connection (outbound mode).
-    ///
-    /// When `on` is true, events that would normally be processed internally
-    /// by FreeSWITCH are instead sent to the ESL connection.
-    pub async fn divert_events(&self, on: bool) -> EslResult<()> {
-        self.send_command_ok(EslCommand::DivertEvents { on })
+    pub async fn divert_events(&self, mode: DivertMode) -> EslResult<()> {
+        self.send_command_ok(EslCommand::DivertEvents { mode })
             .await
     }
 

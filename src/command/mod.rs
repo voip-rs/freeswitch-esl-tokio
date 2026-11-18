@@ -184,6 +184,26 @@ impl ExecuteOptions {
     }
 }
 
+/// Argument of the outbound-mode `divert_events` command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum DivertMode {
+    /// Hand the session's queued events to this socket instead of its running
+    /// application, and queue its DTMF there rather than fire it to every listener.
+    On,
+    /// Restore both. The switch reads any value but `on` as this.
+    Off,
+}
+
+impl DivertMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            DivertMode::On => "on",
+            DivertMode::Off => "off",
+        }
+    }
+}
+
 /// ESL command types for the wire protocol.
 ///
 /// Most users won't construct these directly -- use [`EslClient`](crate::EslClient)
@@ -296,8 +316,8 @@ pub enum EslCommand {
     },
     /// Redirect session events to ESL (outbound mode).
     DivertEvents {
-        /// `true` to enable, `false` to disable.
-        on: bool,
+        /// Whether to divert.
+        mode: DivertMode,
     },
     /// Read a channel variable (outbound mode).
     GetVar {
@@ -515,10 +535,10 @@ impl EslCommand {
                 "filter",
                 &["delete", FILTER_DELETE_ALL],
             )),
-            EslCommand::DivertEvents { on } => {
-                let arg = if *on { "on" } else { "off" };
-                Ok(Self::format_simple_command("divert_events", &[arg]))
-            }
+            EslCommand::DivertEvents { mode } => Ok(Self::format_simple_command(
+                "divert_events",
+                &[mode.as_str()],
+            )),
             EslCommand::GetVar { name } => Ok(Self::format_simple_command("getvar", &[name])),
             EslCommand::Connect => Ok(Self::format_simple_command("connect", &[])),
         }
@@ -651,11 +671,15 @@ mod tests {
                 "filter delete Event-Name CHANNEL_CREATE\n\n",
             ),
             (
-                EslCommand::DivertEvents { on: true },
+                EslCommand::DivertEvents {
+                    mode: DivertMode::On,
+                },
                 "divert_events on\n\n",
             ),
             (
-                EslCommand::DivertEvents { on: false },
+                EslCommand::DivertEvents {
+                    mode: DivertMode::Off,
+                },
                 "divert_events off\n\n",
             ),
             (

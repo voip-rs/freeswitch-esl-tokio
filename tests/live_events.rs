@@ -8,8 +8,8 @@
 mod live_common;
 
 use freeswitch_esl_tokio::{
-    EslCommand, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
-    EventSubscription, HeaderLookup, ReplyStatus,
+    DivertMode, EslCommand, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
+    EventHeader, EventSubscription, HeaderLookup, ReplyStatus,
 };
 use live_common::{
     connect, custom_roundtrip, custom_roundtrip_as, percent_escape_tree, switch_version,
@@ -212,7 +212,9 @@ async fn live_reply_status_err() {
     // divert_events needs a session, so inbound gets -ERR; send_command keeps
     // the raw EslResponse that divert_events() would turn into an Err.
     let resp = client
-        .send_command(EslCommand::DivertEvents { on: true })
+        .send_command(EslCommand::DivertEvents {
+            mode: DivertMode::On,
+        })
         .await
         .expect("send_command should not fail at transport level");
 

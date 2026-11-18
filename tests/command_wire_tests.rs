@@ -6,7 +6,8 @@
 mod mock_server;
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEvent, EslEventType, EventFormat, HeaderLookup, DEFAULT_ESL_PASSWORD,
+    DivertMode, EslClient, EslError, EslEvent, EslEventType, EventFormat, HeaderLookup,
+    DEFAULT_ESL_PASSWORD,
 };
 use mock_server::{recv_event, setup_connected_pair, setup_raw_pair, MockConnection};
 use std::collections::HashMap;
@@ -245,7 +246,7 @@ async fn test_filter_delete_command() {
 async fn test_divert_events_command() {
     wire_round_trip("divert_events on\n\n", |client| async move {
         client
-            .divert_events(true)
+            .divert_events(DivertMode::On)
             .await
     })
     .await;
