@@ -380,3 +380,31 @@ fn a_repeated_payload_type_takes_its_attributes_on_the_first_entry_only() {
         [96]
     );
 }
+
+// sdp_media_type matches the media type case-insensitively.
+#[test]
+fn a_media_type_matches_in_any_case() {
+    let codecs = parse("m=AUDIO 5004 RTP/AVP 0\r\nm=Video 5006 RTP/AVP 34\r\n");
+    let types: Vec<_> = codecs
+        .sections()
+        .iter()
+        .map(|s| {
+            s.media_type()
+                .clone()
+        })
+        .collect();
+    assert_eq!(
+        types,
+        [
+            crate::sdp::SdpMediaType::Audio,
+            crate::sdp::SdpMediaType::Video
+        ]
+    );
+    assert_eq!(names(&codecs), ["PCMU"]);
+    assert_eq!(
+        codecs
+            .video()
+            .count(),
+        1
+    );
+}

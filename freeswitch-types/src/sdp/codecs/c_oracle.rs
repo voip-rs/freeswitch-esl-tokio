@@ -133,7 +133,18 @@ fn media_line() -> impl Strategy<Value = String> {
 }
 
 fn m_line() -> impl Strategy<Value = String> {
-    let media = select(&["audio", "video", "image", "application"][..]);
+    let media = select(
+        &[
+            "audio",
+            "video",
+            "image",
+            "application",
+            "AUDIO",
+            "Video",
+            "IMAGE",
+            "Text",
+        ][..],
+    );
     let port = select(&["5004", "9", "65535", "0", "5004/2"][..]);
     let proto = select(
         &[
@@ -279,10 +290,19 @@ fn direction_of(mode: u8) -> SdpDirection {
 
 fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
     let held = c.port == 0;
+    // sofia spells a type it knows in lowercase, one it does not verbatim; Other keeps the
+    // spelling of a type sofia knows and SdpMediaType has no variant for.
+    let ours_type = ours
+        .media_type()
+        .to_string();
+    let c_type = String::from_utf8_lossy(&c.type_name);
+    let sofia_only = ["image", "data", "control", "red"].contains(&c_type.as_ref());
     prop_assert!(
-        ours.media_type()
-            .to_string()
-            .eq_ignore_ascii_case(&String::from_utf8_lossy(&c.type_name)),
+        if sofia_only {
+            ours_type.eq_ignore_ascii_case(&c_type)
+        } else {
+            ours_type == c_type
+        },
         "media type: sofia {:?}, ours {}",
         String::from_utf8_lossy(&c.type_name),
         ours.media_type()
@@ -323,7 +343,7 @@ fn compare_section(c: &SdpMedia, ours: &SdpMediaSection) -> TestCaseResult {
     }
     prop_assert_eq!(ours.direction(), direction_of(c.mode), "direction");
     // m=image is T.38 whatever its proto, as the switch reads it.
-    if ours.media_type() == &crate::sdp::SdpMediaType::Other("image".into()) {
+    if super::is_image(ours.media_type()) {
         return Ok(());
     }
     // Each list keeps format-list order, so sofia's entries for one payload type, taken by the
