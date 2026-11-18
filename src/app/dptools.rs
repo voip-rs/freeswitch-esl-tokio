@@ -6,6 +6,7 @@ use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
 use crate::commands::UndeliverableVariable;
+use freeswitch_types::wire_safety::check_header_value;
 
 /// Constructors for common dptools application commands.
 ///
@@ -45,8 +46,10 @@ impl AppCommand {
         execute("bridge", Some(destination.to_string()))
     }
 
-    /// Set a channel variable (`set` application).
+    /// Set a channel variable (`set` application), refusing a value with a control character
+    /// other than tab under a name mod_sofia sends as an outgoing SIP header.
     pub fn set_var(name: &str, value: &str) -> Result<EslCommand, UndeliverableVariable> {
+        check_header_value(name, value)?;
         Ok(execute("set", Some(format!("{}={}", name, value))))
     }
 

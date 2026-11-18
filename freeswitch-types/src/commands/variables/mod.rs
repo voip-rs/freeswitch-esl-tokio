@@ -9,8 +9,7 @@ use crate::switch_passes::brackets::{check_separator, same_header, unbalanced, B
 use crate::switch_passes::escape::{escape_text, escape_value, EscapedField};
 use crate::switch_passes::originate_legs::splits_into_threads;
 use crate::switch_passes::{pipeline, PipelineError};
-use crate::variables::names_outgoing_header;
-use crate::wire_safety::contains_header_control;
+use crate::wire_safety::check_header_value;
 
 mod fault;
 mod target;
@@ -135,18 +134,6 @@ fn check_representable(
     fault.map_or(Ok(()), |fault| {
         Err(UndeliverableVariable::in_value(key, fault))
     })
-}
-
-/// Reject a value the switch copies into an outgoing SIP header when it carries a control
-/// character but tab, which a header field value cannot hold.
-fn check_header_value(key: &str, value: &str) -> Result<(), UndeliverableVariable> {
-    match names_outgoing_header(key) && contains_header_control(value) {
-        true => Err(UndeliverableVariable::in_value(
-            key,
-            VariableFault::HeaderControl,
-        )),
-        false => Ok(()),
-    }
 }
 
 /// Reject a key naming, but for ASCII case, one of `others`: the block's event replaces a header

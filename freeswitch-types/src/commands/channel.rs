@@ -5,6 +5,7 @@ use std::fmt;
 use crate::channel::HangupCause;
 use crate::commands::originate::DialplanType;
 use crate::commands::variables::UndeliverableVariable;
+use crate::wire_safety::check_header_value;
 
 /// Answer a channel: `uuid_answer <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,16 +199,19 @@ pub struct UuidSetVar {
 }
 
 impl UuidSetVar {
-    /// Create a new uuid_setvar command.
+    /// Create a new uuid_setvar command, refusing a value with a control character other than
+    /// tab under a name mod_sofia sends as an outgoing SIP header.
     pub fn new(
         uuid: impl Into<String>,
         key: impl Into<String>,
         value: impl Into<String>,
     ) -> Result<Self, UndeliverableVariable> {
+        let (key, value) = (key.into(), value.into());
+        check_header_value(&key, &value)?;
         Ok(Self {
             uuid: uuid.into(),
-            key: key.into(),
-            value: value.into(),
+            key,
+            value,
         })
     }
 

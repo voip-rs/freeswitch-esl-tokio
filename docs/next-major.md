@@ -26,13 +26,6 @@ endpoint. Its own rustdoc warns against calling it. Either drop the `Display`
 bound from `DialString`, or drop the impl and let the three `Endpoint` variants
 be the only way to render an audio endpoint.
 
-### `UuidSetVar::new` and `set_var` need to be fallible
-
-A value carrying a control character but tab under a prefix mod_sofia sends
-as an outgoing header ships in a header field that cannot hold it.
-`Variables` refuses it; `UuidSetVar::new` and `set_var` carry it with no
-fallible step at all.
-
 ### Endpoint fields need to refuse what the module misreads
 
 A sofia profile carrying `/`, `^` or `@` or reading `gateway`, a gateway or
