@@ -1564,3 +1564,177 @@ fn parse_and_config_load_refuse_a_pair_with_the_same_typed_fault() {
         assert_eq!(message, want.to_string(), "{json}");
     }
 }
+
+/// The builder refuses every pair parse and config load refuse, at the position it would take,
+/// and leaves the set as it was.
+#[test]
+fn insert_refuses_what_no_block_carries() {
+    use VariableFault::*;
+    use VariablePart::*;
+    let cases = [
+        (VariablesType::Default, "k", "", (1, Value, Empty)),
+        (
+            VariablesType::Default,
+            "k",
+            "a}b",
+            (1, Value, ClosesUnopenedBracket('{')),
+        ),
+        (
+            VariablesType::Default,
+            "k",
+            "a{b",
+            (1, Value, UnclosedBracket('{')),
+        ),
+        (
+            VariablesType::Channel,
+            "k",
+            "it's",
+            (1, Value, QuoteInChannelScope),
+        ),
+        (
+            VariablesType::Default,
+            "k",
+            "x:_:y",
+            (1, Value, EnterpriseSeparator),
+        ),
+        (
+            VariablesType::Default,
+            "sip_h_X",
+            "a\u{1}b",
+            (1, Value, HeaderControl),
+        ),
+        (VariablesType::Default, "", "v", (1, Name, Empty)),
+        (
+            VariablesType::Default,
+            "k:_:x",
+            "v",
+            (1, Name, EnterpriseSeparator),
+        ),
+        (
+            VariablesType::Enterprise,
+            "k>",
+            "v",
+            (1, Name, ClosesUnopenedBracket('<')),
+        ),
+        (
+            VariablesType::Channel,
+            "it's",
+            "v",
+            (1, Name, QuoteInChannelScope),
+        ),
+        (VariablesType::Default, "k[1]", "v", (1, Name, ArrayIndex)),
+        (VariablesType::Default, "A", "v", (1, Name, CaseCollision)),
+    ];
+    for (scope, key, value, want) in cases {
+        let mut vars = Variables::new(scope);
+        vars.insert("a", "1")
+            .unwrap();
+        let before = vars.clone();
+        let err = vars
+            .insert(key, value)
+            .expect_err(key);
+        assert_eq!(undeliverable(err), want, "{key:?}={value:?} in {scope:?}");
+        assert_eq!(vars, before, "{key:?}={value:?} in {scope:?}");
+    }
+}
+
+#[test]
+fn insert_overwriting_a_name_refuses_at_its_position() {
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("a", "1")
+        .unwrap();
+    vars.insert("b", "2")
+        .unwrap();
+    let err = vars
+        .insert("a", "")
+        .expect_err("an empty value");
+    assert_eq!(
+        undeliverable(err),
+        (0, VariablePart::Value, VariableFault::Empty)
+    );
+    vars.insert("a", "3")
+        .expect("the same name replaces its value");
+    assert_eq!(vars.get("a"), Some("3"));
+}
+
+/// A pair inserted after the separator was chosen would split on it.
+#[test]
+fn insert_after_with_separator_refuses_the_separator() {
+    let vars = Variables::with_vars(VariablesType::Default, [("a", "1")])
+        .unwrap()
+        .with_separator(';')
+        .unwrap();
+    for (key, value, part) in [
+        ("k", "x;y", VariablePart::Value),
+        ("k;x", "v", VariablePart::Name),
+    ] {
+        let mut vars = vars.clone();
+        let err = vars
+            .insert(key, value)
+            .expect_err(key);
+        assert_eq!(
+            undeliverable(err),
+            (1, part, VariableFault::BlockSeparator(';'))
+        );
+    }
+}
+
+#[test]
+fn with_vars_refuses_the_first_pair_insert_refuses() {
+    let err = Variables::with_vars(
+        VariablesType::Default,
+        [("a", "1"), ("b", ""), ("c", "x:_:y")],
+    )
+    .expect_err("an empty value");
+    assert_eq!(
+        undeliverable(err),
+        (1, VariablePart::Value, VariableFault::Empty)
+    );
+}
+
+/// The scope picks the brackets, the channel-scope quote rule and what may separate the pairs,
+/// so a change of scope checks every held pair and the separator again, and a refusal keeps
+/// the old scope.
+#[test]
+fn set_scope_refuses_a_scope_a_held_pair_cannot_be_written_in() {
+    for (pairs, want) in [
+        (
+            [("a", "1"), ("k", "it's")],
+            (1, VariablePart::Value, VariableFault::QuoteInChannelScope),
+        ),
+        (
+            [("a", "1"), ("k", "x]y")],
+            (
+                1,
+                VariablePart::Value,
+                VariableFault::ClosesUnopenedBracket('['),
+            ),
+        ),
+        (
+            [("a", "1"), ("k's", "v")],
+            (1, VariablePart::Name, VariableFault::QuoteInChannelScope),
+        ),
+    ] {
+        let mut vars = Variables::with_vars(VariablesType::Default, pairs).unwrap();
+        let err = vars
+            .set_scope(VariablesType::Channel)
+            .expect_err("channel scope");
+        assert_eq!(undeliverable(err), want);
+        assert_eq!(vars.scope(), VariablesType::Default);
+    }
+
+    let mut piped = Variables::with_vars(VariablesType::Default, [("a", "1")])
+        .unwrap()
+        .with_separator('|')
+        .unwrap();
+    assert!(piped
+        .set_scope(VariablesType::Channel)
+        .is_err());
+    assert_eq!(piped.scope(), VariablesType::Default);
+
+    let mut plain = Variables::with_vars(VariablesType::Default, [("k", "it's")]).unwrap();
+    plain
+        .set_scope(VariablesType::Enterprise)
+        .expect("a quote is carried outside channel scope");
+    assert_eq!(plain.scope(), VariablesType::Enterprise);
+}
