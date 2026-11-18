@@ -29,6 +29,6 @@ pub use codec::{
 };
 pub use codec_string::{CodecString, CodecStringEntry};
 pub use codecs::{SdpCodecEntry, SdpCodecs, SdpMediaSection};
-pub use error::{CodecStringError, SdpCodecError, SdpWarning, UnmappedPayload};
+pub use error::{CodecStringError, SdpCodecError, SdpWarning, SwitchRejection, UnmappedPayload};
 pub use options::CodecStringOptions;
 pub use static_payload::{default_ptime, default_rate};

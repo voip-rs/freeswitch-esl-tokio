@@ -376,6 +376,71 @@ pub enum SdpWarning {
         /// The attribute name as the peer spelled it.
         attribute: String,
     },
+    /// FreeSWITCH's SDP parser refuses this offer, so the switch derives no codecs from it.
+    ///
+    /// Only the first refusal is reported: the switch's parse ends there.
+    SwitchRejects {
+        /// What the switch's parser refuses.
+        reason: SwitchRejection,
+        /// The byte offset of the line it refuses at, `None` for a line missing from the offer.
+        offset: Option<usize>,
+    },
+    /// The switch's SDP parser ends at this byte, so nothing from here on reached it.
+    ///
+    /// It ends at a line of at most one character after leading spaces and tabs, or at a NUL;
+    /// `&sdp[..offset]` is what it read, and parsing that prefix gives the switch's view.
+    SwitchStopsReading {
+        /// The byte offset where the switch's parse ends.
+        offset: usize,
+    },
+    /// The switch drops this `a=rtpmap` or `a=fmtp`: its payload type is unreadable.
+    PayloadAttributeIgnored {
+        /// The byte offset of the attribute's line.
+        offset: usize,
+    },
+}
+
+/// Why FreeSWITCH's SDP parser refuses an offer, as sofia-sip's `sdp_parse` decides it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SwitchRejection {
+    /// A session-level line that is not key=value or has a key longer than one character.
+    BadLine,
+    /// A session-level key the parser does not know.
+    UnknownField,
+    /// `r=` with no earlier `t=`.
+    RepeatWithoutTime,
+    /// `z=` with no `t=` since the last `z=`.
+    ZoneWithoutTime,
+    /// An `a=` line whose name has no token characters.
+    InvalidAttributeName,
+    /// An `m=` line whose media, port or proto cannot be read.
+    InvalidMediaLine,
+    /// An RTP format that is not a number below 128.
+    InvalidRtpFormat,
+    /// An `a=rtpmap` with no readable clock rate.
+    InvalidRtpmap,
+    /// No `o=` line.
+    MissingOrigin,
+    /// A section with a nonzero port and no `c=` on it or at session level.
+    MissingConnection,
+}
+
+impl fmt::Display for SwitchRejection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::BadLine => "a session-level line is not key=value with a one-character key",
+            Self::UnknownField => "a session-level line has a key the parser does not know",
+            Self::RepeatWithoutTime => "r= comes before any t=",
+            Self::ZoneWithoutTime => "z= has no t= since the last z=",
+            Self::InvalidAttributeName => "an a= line has no attribute name",
+            Self::InvalidMediaLine => "an m= line's media, port or proto cannot be read",
+            Self::InvalidRtpFormat => "an RTP format is not a number below 128",
+            Self::InvalidRtpmap => "an a=rtpmap has no readable clock rate",
+            Self::MissingOrigin => "there is no o= line",
+            Self::MissingConnection => "a live section has no c= on it or at session level",
+        })
+    }
 }
 
 impl SdpWarning {
@@ -496,6 +561,24 @@ impl fmt::Display for SdpWarning {
                 f,
                 "codec string carries {entries} comma-separated slots; FreeSWITCH keeps \
                  the first {limit} and drops the rest with no log"
+            ),
+            Self::SwitchRejects {
+                reason,
+                offset: Some(offset),
+            } => write!(f, "FreeSWITCH refuses this SDP at byte {offset}: {reason}"),
+            Self::SwitchRejects {
+                reason,
+                offset: None,
+            } => write!(f, "FreeSWITCH refuses this SDP: {reason}"),
+            Self::SwitchStopsReading { offset } => write!(
+                f,
+                "FreeSWITCH stops reading this SDP at byte {offset}; nothing after it \
+                 reached the switch"
+            ),
+            Self::PayloadAttributeIgnored { offset } => write!(
+                f,
+                "the payload attribute at byte {offset} has an unreadable payload type; \
+                 FreeSWITCH drops it"
             ),
         }
     }
@@ -691,6 +774,28 @@ mod tests {
             assert!(msg.contains(expected), "{msg}");
             assert!(!msg.contains(forbidden), "warning quoted its input: {msg}");
         }
+    }
+
+    #[test]
+    fn switch_warnings_name_the_offset_and_the_reason() {
+        let at = SdpWarning::SwitchRejects {
+            reason: SwitchRejection::RepeatWithoutTime,
+            offset: Some(42),
+        }
+        .to_string();
+        assert!(at.contains("byte 42"), "{at}");
+        assert!(
+            at.contains(&SwitchRejection::RepeatWithoutTime.to_string()),
+            "{at}"
+        );
+        let missing = SdpWarning::SwitchRejects {
+            reason: SwitchRejection::MissingOrigin,
+            offset: None,
+        }
+        .to_string();
+        assert!(!missing.contains("byte"), "{missing}");
+        let stop = SdpWarning::SwitchStopsReading { offset: 7 }.to_string();
+        assert!(stop.contains("byte 7"), "{stop}");
     }
 
     #[test]
