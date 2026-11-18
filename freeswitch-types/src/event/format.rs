@@ -10,7 +10,6 @@ wire_enum! {
         Xml => "xml",
     }
     error ParseEventFormatError("event format");
-    from_str: ignore_case;
 }
 
 impl EventFormat {

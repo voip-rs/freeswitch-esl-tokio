@@ -53,11 +53,10 @@ macro_rules! parse_error {
 /// ```
 ///
 /// Trailing clauses, in this order. `numeric:` needs a discriminant on every
-/// row; `from_str: ignore_case` excludes `tests:`, which rejects wrong case.
+/// row. `FromStr` is strict canonical case; `tests:` checks it rejects any other.
 ///
 /// ```ignore
 ///     numeric: from_number(u8);
-///     from_str: ignore_case;
 ///     tests: channel_state_wire_tests;
 /// ```
 macro_rules! wire_enum {
@@ -213,43 +212,6 @@ macro_rules! wire_enum {
         }
 
         wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
-    };
-
-    // Case-insensitive FromStr, no tests.
-    (
-        $(#[$enum_meta:meta])*
-        $vis:vis enum $Enum:ident {
-            $(
-                $(#[$var_meta:meta])*
-                $Variant:ident $(= $disc:literal)? => $wire:literal
-            ),+ $(,)?
-        }
-        error $Error:ident($label:literal);
-        from_str: ignore_case;
-    ) => {
-        wire_enum! {
-            @decl
-            $(#[$enum_meta])*
-            $vis enum $Enum {
-                $(
-                    $(#[$var_meta])*
-                    $Variant $(= $disc)? => $wire
-                ),+
-            }
-            error $Error($label);
-        }
-
-        impl ::std::str::FromStr for $Enum {
-            type Err = $Error;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                $(
-                    if s.eq_ignore_ascii_case($wire) {
-                        return Ok(Self::$Variant);
-                    }
-                )+
-                Err($Error(s.to_string()))
-            }
-        }
     };
 
     // Base expansion, no tests.

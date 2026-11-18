@@ -32,12 +32,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `EventFormat::from_str` is case-insensitive on a wire token
-
-The value goes on the wire in `event <format> ...`, so under the FromStr casing
-rule it should be strict canonical like every other `wire_enum!`. Tightening
-rejects input it accepts today.
-
 ### `EventSubscription::custom_subclass_list` should be `custom_subclasses`
 
 Every other pair on the type is `x()`/`x_mut()`; this reader is the odd one.

@@ -97,3 +97,4 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | 2.x | 3.0 |
 |---|---|
 | `SipPassthroughHeader::is_array_header()` returns `bool`, `false` for a header the catalog does not register | returns `Option<bool>`: `None` for an unregistered `sip_i_` header, which arrives as an `ARRAY::` value whenever the message repeats it; `Some(false)` for every other prefix |
+| `"JSON".parse::<EventFormat>()` and any other casing of `plain`, `json`, `xml` | refused; the token is parsed in its wire case only. Serde is unchanged: it reads the variant name (`"Json"`), as in 2.x |
