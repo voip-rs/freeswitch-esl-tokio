@@ -312,13 +312,45 @@ Emitted form is `modname.encoding` plus rate, ptime and bitrate/channels
 (`:13538`). The **audio** path emits no `~fmtp`; only the video path does
 (`:13767`, `:13808`).
 
+### Which lines the switch reads
+
+The walk runs over what sofia-sip's `sdp_parse` built, called with flags 0 and
+the length from `strlen`, so the input ends at the first NUL. In `sdp_parse.c`:
+
+- `next()` splits lines on any run of CR or LF bytes, so a bare CR ends a line,
+  and strips leading spaces and tabs. A line that is empty after that, or one
+  byte long, ends the parse with no error: in a media section that section and
+  every later one are cut there, in the session part the session has no media.
+- `parse_message` (up to the first `m=`) refuses the offer at a line that is
+  not key=value with a one-byte key, an unknown key, or `r=`/`z=` with no `t=`
+  before it. `parse_descs` (from the first `m=`) skips any such line instead.
+- `parse_media` refuses an `m=` whose media, port or proto cannot be read, and
+  an RTP format that is not a number below 128. The static payload names come
+  from `sdp_rtpmap_well_known`.
+- `parse_media_attr` reads no attribute of a port-0 section and forces it
+  inactive. Elsewhere it matches attribute names in any case, lets each
+  direction attribute overwrite the last, drops an `a=rtpmap` or `a=fmtp`
+  whose payload type is unreadable, binds one to the first `m=` entry with its
+  payload type, and refuses the offer at an `a=rtpmap` of a listed type with no
+  readable rate.
+- `sdp_sanity_check` refuses an offer with no `o=`, or with no `c=` at session
+  level and a section with a nonzero port and no `c=` of its own. A one-byte
+  line in the session part returns before it runs.
+
+`SdpCodecs::parse` follows these rules but never fails where the switch would
+refuse or stop: the first refusal comes back as `SdpWarning::SwitchRejects` and
+the stop as `SdpWarning::SwitchStopsReading`, each with a byte offset. The
+input before a stop is exactly what the switch read. Values of lines extraction
+never reads (`o=`, `c=`, `b=`, `t=`, `r=`, `z=`, `k=`) are not validated, so a
+refusal for one of them alone is not reported.
+
 ### Walk
 
 - session-level `a=ptime` is read first as a default (`:13594-13603`), then
   overridden per media section (`:13617-13619`)
 - m-lines with port 0 contribute nothing (`:13608`, `:13650`). They are still
-  parsed here and reachable through `SdpCodecs::sections()` — a held stream is
-  what a reader most needs
+  reachable through `SdpCodecs::sections()`, carrying what the switch read there
+  unless `SdpParseOptions::with_port_zero_attributes` asks for what the peer wrote
 - any `m=image` with a nonzero port contributes the literal `t38`, regardless of
   proto or fmt (`:13650-13651`)
 - the walk reads `m->m_rtpmaps`, which libsofia fills only for the protos

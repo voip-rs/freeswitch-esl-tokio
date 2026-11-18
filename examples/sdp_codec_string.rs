@@ -136,9 +136,8 @@ async fn handle_answered_channel(
 ) {
     let short = short_uuid(uuid);
 
-    // SdpCodecs::parse fails only on structural breakage: missing v=, malformed
-    // a=rtpmap, non-numeric payload type. Unknown codecs with no a=rtpmap go to
-    // unmapped(), so the parse succeeds even for exotic carrier SDPs.
+    // Fails only on input that is not SDP. What the switch itself would refuse, or
+    // stop reading at, comes back in warnings() below instead.
     let parsed = match SdpCodecs::parse(sdp_str) {
         Ok(p) => p,
         Err(e) => {
@@ -222,8 +221,8 @@ async fn handle_answered_channel(
         warn!("{}: {}", short, u);
     }
 
-    // warnings(): recoverable parse oddities, e.g. an unparseable a=ptime value.
-    // The parser records these and continues, matching FreeSWITCH's atoi tolerance.
+    // warnings(): oddities the parse read past, such as an unparseable a=ptime or a
+    // line where the switch's own parser refuses the offer (SwitchRejects).
     for w in parsed.warnings() {
         warn!("{}: SDP warning: {}", short, w);
     }
