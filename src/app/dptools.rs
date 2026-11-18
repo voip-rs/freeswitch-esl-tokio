@@ -1,11 +1,9 @@
 //! FreeSWITCH dptools application commands (`answer`, `hangup`, `playback`, etc.).
 
-use std::fmt;
-
 use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
-use crate::commands::UndeliverableVariable;
+use crate::commands::{BlockParse, BridgeDialString, UndeliverableVariable};
 use freeswitch_types::wire_safety::check_header_value;
 
 /// Constructors for common dptools application commands.
@@ -40,9 +38,16 @@ impl AppCommand {
         execute("playback", Some(file.to_string()))
     }
 
-    /// `destination`: dial string for the B-leg, such as a
-    /// [`BridgeDialString::render`](crate::commands::BridgeDialString::render) output.
-    pub fn bridge(destination: impl fmt::Display) -> EslCommand {
+    /// Bridge to `destination`, rendered for a switch whose dialplan parser is
+    /// `block_parse`.
+    pub fn bridge(destination: &BridgeDialString, block_parse: BlockParse) -> EslCommand {
+        Self::bridge_raw(&destination.render(block_parse))
+    }
+
+    /// Bridge to a dial string sent verbatim, such as one
+    /// [`Endpoint::render`](crate::Endpoint::render) wrote for
+    /// [`DialStringCarrier::Dialplan`](crate::DialStringCarrier::Dialplan).
+    pub fn bridge_raw(destination: &str) -> EslCommand {
         execute("bridge", Some(destination.to_string()))
     }
 
@@ -58,30 +63,32 @@ impl AppCommand {
         execute("park", None)
     }
 
-    /// Transfer the channel to another dialplan extension.
+    /// Transfer the channel to `extension` in its own dialplan and context.
     ///
-    /// FreeSWITCH transfer args are positional: `extension [dialplan [context]]`.
-    /// When `context` is set but `dialplan` is `None`, the default `XML` is
-    /// emitted to fill the positional gap.
-    pub fn transfer(
-        extension: &str,
-        dialplan: Option<DialplanType>,
-        context: Option<&str>,
-    ) -> EslCommand {
-        let mut args = extension.to_string();
-        let has_ctx = context.is_some();
-        if let Some(dp) = dialplan {
-            args.push(' ');
-            args.push_str(&dp.to_string());
-        } else if has_ctx {
-            args.push_str(" XML");
-        }
-        if let Some(ctx) = context {
-            args.push(' ');
-            args.push_str(ctx);
-        }
+    /// The switch takes `force_transfer_dialplan` and `force_transfer_context`
+    /// first, then the caller profile's, with `inline` falling back to `XML`.
+    pub fn transfer(extension: &str) -> EslCommand {
+        execute("transfer", Some(extension.to_string()))
+    }
 
-        execute("transfer", Some(args))
+    /// Transfer the channel to `extension` under `dialplan`, keeping its context.
+    pub fn transfer_to_dialplan(extension: &str, dialplan: DialplanType) -> EslCommand {
+        execute("transfer", Some(format!("{extension} {dialplan}")))
+    }
+
+    /// Transfer the channel to `extension` in `context` under `dialplan`.
+    ///
+    /// The arguments are positional, so a context always names its dialplan:
+    /// leaving it to the channel needs [`transfer`](Self::transfer).
+    pub fn transfer_to_context(
+        extension: &str,
+        dialplan: DialplanType,
+        context: &str,
+    ) -> EslCommand {
+        execute(
+            "transfer",
+            Some(format!("{extension} {dialplan} {context}")),
+        )
     }
 }
 
@@ -98,26 +105,32 @@ mod tests {
 
     #[test]
     fn transfer_extension_only() {
-        let cmd = AppCommand::transfer("1000", None, None);
+        let cmd = AppCommand::transfer("1000");
         assert_eq!(extract_args(&cmd), Some("1000"));
     }
 
     #[test]
     fn transfer_with_dialplan() {
-        let cmd = AppCommand::transfer("1000", Some(DialplanType::XML), None);
+        let cmd = AppCommand::transfer_to_dialplan("1000", DialplanType::XML);
         assert_eq!(extract_args(&cmd), Some("1000 XML"));
     }
 
     #[test]
     fn transfer_with_dialplan_and_context() {
-        let cmd = AppCommand::transfer("1000", Some(DialplanType::XML), Some("myctx"));
+        let cmd = AppCommand::transfer_to_context("1000", DialplanType::XML, "myctx");
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
 
     #[test]
-    fn transfer_context_without_dialplan_fills_gap() {
-        let cmd = AppCommand::transfer("1000", None, Some("myctx"));
-        assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
+    fn bridge_renders_the_dial_string() {
+        use crate::commands::{Endpoint, SofiaGateway};
+        let gateway = SofiaGateway::new("primary", "18005551234").unwrap();
+        let bridge = BridgeDialString::new(vec![vec![Endpoint::SofiaGateway(gateway)]]).unwrap();
+        let cmd = AppCommand::bridge(&bridge, BlockParse::PairSplitCleans);
+        assert_eq!(
+            extract_args(&cmd),
+            Some("sofia/gateway/primary/18005551234")
+        );
     }
 
     #[test]

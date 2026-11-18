@@ -49,8 +49,8 @@ mod common;
 use freeswitch_esl_tokio::commands::LoopbackEndpoint;
 use freeswitch_esl_tokio::variables::LoopbackChannelName;
 use freeswitch_esl_tokio::{
-    AppCommand, Application, Endpoint, EslClient, EslEventStream, EslEventType, EventFormat,
-    EventSubscription, HeaderLookup, Originate, Variables, VariablesType,
+    AppCommand, Application, DialplanType, Endpoint, EslClient, EslEventStream, EslEventType,
+    EventFormat, EventSubscription, HeaderLookup, Originate, Variables, VariablesType,
 };
 use std::process::Stdio;
 use std::time::Duration;
@@ -357,7 +357,11 @@ async fn run_ivr(
 
     if *orphaned.borrow() {
         client
-            .send_command(AppCommand::transfer(fallback, None, Some(context)))
+            .send_command(AppCommand::transfer_to_context(
+                fallback,
+                DialplanType::XML,
+                context,
+            ))
             .await?
             .check()?;
         return Ok(format!(
@@ -388,7 +392,11 @@ async fn run_ivr(
     // ours to finish; what is gone is anyone to report a decision to.
     if *orphaned.borrow() {
         client
-            .send_command(AppCommand::transfer(fallback, None, Some(context)))
+            .send_command(AppCommand::transfer_to_context(
+                fallback,
+                DialplanType::XML,
+                context,
+            ))
             .await?
             .check()?;
         return Ok(format!(
@@ -400,7 +408,11 @@ async fn run_ivr(
     match choice.as_deref() {
         Some(digit) if !digit.is_empty() => {
             client
-                .send_command(AppCommand::transfer(fallback, None, Some(context)))
+                .send_command(AppCommand::transfer_to_context(
+                    fallback,
+                    DialplanType::XML,
+                    context,
+                ))
                 .await?
                 .check()?;
             Ok(format!("digit {digit}; transferred to {fallback}"))

@@ -188,7 +188,7 @@ async fn handle_dtmf_input(client: &EslClient, input: &str) -> Result<(), EslErr
                 .await?
                 .check()?;
             client
-                .send_command(AppCommand::transfer(input, None, None))
+                .send_command(AppCommand::transfer(input))
                 .await?
                 .check()?;
         }
@@ -199,7 +199,7 @@ async fn handle_dtmf_input(client: &EslClient, input: &str) -> Result<(), EslErr
                 .await?
                 .check()?;
             client
-                .send_command(AppCommand::transfer("operator", None, None))
+                .send_command(AppCommand::transfer("operator"))
                 .await?
                 .check()?;
         }

@@ -127,7 +127,7 @@ let bridge = BridgeDialString::new(vec![
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
 // Use with the bridge dptools application
-client.send_command(AppCommand::bridge(bridge.render(block_parse))).await?;
+client.send_command(AppCommand::bridge(&bridge, block_parse)).await?;
 # Ok(())
 # }
 ```

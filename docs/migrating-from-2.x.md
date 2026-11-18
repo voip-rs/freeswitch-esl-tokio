@@ -78,7 +78,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `s.parse::<Originate>()`, `s.parse::<BridgeDialString>()` | `Originate::parse_for(s, block_parse)`, `BridgeDialString::parse_for(s, block_parse)` |
 | `Originate::display_with(block_parse)`, `BridgeDialString::display_with(block_parse)` and their `OriginateDisplay`, `BridgeDialStringDisplay` adapters | `render(block_parse)`, which returns the `String` |
 | `Originate::parse_with(s, block_parse)`, `BridgeDialString::parse_with(s, block_parse)` | `parse_for(s, block_parse)` |
-| `AppCommand::bridge(bridge)` with a `BridgeDialString` or `Endpoint` | `AppCommand::bridge(bridge.render(block_parse))`, or `endpoint.render(DialStringTarget::new(DialStringCarrier::Dialplan, block_parse))` |
+| `AppCommand::bridge(destination: impl Display)` with a `BridgeDialString`, an `Endpoint` or a string | `AppCommand::bridge(&bridge, block_parse)` for a `BridgeDialString`; `AppCommand::bridge_raw(&s)` sends a string verbatim, such as `endpoint.render(DialStringTarget::new(DialStringCarrier::Dialplan, block_parse))` |
 | `FlattenedDialString::display_for(target)` and its `FlattenedDialStringDisplay` adapter | `render(target)`, which returns the `String`; `display_raw()` stays and returns an `impl Display` |
 | `BlockParse::default()`, `BlockParse: Default` | `BlockParse::for_version(&version)` for the release you target, or a named revision such as `BlockParse::PairSplitCleans` |
 | `DialStringTarget::new(carrier)` | `DialStringTarget::new(carrier, block_parse)` |
@@ -132,3 +132,6 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `EslCommand::FilterDelete { header: "all", .. }` and `filter_delete_raw("all", value)` send `filter delete all`, warning when a value is dropped | refused in any case with `EslError::FilterDeleteAllHeader`; send `EslCommand::FilterDeleteAll` or call `filter_delete_all()` |
 | `EslClient::getvar(name)` returning `EslResult<String>`, the reply text verbatim | `getvar_raw(name)` |
 | `EslClient::getvar_opt(name)` returning `EslResult<Option<String>>` | `getvar(name)`; an unset variable (`_undef_`, an empty reply, or the switch's `-ERR command not found` filler) is `None` |
+| `AppCommand::transfer(extension, None, None)` | `AppCommand::transfer(extension)` |
+| `AppCommand::transfer(extension, Some(dialplan), None)` | `AppCommand::transfer_to_dialplan(extension, dialplan)` |
+| `AppCommand::transfer(extension, dialplan, Some(context))`, which wrote `XML` for a `None` dialplan | `AppCommand::transfer_to_context(extension, dialplan, context)`; the dialplan is named, since leaving it out lets the switch use the channel's own (or `force_transfer_dialplan`), which `XML` overrode |

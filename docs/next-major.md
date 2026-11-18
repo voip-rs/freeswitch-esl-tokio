@@ -20,12 +20,6 @@ public surface breaks this crate's too. There is no separate work item — the
 bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
-### `AppCommand::transfer` takes two positional `Option`s
-
-`transfer(extension, Option<DialplanType>, Option<&str>)` documents the
-interaction of its options instead of typing it. An options struct or named
-variants.
-
 ### `EslError::ReexecFailed`, `JsonError`, `XmlError` carry no source
 
 Each stringifies the underlying error into a `String` field. Boxed `#[source]`
