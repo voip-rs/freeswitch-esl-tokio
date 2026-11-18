@@ -603,6 +603,24 @@ mod tests {
         );
     }
 
+    /// RFC 3261 §7.2: a status code is three digits; the 9xx nua reports are kept.
+    #[test]
+    fn sip_status_code_takes_three_digits_with_a_nonzero_first() {
+        let mut map = HashMap::new();
+        for (raw, code) in [("100", 100), ("699", 699), ("904", 904), ("999", 999)] {
+            map.insert("Status".to_string(), raw.to_string());
+            assert_eq!(map.sip_status_code(), Ok(Some(code)), "{raw}");
+        }
+        for raw in ["+200", "0200", "042", "42", "1000", "20 0", "", "099"] {
+            map.insert("Status".to_string(), raw.to_string());
+            assert_eq!(
+                map.sip_status_code(),
+                Err(ParseSipStatusCodeError(raw.into())),
+                "{raw:?}"
+            );
+        }
+    }
+
     #[test]
     fn every_accessor_error_converts_into_the_union() {
         let cases: Vec<(ParseHeaderError, &str)> = vec![
