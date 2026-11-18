@@ -401,6 +401,27 @@ mod tests {
         assert_eq!(EslArray::parse(&arr.to_string()), Ok(arr));
     }
 
+    /// No items and one empty item both render a bare `ARRAY::`, which
+    /// `switch_event_add_array` drops and the switch never emits.
+    #[test]
+    fn an_array_rendering_a_bare_prefix_is_refused() {
+        assert_eq!(EslArray::new(vec![]), Err(EslArrayError::Empty));
+        assert_eq!(
+            EslArray::new(vec![String::new()]),
+            Err(EslArrayError::Empty)
+        );
+        assert_eq!(EslArray::parse("ARRAY::"), Err(EslArrayError::Empty));
+        let two_empty = EslArray::new(vec![String::new(), String::new()]).unwrap();
+        assert_eq!(two_empty.to_string(), "ARRAY::|:");
+        assert_eq!(EslArray::parse("ARRAY::|:"), Ok(two_empty));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize_refuses_an_empty_array() {
+        assert!(serde_json::from_str::<EslArray>("[]").is_err());
+    }
+
     #[cfg(feature = "serde")]
     #[test]
     fn deserialize_refuses_a_separator_in_an_item() {
