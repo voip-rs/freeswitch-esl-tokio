@@ -4,6 +4,11 @@
 //!
 //! The unit is the files of `UNITS` joined, each `//@` directive line replaced by what it names in
 //! the tree; `extract.rs` holds the directive grammar.
+//!
+//! sofia-sip's `sdp_parse` is compiled apart from the trees: one build, from the commit the index
+//! pins under `sofia_sip`, read out of the clone `SOFIA_SIP_SOURCE` names. Its files are taken
+//! whole, never extracted, beside a stub `su_alloc` and the configure headers in `c/sdp`, because
+//! the switch links sofia as a library and every tree it tracks ships the same parser.
 
 #[path = "build/extract.rs"]
 mod extract;
@@ -101,6 +106,12 @@ struct Index {
     freeswitch: Pinned,
     #[serde(default)]
     trees: Vec<Named>,
+    sofia_sip: SofiaPin,
+}
+
+#[derive(Deserialize)]
+struct SofiaPin {
+    commit: String,
 }
 
 #[derive(Deserialize)]
@@ -185,6 +196,146 @@ fn main() {
     generated += &modules;
     let file = out.join("trees.rs");
     fs::write(&file, generated).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
+
+    let file = out.join("sdp.rs");
+    let generated = sofia_sdp(&manifest, &out, &index, &target_os);
+    fs::write(&file, generated).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
+}
+
+/// What `c/sdp/oracle_sdp.c` reports through its callback, numbered alike in C and in Rust.
+const SDP_TAGS: &[&str] = &[
+    "ERROR",
+    "SESSION_ATTR",
+    "MEDIA",
+    "PORT",
+    "MODE",
+    "REJECTED",
+    "FORMAT",
+    "RTPMAP",
+    "ENCODING",
+    "RATE",
+    "PARAMS",
+    "FMTP",
+    "PREDEF",
+    "MEDIA_ATTR",
+];
+
+/// sofia-sip's files the SDP oracle compiles or includes, each read at the pinned commit and
+/// written under the build directory at the same path below `libsofia-sip-ua/<module>/`.
+const SOFIA_FILES: &[&str] = &[
+    "libsofia-sip-ua/sdp/sdp_parse.c",
+    "libsofia-sip-ua/sdp/sofia-sip/sdp.h",
+    "libsofia-sip-ua/su/su_string.c",
+    "libsofia-sip-ua/su/sofia-sip/su_alloc.h",
+    "libsofia-sip-ua/su/sofia-sip/su_config.h",
+    "libsofia-sip-ua/su/sofia-sip/su_string.h",
+    "libsofia-sip-ua/su/sofia-sip/su_types.h",
+];
+
+/// Compile sofia-sip's `sdp_parse` at the pin the index names under `sofia_sip`, read out of the
+/// clone `SOFIA_SIP_SOURCE` names, and return the Rust its module includes.
+fn sofia_sdp(manifest: &Path, out: &Path, index: &Path, target_os: &str) -> String {
+    println!("cargo::rerun-if-env-changed=SOFIA_SIP_SOURCE");
+    println!("cargo::rustc-check-cfg=cfg(c_oracle_sdp)");
+    let mut generated = String::new();
+    for (number, tag) in (1..).zip(SDP_TAGS) {
+        generated += &format!("const SDP_{tag}: c_int = {number};\n");
+    }
+    let built = sofia_source(index, target_os).and_then(|(root, commit)| {
+        let dir = out.join("sofia");
+        for path in SOFIA_FILES {
+            let output = git(&root)
+                .arg("show")
+                .arg(format!("{commit}:{path}"))
+                .output()
+                .map_err(|e| format!("running git: {e}"))?;
+            if !output
+                .status
+                .success()
+            {
+                return Err(format!(
+                    "{path} at {commit}: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ));
+            }
+            let dest = dir.join(
+                path.split_once("/sofia-sip/")
+                    .map_or_else(
+                        || {
+                            Path::new(path)
+                                .file_name()
+                                .expect("every listed path names a file")
+                                .into()
+                        },
+                        |(_, header)| PathBuf::from("include/sofia-sip").join(header),
+                    ),
+            );
+            fs::create_dir_all(
+                dest.parent()
+                    .expect("every destination has a directory"),
+            )
+            .unwrap_or_else(|e| panic!("creating {}: {e}", dest.display()));
+            fs::write(&dest, output.stdout)
+                .unwrap_or_else(|e| panic!("writing {}: {e}", dest.display()));
+        }
+        let mut build = cc::Build::new();
+        // sofia-sip's code as it ships, so its warnings are not ours to fix.
+        build
+            .warnings(false)
+            .include(manifest.join("c/sdp/include"))
+            .include(dir.join("include"))
+            .file(dir.join("sdp_parse.c"))
+            .file(dir.join("su_string.c"))
+            .file(manifest.join("c/sdp/su_home.c"))
+            .file(manifest.join("c/sdp/oracle_sdp.c"));
+        for (number, tag) in (1..).zip(SDP_TAGS) {
+            build.define(
+                &format!("SDP_{tag}"),
+                number
+                    .to_string()
+                    .as_str(),
+            );
+        }
+        build.compile("sofia_sdp");
+        println!("cargo::rustc-cfg=c_oracle_sdp");
+        Ok(())
+    });
+    if let Err(missing) = &built {
+        println!("cargo::warning=sofia-sip SDP oracle not built: {missing}");
+    }
+    generated + &format!("static SOFIA_SDP: Result<(), &str> = {built:?};\n")
+}
+
+/// The clone `SOFIA_SIP_SOURCE` names and the commit the index pins, or why there is none.
+fn sofia_source(index: &Path, target_os: &str) -> Result<(PathBuf, String), String> {
+    if target_os != "linux" {
+        return Err(format!("target OS is {target_os}, not linux"));
+    }
+    let root = match env::var_os("SOFIA_SIP_SOURCE") {
+        None => return Err("SOFIA_SIP_SOURCE is not set".to_owned()),
+        Some(root) if root.is_empty() => return Err("SOFIA_SIP_SOURCE is empty".to_owned()),
+        Some(root) => PathBuf::from(root),
+    };
+    let yaml =
+        fs::read_to_string(index).unwrap_or_else(|e| panic!("reading {}: {e}", index.display()));
+    let index: Index =
+        yaml_serde::from_str(&yaml).unwrap_or_else(|e| panic!("parsing {}: {e}", index.display()));
+    let commit = index
+        .sofia_sip
+        .commit;
+    let output = git(&root)
+        .arg("cat-file")
+        .arg("-e")
+        .arg(format!("{commit}^{{commit}}"))
+        .output()
+        .map_err(|e| format!("running git: {e}"))?;
+    if !output
+        .status
+        .success()
+    {
+        return Err(format!("SOFIA_SIP_SOURCE has no commit {commit}"));
+    }
+    Ok((root, commit))
 }
 
 /// Every unit's text, in `UNITS` order.

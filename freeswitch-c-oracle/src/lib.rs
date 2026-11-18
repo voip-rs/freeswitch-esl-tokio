@@ -1,5 +1,6 @@
 //! FreeSWITCH's C that `freeswitch-types` ports, compiled from every tree `hooks/source-refs.yaml`
-//! names, for differential tests of the port against each.
+//! names, for differential tests of the port against each, and sofia-sip's SDP parser from the
+//! release the index pins, which the switch links whatever its tree.
 //!
 //! Every call works on bytes, and the C reads its input up to the first NUL. Passes that install
 //! channel variables or call into the core run against stubs that report each call and store
@@ -11,8 +12,12 @@ mod every_tree;
 #[cfg(test)]
 #[path = "../build/extract.rs"]
 mod extract;
+mod sdp;
 
 pub use every_tree::{against_the_c, config, on_every_tree, oracles, trees_agree};
+pub use sdp::{
+    against_sofia, sofia_sdp, SdpAttribute, SdpMedia, SdpParse, SdpRtpmap, SdpSession, SofiaSdp,
+};
 
 /// One FreeSWITCH tree the build compiles: the pin, or an entry of `trees` in the index.
 #[derive(Debug)]
