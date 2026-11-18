@@ -42,18 +42,27 @@ impl fmt::Display for SdpMediaType {
     }
 }
 
+/// Matched in any case, as sofia-sip's `sdp_media_type` matches it: `m=AUDIO` is an audio section
+/// to the switch. [`Other`](SdpMediaType::Other) keeps the spelling it was given.
 impl FromStr for SdpMediaType {
     type Err = std::convert::Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
-            "audio" => Self::Audio,
-            "video" => Self::Video,
-            "application" => Self::Application,
-            "text" => Self::Text,
-            "message" => Self::Message,
-            other => Self::Other(other.to_string()),
-        })
+        let known = [
+            Self::Audio,
+            Self::Video,
+            Self::Application,
+            Self::Text,
+            Self::Message,
+        ];
+        Ok(known
+            .into_iter()
+            .find(|known| {
+                known
+                    .to_string()
+                    .eq_ignore_ascii_case(s)
+            })
+            .unwrap_or_else(|| Self::Other(s.to_string())))
     }
 }
 
