@@ -1,5 +1,7 @@
 use super::*;
-use crate::commands::endpoint::{LoopbackEndpoint, SofiaEndpoint, SofiaGateway};
+use crate::commands::endpoint::{
+    GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint, SofiaGateway,
+};
 use crate::commands::originate_split;
 use crate::commands::variables::InvalidArgvSeparator;
 
@@ -1620,6 +1622,109 @@ fn a_parenthesis_refusal_points_at_the_inline_action_list() {
     assert_eq!(
         originate.render(BlockParse::MEASURED),
         r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800)' inline"
+    );
+}
+
+/// The builders refuse an `undef` positional and target as config load does: the switch
+/// reads either as absent, and asserts on an absent target.
+#[test]
+fn builders_refuse_an_undef_positional_and_target() {
+    let park = || Originate::application(test_endpoint(), Application::park()).unwrap();
+    assert_eq!(
+        park().with_context("undef"),
+        Err(OriginateError::UndefPositional("context"))
+    );
+    assert_eq!(
+        park().with_cid_name("UNDEF"),
+        Err(OriginateError::UndefPositional("cid_name"))
+    );
+    assert_eq!(
+        park().with_cid_num("Undef"),
+        Err(OriginateError::UndefPositional("cid_num"))
+    );
+    assert_eq!(
+        Originate::extension(test_endpoint(), "uNdEf"),
+        Err(OriginateError::UndefPositional("target"))
+    );
+    assert_eq!(
+        Originate::inline(test_endpoint(), [Application::simple("undef")]),
+        Err(OriginateError::UndefPositional("target"))
+    );
+    assert!(park()
+        .with_cid_name("undefined")
+        .is_ok());
+}
+
+/// The constructors refuse a target `originate_function` runs as something else, as config
+/// load does; an inline action list still carries a `)`.
+#[test]
+fn constructors_refuse_a_target_read_as_something_else() {
+    assert_eq!(
+        Originate::extension(test_endpoint(), "&park()"),
+        Err(OriginateError::ExtensionReadsAsApplication)
+    );
+    for app in [
+        Application::new("park", Some("a)b")),
+        Application::simple("pa(rk"),
+    ] {
+        assert!(
+            matches!(
+                Originate::application(test_endpoint(), app.clone()),
+                Err(OriginateError::ParenthesisInApplication { .. })
+            ),
+            "{app:?}"
+        );
+    }
+    assert!(Originate::extension(test_endpoint(), "&").is_ok());
+    assert!(Originate::inline(
+        test_endpoint(),
+        [Application::new(
+            "playback",
+            Some("tone_stream://%(500,0,800)")
+        )]
+    )
+    .is_ok());
+}
+
+/// A dialplan the target cannot run under is refused whichever builder sets it last.
+#[test]
+fn builders_refuse_a_mismatched_dialplan() {
+    assert_eq!(
+        Originate::extension(test_endpoint(), "1000")
+            .unwrap()
+            .with_dialplan(DialplanType::INLINE),
+        Err(OriginateError::ExtensionWithInlineDialplan)
+    );
+    assert_eq!(
+        Originate::inline(test_endpoint(), [Application::park()])
+            .unwrap()
+            .with_dialplan(DialplanType::XML),
+        Err(OriginateError::InlineApplicationsWithDialplan)
+    );
+}
+
+/// `originate` over the API never expands a `sofia_contact` or `group_call` expression, so
+/// every constructor refuses one as config load does.
+#[test]
+fn constructors_refuse_an_expression_endpoint() {
+    let contact = || Endpoint::SofiaContact(SofiaContact::new("1000", "example.com").unwrap());
+    let group = || Endpoint::GroupCall(GroupCall::new("sales", "example.com").unwrap());
+    let refused = |endpoint: &'static str| OriginateError::UnexpandedExpression { endpoint };
+    assert_eq!(
+        Originate::extension(contact(), "1000"),
+        Err(refused("sofia_contact"))
+    );
+    assert_eq!(
+        Originate::application(group(), Application::park()),
+        Err(refused("group_call"))
+    );
+    assert_eq!(
+        Originate::inline(contact(), [Application::park()]),
+        Err(refused("sofia_contact"))
+    );
+    assert_eq!(
+        Originate::inline_with_delimiter(group(), [Application::park()], ';'),
+        Err(refused("group_call"))
     );
 }
 
