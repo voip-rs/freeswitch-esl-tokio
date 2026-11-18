@@ -712,6 +712,28 @@ mod tests {
         assert!(lossy.is_empty());
     }
 
+    /// A raw non-UTF-8 byte in the envelope is a framing fault, so it ends the
+    /// session, and the decoder's offset survives as the error's source.
+    #[test]
+    fn non_utf8_envelope_keeps_the_decoder_error() {
+        let mut parser = EslParser::new();
+        parser
+            .add_data(b"Content-Type: command/reply\nReply-Text: +OK \xff\n\n")
+            .unwrap();
+        let err = parser
+            .parse_message()
+            .unwrap_err();
+        assert!(err.is_connection_error(), "{err}");
+        assert!(!err.is_recoverable(), "{err}");
+        let source = std::error::Error::source(&err).expect("no source");
+        assert!(
+            source
+                .downcast_ref::<std::str::Utf8Error>()
+                .is_some(),
+            "{source}"
+        );
+    }
+
     #[test]
     fn test_connect_response_non_utf8_value_strict_error() {
         let mut parser = EslParser::new().with_strict_header_utf8(true);

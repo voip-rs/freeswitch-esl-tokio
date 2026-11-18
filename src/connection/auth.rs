@@ -395,6 +395,24 @@ mod tests {
     }
 
     #[test]
+    fn salvage_of_non_utf8_keeps_the_decoder_error() {
+        let mut parser = EslParser::new();
+        parser
+            .add_data(b"Content-Type: command/reply\nReply-Text: +OK \xff\n")
+            .unwrap();
+        let err = salvage_truncated_auth_response(&mut parser).unwrap_err();
+        assert!(err.is_connection_error(), "{err}");
+        assert!(!err.is_recoverable(), "{err}");
+        let source = std::error::Error::source(&err).expect("no source");
+        assert!(
+            source
+                .downcast_ref::<std::str::Utf8Error>()
+                .is_some(),
+            "{source}"
+        );
+    }
+
+    #[test]
     fn salvage_wrong_content_type_returns_error() {
         let wire_data = "Content-Type: auth/request\n";
         let mut parser = EslParser::new();
