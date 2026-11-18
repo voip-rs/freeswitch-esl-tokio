@@ -511,6 +511,22 @@ mod tests {
         assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     }
 
+    /// The switch deletes a header set to an empty value, so there is nothing to stack onto.
+    #[test]
+    fn stacking_onto_an_empty_header_sets_it() {
+        let mut event = EslEvent::new();
+        event.set_header("X-Push", "");
+        event
+            .push_header("X-Push", "v")
+            .unwrap();
+        assert_eq!(event.header_str("X-Push"), Some("v"));
+        event.set_header("X-Unshift", "");
+        event
+            .unshift_header("X-Unshift", "v")
+            .unwrap();
+        assert_eq!(event.header_str("X-Unshift"), Some("v"));
+    }
+
     #[test]
     fn test_push_header_at_capacity() {
         use crate::variables::MAX_ARRAY_ITEMS;
