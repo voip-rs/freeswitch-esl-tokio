@@ -767,8 +767,8 @@ mod tests {
         ));
     }
 
-    /// Framing resolves through the store's case rule, not the normaliser's
-    /// spelling of the framing headers.
+    /// Framing reads the key the normaliser stored, so a lowercase framing
+    /// header still frames its body.
     #[test]
     fn lowercase_framing_headers_still_frame_the_body() {
         let mut parser = EslParser::new();

@@ -12,6 +12,7 @@ use crate::{
     constants::{CONTENT_TYPE_LOG_DATA, HEADER_CONTENT_TYPE, READER_TICK_MS, SOCKET_BUF_SIZE},
     error::EslError,
     event::{EslEvent, EventFormat},
+    headers::normalize_header_key,
     protocol::{EslMessage, EslParser, MessageType},
 };
 
@@ -397,7 +398,7 @@ async fn dispatch_message(
             }
             let controlled_session_uuid = message
                 .headers
-                .get("Controlled-Session-UUID")
+                .get(&normalize_header_key("Controlled-Session-UUID"))
                 .cloned();
             info!("Received disconnect notice from server");
             return ControlFlow::Break(Some(DisconnectReason::ServerNotice {
