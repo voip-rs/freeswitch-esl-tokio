@@ -33,6 +33,39 @@ async fn test_disconnect_notice() {
     }
 }
 
+/// The session-bound notice mod_event_socket sends; no `EventHeader` names
+/// `Controlled-Session-UUID`, so only a case-insensitive read finds it.
+#[tokio::test]
+async fn disconnect_notice_carries_the_controlled_session_uuid() {
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    let body = "Disconnected, goodbye.\n";
+    mock.send_raw(&format!(
+        "Content-Type: text/disconnect-notice\n\
+         Controlled-Session-UUID: 5c4f1a2e-0000-4000-8000-000000000001\n\
+         Content-Disposition: disconnect\n\
+         Content-Length: {}\n\n{body}",
+        body.len()
+    ))
+    .await
+    .unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("timeout");
+    assert!(result.is_none());
+    match client.status() {
+        ConnectionStatus::Disconnected(DisconnectReason::ServerNotice {
+            controlled_session_uuid,
+            ..
+        }) => assert_eq!(
+            controlled_session_uuid.as_deref(),
+            Some("5c4f1a2e-0000-4000-8000-000000000001")
+        ),
+        other => panic!("Expected ServerNotice, got: {:?}", other),
+    }
+}
+
 #[tokio::test]
 async fn test_tcp_disconnect() {
     let (mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
