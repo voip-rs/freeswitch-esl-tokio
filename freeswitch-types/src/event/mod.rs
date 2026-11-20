@@ -11,7 +11,7 @@ pub use subscription::{
     FilterHeaderFault,
 };
 
-use crate::headers::EventHeader;
+use crate::headers::{EventHeader, EventHeaderName};
 use crate::lookup::{variable_key, HeaderLookup};
 use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
@@ -87,10 +87,11 @@ impl EslEvent {
             .and_then(EslEventType::parse_event_type)
     }
 
-    /// Look up a header by its [`EventHeader`] enum variant.
+    /// Look up a header by a typed name: an [`EventHeader`], or a consumer enum
+    /// implementing [`EventHeaderName`].
     ///
-    /// For headers not covered by `EventHeader`, use [`header_str()`](Self::header_str).
-    pub fn header(&self, name: EventHeader) -> Option<&str> {
+    /// For a name known only at run time, use [`header_str()`](Self::header_str).
+    pub fn header(&self, name: impl EventHeaderName) -> Option<&str> {
         HeaderLookup::header(self, name)
     }
 
@@ -369,6 +370,37 @@ impl<'de> serde::Deserialize<'de> for EslEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    crate::define_header_enum! {
+        error_type: ParseSiteHeaderError => "unknown site header",
+        /// A deployment's own CUSTOM-event headers.
+        enum SiteHeader {
+            Action => "C911P-Action",
+        }
+    }
+
+    impl EventHeaderName for SiteHeader {
+        fn as_str(&self) -> &str {
+            SiteHeader::as_str(self)
+        }
+    }
+
+    #[test]
+    fn a_consumer_header_enum_reads_through_every_carrier() {
+        let mut event = EslEvent::new();
+        event.set_header("c911p-action", "dispatch");
+        assert_eq!(event.header(SiteHeader::Action), Some("dispatch"));
+        assert_eq!(
+            HeaderLookup::header(&event, SiteHeader::Action),
+            Some("dispatch")
+        );
+        assert_eq!(
+            event
+                .headers()
+                .header(SiteHeader::Action),
+            Some("dispatch")
+        );
+    }
 
     #[test]
     fn headers_preserve_insertion_order() {

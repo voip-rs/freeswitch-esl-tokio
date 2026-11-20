@@ -67,6 +67,27 @@ impl VariableName for ConferenceVariable {
 event.variable(ConferenceVariable::ConferenceName)
 ```
 
+### EventHeaderName trait extensibility
+
+Headers a deployment's own modules emit get the same treatment through `EventHeaderName`, which `HeaderLookup::header()`, `EslEvent::header()` and `EslResponse::header()` accept:
+
+```rust
+define_header_enum! {
+    error_type: ParseSiteHeaderError,
+    pub enum SiteHeader {
+        Action => "C911P-Action",
+    }
+}
+
+impl EventHeaderName for SiteHeader {
+    fn as_str(&self) -> &str { SiteHeader::as_str(self) }
+}
+
+event.header(SiteHeader::Action)
+```
+
+A header name known only at run time, such as one read from config, goes through `header_str()`.
+
 ### Command builders use Display
 
 `UuidKill`, `Originate`, `AppCommand`, etc. all produce strings via `Display`.

@@ -206,6 +206,25 @@ sip_header_catalog::define_header_enum! {
     }
 }
 
+/// Trait for typed event header name enums, the header counterpart of
+/// [`VariableName`](crate::VariableName).
+///
+/// A consumer naming headers its own modules or dialplan emit builds an enum
+/// with [`define_header_enum!`](crate::define_header_enum) and implements this
+/// to read it through [`HeaderLookup::header()`](crate::HeaderLookup::header).
+/// A name only known at run time goes through
+/// [`header_str()`](crate::HeaderLookup::header_str).
+pub trait EventHeaderName {
+    /// Wire-format header name (e.g. `"Unique-ID"`).
+    fn as_str(&self) -> &str;
+}
+
+impl EventHeaderName for EventHeader {
+    fn as_str(&self) -> &str {
+        EventHeader::as_str(self)
+    }
+}
+
 /// Return a lowercase case-alias for `key` when case-insensitive aliasing applies.
 ///
 /// The aliasing rule: keys containing `_` (channel variables such as

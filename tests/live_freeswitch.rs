@@ -278,7 +278,7 @@ async fn live_connect_userauth_truncated_response() {
         .expect("auth_response should be present for inbound connection");
     assert_eq!(auth.reply_text(), Some("+OK accepted"));
     assert!(
-        auth.header("Allowed-Events")
+        auth.header_str("Allowed-Events")
             .is_some(),
         "Allowed-Events header should be present (possibly truncated)"
     );
@@ -287,7 +287,7 @@ async fn live_connect_userauth_truncated_response() {
     // overflow it's always fully truncated. Its absence proves the
     // salvage path was triggered (a non-truncated response would have it).
     assert!(
-        auth.header("Allowed-Log")
+        auth.header_str("Allowed-Log")
             .is_none(),
         "Allowed-Log should be missing due to reply[512] truncation. \
          If this fails, FreeSWITCH may have been patched — \
@@ -296,7 +296,7 @@ async fn live_connect_userauth_truncated_response() {
 
     // Allowed-API should be present but truncated (fewer commands than
     // the configured "show uuid_dump originate uuid_kill").
-    if let Some(api) = auth.header("Allowed-Api") {
+    if let Some(api) = auth.header_str("Allowed-Api") {
         let commands: Vec<&str> = api
             .split_whitespace()
             .collect();
@@ -409,7 +409,7 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
 
     // Case-sensitive: exact-cased variable name must hit.
     assert_eq!(
-        resp.header("variable_MyMixed_Case_Var"),
+        resp.header_str("variable_MyMixed_Case_Var"),
         Some("preserved"),
         "exact-case variable lookup must succeed"
     );
@@ -419,27 +419,27 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
     // through the alias and return the wrong value (or worse, collapse
     // distinct headers like X-Foo and X-foo).
     assert_eq!(
-        resp.header("variable_mymixed_case_var"),
+        resp.header_str("variable_mymixed_case_var"),
         None,
         "lowercased variable_* must not match — SIP wire casing is preserved"
     );
     assert_eq!(
-        resp.header("VARIABLE_MYMIXED_CASE_VAR"),
+        resp.header_str("VARIABLE_MYMIXED_CASE_VAR"),
         None,
         "uppercased variable_* must not match"
     );
 
     // Case-insensitive: framing headers (no underscore) resolve in any case.
     let canonical = resp
-        .header("Reply-Text")
+        .header_str("Reply-Text")
         .expect("Reply-Text must be present on connect reply");
-    assert_eq!(resp.header("reply-text"), Some(canonical));
-    assert_eq!(resp.header("REPLY-TEXT"), Some(canonical));
+    assert_eq!(resp.header_str("reply-text"), Some(canonical));
+    assert_eq!(resp.header_str("REPLY-TEXT"), Some(canonical));
 
     // Cleanup.
     if let Some(uuid) = resp
-        .header("Channel-Unique-ID")
-        .or_else(|| resp.header("Unique-ID"))
+        .header_str("Channel-Unique-ID")
+        .or_else(|| resp.header_str("Unique-ID"))
         .map(String::from)
     {
         kill_channel(&inbound, &uuid).await;

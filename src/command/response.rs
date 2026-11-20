@@ -4,7 +4,7 @@ use crate::{
     constants::{HEADER_REPLY_TEXT, REPLY_PREFIX_ERR, REPLY_PREFIX_OK, REPLY_PREFIX_USAGE},
     error::{EslError, EslResult},
     event::EslEvent,
-    headers::EventHeader,
+    headers::{EventHeader, EventHeaderName},
     lookup::HeaderLookup,
     protocol::{decode_serialized_event, DecodeOptions, EslMessage},
     EslHeaders, LossyValues,
@@ -279,9 +279,10 @@ impl EslResponse {
             .as_deref()
     }
 
-    /// Look up a response header by name. Case-insensitive.
-    pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
-        self.lookup_header(name.as_ref())
+    /// Look up a response header by a typed name; a raw name goes through
+    /// [`header_str()`](HeaderLookup::header_str).
+    pub fn header(&self, name: impl EventHeaderName) -> Option<&str> {
+        self.lookup_header(name.as_str())
     }
 
     fn lookup_header(&self, name: &str) -> Option<&str> {
@@ -452,9 +453,9 @@ mod tests {
         let mut headers = IndexMap::new();
         headers.insert("Reply-Text".to_string(), "+OK".to_string());
         let r = EslResponse::new(headers, None);
-        assert_eq!(r.header("Reply-Text"), Some("+OK"));
-        assert_eq!(r.header("reply-text"), Some("+OK"));
-        assert_eq!(r.header("REPLY-TEXT"), Some("+OK"));
+        assert_eq!(r.header_str("Reply-Text"), Some("+OK"));
+        assert_eq!(r.header_str("reply-text"), Some("+OK"));
+        assert_eq!(r.header_str("REPLY-TEXT"), Some("+OK"));
     }
 
     #[test]
@@ -484,8 +485,8 @@ mod tests {
                 .keys()
                 .collect::<Vec<_>>()
         );
-        assert_eq!(resp.header("Unique-ID"), event.header_str("Unique-ID"));
-        assert_eq!(resp.header("unique-id"), event.header_str("unique-id"));
+        assert_eq!(resp.header_str("Unique-ID"), event.header_str("Unique-ID"));
+        assert_eq!(resp.header_str("unique-id"), event.header_str("unique-id"));
     }
 
     #[test]
@@ -500,11 +501,14 @@ mod tests {
         headers.insert("variable_MyVar".to_string(), "vv".to_string());
         let r = EslResponse::new(headers, None);
 
-        assert_eq!(r.header("variable_sip_h_X-MixedCase-Hdr"), Some("value"));
-        assert_eq!(r.header("variable_MyVar"), Some("vv"));
-        assert_eq!(r.header("variable_sip_h_x-mixedcase-hdr"), None);
-        assert_eq!(r.header("VARIABLE_SIP_H_X-MIXEDCASE-HDR"), None);
-        assert_eq!(r.header("variable_myvar"), None);
+        assert_eq!(
+            r.header_str("variable_sip_h_X-MixedCase-Hdr"),
+            Some("value")
+        );
+        assert_eq!(r.header_str("variable_MyVar"), Some("vv"));
+        assert_eq!(r.header_str("variable_sip_h_x-mixedcase-hdr"), None);
+        assert_eq!(r.header_str("VARIABLE_SIP_H_X-MIXEDCASE-HDR"), None);
+        assert_eq!(r.header_str("variable_myvar"), None);
     }
 
     #[test]
@@ -1037,7 +1041,7 @@ mod tests {
 
         assert!(response.is_success());
         assert_eq!(
-            response.header("Caller-Caller-ID-Name"),
+            response.header_str("Caller-Caller-ID-Name"),
             Some("Andr\u{FFFD}")
         );
         let lossy = response.lossy_values();

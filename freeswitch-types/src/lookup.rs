@@ -19,7 +19,7 @@ use crate::channel::{
 };
 #[cfg(feature = "esl")]
 use crate::event::{EslEventPriority, ParsePriorityError};
-use crate::headers::EventHeader;
+use crate::headers::{EventHeader, EventHeaderName};
 use crate::sofia::{
     GatewayPingStatus, GatewayRegState, ParseGatewayPingStatusError, ParseGatewayRegStateError,
     ParseSipUserPingStatusError, ParseSofiaEventSubclassError, SipUserPingStatus,
@@ -136,8 +136,9 @@ pub trait HeaderLookup: SipHeaderRows {
     /// Implementations typically prepend `variable_` and delegate to `header_str`.
     fn variable_str(&self, name: &str) -> Option<&str>;
 
-    /// Look up a header by its [`EventHeader`] enum variant.
-    fn header(&self, name: EventHeader) -> Option<&str> {
+    /// Look up a header by a typed name: an [`EventHeader`], or a consumer enum
+    /// implementing [`EventHeaderName`].
+    fn header(&self, name: impl EventHeaderName) -> Option<&str> {
         self.header_str(name.as_str())
     }
 

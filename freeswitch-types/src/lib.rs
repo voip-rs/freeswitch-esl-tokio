@@ -85,7 +85,9 @@ pub use event::{
     EventSubscriptionError, FilterHeaderFault, ParseEventFormatError, ParseEventTypeError,
     ParsePriorityError,
 };
-pub use headers::{case_alias_key, normalize_header_key, EventHeader, ParseEventHeaderError};
+pub use headers::{
+    case_alias_key, normalize_header_key, EventHeader, EventHeaderName, ParseEventHeaderError,
+};
 pub use log_level::{LogLevel, ParseLogLevelError};
 pub use lookup::{variable_key, HeaderLookup, ParseHeaderError, ParseSipStatusCodeError};
 #[cfg(feature = "esl")]

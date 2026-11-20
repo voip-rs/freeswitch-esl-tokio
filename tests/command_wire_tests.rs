@@ -389,14 +389,17 @@ async fn test_outbound_connect_session() {
     assert!(response.is_success());
     assert_eq!(response.reply_text(), Some("+OK"));
     assert_eq!(
-        response.header("Channel-Name"),
+        response.header_str("Channel-Name"),
         Some("sofia/internal/1000@example.com")
     );
-    assert_eq!(response.header("Unique-ID"), Some("abcd-1234-efgh"));
-    assert_eq!(response.header("Caller-Caller-ID-Name"), Some("Test User"));
-    assert_eq!(response.header("Caller-Caller-ID-Number"), Some("1000"));
-    assert_eq!(response.header("Socket-Mode"), Some("async"));
-    assert_eq!(response.header("Control"), Some("full"));
+    assert_eq!(response.header_str("Unique-ID"), Some("abcd-1234-efgh"));
+    assert_eq!(
+        response.header_str("Caller-Caller-ID-Name"),
+        Some("Test User")
+    );
+    assert_eq!(response.header_str("Caller-Caller-ID-Number"), Some("1000"));
+    assert_eq!(response.header_str("Socket-Mode"), Some("async"));
+    assert_eq!(response.header_str("Control"), Some("full"));
 }
 
 // --- bgapi correlation with mock ---
