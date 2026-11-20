@@ -216,7 +216,10 @@ impl EslResponse {
     /// `sip_h_*`, and `sip_i_*` keys, which must preserve original SIP
     /// wire casing.
     pub fn new(headers: IndexMap<String, String>, body: Option<String>) -> Self {
-        let headers = EslHeaders::from_map(headers);
+        Self::from_headers(EslHeaders::from_map(headers), body)
+    }
+
+    fn from_headers(headers: EslHeaders, body: Option<String>) -> Self {
         let status = match headers.header_str(HEADER_REPLY_TEXT) {
             None | Some("") => ReplyStatus::Ok,
             Some(t) if t.starts_with(REPLY_PREFIX_OK) => ReplyStatus::Ok,
@@ -238,7 +241,7 @@ impl EslResponse {
         Self {
             raw_body: message.raw_body,
             lossy_values: message.lossy_values,
-            ..Self::new(message.headers, message.body)
+            ..Self::from_headers(message.headers, message.body)
         }
     }
 
@@ -979,29 +982,25 @@ mod tests {
         assert_eq!(
             message
                 .headers
-                .get("Channel-Name")
-                .map(|s| s.as_str()),
+                .header_str("Channel-Name"),
             Some("sofia/internal/1000@example.com")
         );
         assert_eq!(
             message
                 .headers
-                .get("Caller-Caller-ID-Name")
-                .map(|s| s.as_str()),
+                .header_str("Caller-Caller-ID-Name"),
             Some("Test User")
         );
         assert_eq!(
             message
                 .headers
-                .get("Socket-Mode")
-                .map(|s| s.as_str()),
+                .header_str("Socket-Mode"),
             Some("async")
         );
         assert_eq!(
             message
                 .headers
-                .get("Control")
-                .map(|s| s.as_str()),
+                .header_str("Control"),
             Some("full")
         );
 

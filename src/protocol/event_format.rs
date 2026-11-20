@@ -68,7 +68,10 @@ impl EslParser {
     /// outer envelope headers and the body is raw log text.
     pub(super) fn parse_log_event(message: EslMessage) -> EslResult<EslEvent> {
         let mut event = EslEvent::new();
-        for (key, value) in &message.headers {
+        for (key, value) in message
+            .headers
+            .as_map()
+        {
             event.set_header(key.clone(), value.clone());
         }
         if let Some(body) = message.body {

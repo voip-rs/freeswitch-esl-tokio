@@ -13,6 +13,7 @@ use crate::{
     error::EslError,
     event::{EslEvent, EventFormat},
     protocol::{EslMessage, EslParser, MessageType},
+    HeaderLookup,
 };
 
 use super::reexec::ReexecReader;
@@ -302,8 +303,7 @@ async fn dispatch_parsed_event(
 ) -> ControlFlow<Option<DisconnectReason>> {
     let ct = message
         .headers
-        .get(HEADER_CONTENT_TYPE)
-        .map(|s| s.as_str());
+        .header_str(HEADER_CONTENT_TYPE);
 
     // log/data uses single-level framing handled inside parse_event.
     let format = if ct == Some(CONTENT_TYPE_LOG_DATA) {
@@ -361,8 +361,7 @@ async fn dispatch_message(
                 pending.stale_replies -= 1;
                 let reply_text = message
                     .headers
-                    .get("Reply-Text")
-                    .map(|s| s.as_str())
+                    .header_str("Reply-Text")
                     .unwrap_or("<none>");
                 warn!(
                     "Discarded stale {:?} reply (Reply-Text: {}) to preserve \
@@ -389,16 +388,15 @@ async fn dispatch_message(
         MessageType::Disconnect => {
             let disposition = message
                 .headers
-                .get("Content-Disposition")
-                .map(|s| s.as_str());
+                .header_str("Content-Disposition");
             if disposition == Some("linger") {
                 debug!("Received disconnect notice with linger disposition, ignoring");
                 return ControlFlow::Continue(());
             }
             let controlled_session_uuid = message
                 .headers
-                .get("Controlled-Session-UUID")
-                .cloned();
+                .header_str("Controlled-Session-UUID")
+                .map(str::to_string);
             info!("Received disconnect notice from server");
             return ControlFlow::Break(Some(DisconnectReason::ServerNotice {
                 controlled_session_uuid,

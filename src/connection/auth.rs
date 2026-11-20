@@ -9,6 +9,7 @@ use crate::{
     constants::{CONTENT_TYPE_COMMAND_REPLY, HEADER_CONTENT_TYPE},
     error::{EslError, EslResult},
     protocol::{EslMessage, EslParser, MessageType},
+    HeaderLookup,
 };
 
 /// How an inbound connection authenticates.
@@ -199,7 +200,7 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
 
     // Validate this is actually a command/reply (auth response).
     let content_type = headers
-        .get(HEADER_CONTENT_TYPE)
+        .header_str(HEADER_CONTENT_TYPE)
         .ok_or_else(|| {
             EslError::protocol_error(
                 "truncated response missing Content-Type header — not an auth response",
@@ -262,19 +263,17 @@ mod tests {
         assert_eq!(msg.message_type, MessageType::CommandReply);
         assert_eq!(
             msg.headers
-                .get("Reply-Text")
-                .map(|s| s.as_str()),
+                .header_str("Reply-Text"),
             Some("+OK accepted")
         );
         assert!(msg
             .headers
-            .get("Allowed-Events")
+            .header_str("Allowed-Events")
             .is_some());
         // Truncated value is preserved (normalize_header_key title-cases "API" → "Api")
         assert_eq!(
             msg.headers
-                .get("Allowed-Api")
-                .map(|s| s.as_str()),
+                .header_str("Allowed-Api"),
             Some("show")
         );
 
@@ -304,14 +303,13 @@ mod tests {
         assert_eq!(msg.message_type, MessageType::CommandReply);
         assert_eq!(
             msg.headers
-                .get("Reply-Text")
-                .map(|s| s.as_str()),
+                .header_str("Reply-Text"),
             Some("+OK accepted")
         );
         // "Allo" fragment was dropped
         assert!(msg
             .headers
-            .get("Allo")
+            .header_str("Allo")
             .is_none());
     }
 

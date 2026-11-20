@@ -17,9 +17,8 @@ use crate::{
     error::{EslError, EslResult},
     event::{EslEvent, EventFormat},
     headers::normalize_header_key,
-    LossyValue, LossyValues,
+    EslHeaders, HeaderLookup, LossyValue, LossyValues,
 };
-use indexmap::IndexMap;
 use percent_encoding::percent_decode_str;
 
 mod event_format;
@@ -105,7 +104,7 @@ pub(crate) struct EslMessage {
     /// Message type
     pub message_type: MessageType,
     /// Message headers
-    pub headers: IndexMap<String, String>,
+    pub headers: EslHeaders,
     /// Message body (optional)
     pub body: Option<String>,
     /// Exact wire bytes of a body that was not valid UTF-8; `body` then
@@ -121,12 +120,12 @@ impl EslMessage {
     /// Create new message
     pub fn new(
         message_type: MessageType,
-        headers: IndexMap<String, String>,
+        headers: impl Into<EslHeaders>,
         body: Option<String>,
     ) -> Self {
         Self {
             message_type,
-            headers,
+            headers: headers.into(),
             body,
             raw_body: None,
             lossy_values: LossyValues::default(),
@@ -144,7 +143,7 @@ impl EslMessage {
 #[derive(Debug)]
 struct PendingBody {
     message_type: MessageType,
-    headers: IndexMap<String, String>,
+    headers: EslHeaders,
     body_length: usize,
     lossy_values: LossyValues,
 }
@@ -245,13 +244,13 @@ impl EslParser {
         // Every ESL message must have Content-Type. Missing means
         // protocol desync (e.g. from a corrupted Content-Length).
         let content_type = headers
-            .get(HEADER_CONTENT_TYPE)
+            .header_str(HEADER_CONTENT_TYPE)
             .ok_or_else(|| {
                 EslError::protocol_error("Missing Content-Type header -- likely protocol desync")
             })?;
         let message_type = MessageType::from_content_type(content_type)?;
 
-        let body_length = match headers.get(HEADER_CONTENT_LENGTH) {
+        let body_length = match headers.header_str(HEADER_CONTENT_LENGTH) {
             Some(length_str) => length_str
                 .parse()
                 .map_err(|_| EslError::InvalidHeader {
@@ -353,11 +352,8 @@ impl EslParser {
     /// encoded, but decoding them is a no-op. Non-UTF-8 values are decoded
     /// lossily and recorded in the returned `LossyValues` unless
     /// `strict_header_utf8` is set, in which case they error.
-    pub(crate) fn parse_headers(
-        &self,
-        headers_str: &str,
-    ) -> EslResult<(IndexMap<String, String>, LossyValues)> {
-        let mut headers = IndexMap::new();
+    pub(crate) fn parse_headers(&self, headers_str: &str) -> EslResult<(EslHeaders, LossyValues)> {
+        let mut headers = EslHeaders::new();
         let mut lossy = LossyValues::default();
         decode_header_block(
             headers_str,
@@ -388,8 +384,7 @@ impl EslParser {
     pub fn parse_event(&self, message: EslMessage, format: EventFormat) -> EslResult<EslEvent> {
         if message
             .headers
-            .get(HEADER_CONTENT_TYPE)
-            .map(|s| s.as_str())
+            .header_str(HEADER_CONTENT_TYPE)
             == Some(CONTENT_TYPE_LOG_DATA)
         {
             return Self::parse_log_event(message);
@@ -466,6 +461,7 @@ mod tests {
     use crate::event::EslEventType;
     use crate::headers::EventHeader;
     use crate::lookup::HeaderLookup;
+    use indexmap::IndexMap;
 
     #[test]
     fn test_parse_headers() {
@@ -475,18 +471,8 @@ mod tests {
             .parse_headers(headers_str)
             .unwrap();
 
-        assert_eq!(
-            headers
-                .get("Content-Type")
-                .map(|s| s.as_str()),
-            Some("auth/request")
-        );
-        assert_eq!(
-            headers
-                .get("Content-Length")
-                .map(|s| s.as_str()),
-            Some("0")
-        );
+        assert_eq!(headers.header_str("Content-Type"), Some("auth/request"));
+        assert_eq!(headers.header_str("Content-Length"), Some("0"));
     }
 
     #[test]
@@ -497,6 +483,7 @@ mod tests {
             .parse_headers(headers_str)
             .unwrap();
         let keys: Vec<&str> = headers
+            .as_map()
             .keys()
             .map(|s| s.as_str())
             .collect();
@@ -593,8 +580,7 @@ mod tests {
         assert_eq!(
             message
                 .headers
-                .get("Some-Header")
-                .map(|s| s.as_str()),
+                .header_str("Some-Header"),
             Some("some-value")
         );
     }
@@ -705,17 +691,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            headers
-                .get("Channel-Name")
-                .map(|s| s.as_str()),
+            headers.header_str("Channel-Name"),
             Some("sofia/internal/1000@example.com")
         );
-        assert_eq!(
-            headers
-                .get("X-Space")
-                .map(|s| s.as_str()),
-            Some("a b")
-        );
+        assert_eq!(headers.header_str("X-Space"), Some("a b"));
         assert!(lossy.is_empty());
     }
 
