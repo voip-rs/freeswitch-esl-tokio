@@ -1360,6 +1360,7 @@ async fn dumped_spellings(client: &EslClient, uuid: &str, name: &str) -> Vec<(St
     let dump = parse_channel_dump(&body).unwrap_or_else(|e| panic!("uuid_dump {uuid}: {e}"));
     let wanted = format!("variable_{name}");
     dump.headers()
+        .as_map()
         .iter()
         .filter(|(key, _)| key.eq_ignore_ascii_case(&wanted))
         .map(|(key, value)| (key.clone(), value.clone()))
@@ -1564,6 +1565,7 @@ async fn live_channel_dump_rebuild_loop() {
         // src/command/response.rs; here the sentinel must simply never survive.
         assert!(
             dump.headers()
+                .as_map()
                 .values()
                 .all(|v| v != "_undef_"),
             "an empty value must read as absent, not as the sentinel, for {}",

@@ -15,7 +15,7 @@ use crate::headers::EventHeader;
 use crate::lookup::{variable_key, HeaderLookup};
 use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
-use indexmap::IndexMap;
+
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use sip_header_catalog::{RowError, SipHeaderRows};
 
@@ -114,10 +114,9 @@ impl EslEvent {
         self.header_str(&variable_key(name))
     }
 
-    /// All headers as a map, keyed canonically.
-    pub fn headers(&self) -> &IndexMap<String, String> {
-        self.headers
-            .as_map()
+    /// The header store, for iteration and [`EslHeaders::with_prefix`].
+    pub fn headers(&self) -> &EslHeaders {
+        &self.headers
     }
 
     /// Set or overwrite a header, normalizing the key.
@@ -379,6 +378,7 @@ mod tests {
         event.set_header("Middle", "mid");
         let keys: Vec<&str> = event
             .headers()
+            .as_map()
             .keys()
             .map(|s| s.as_str())
             .collect();

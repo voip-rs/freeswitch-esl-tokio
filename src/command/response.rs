@@ -289,10 +289,9 @@ impl EslResponse {
             .header_str(name)
     }
 
-    /// All response headers, keyed canonically.
-    pub fn headers(&self) -> &IndexMap<String, String> {
-        self.headers
-            .as_map()
+    /// The header store, for iteration and [`EslHeaders::with_prefix`].
+    pub fn headers(&self) -> &EslHeaders {
+        &self.headers
     }
 
     /// Raw `Reply-Text` header value (e.g. `+OK`, `-ERR invalid command`).
@@ -476,10 +475,12 @@ mod tests {
 
         assert_eq!(
             resp.headers()
+                .as_map()
                 .keys()
                 .collect::<Vec<_>>(),
             event
                 .headers()
+                .as_map()
                 .keys()
                 .collect::<Vec<_>>()
         );
@@ -846,6 +847,7 @@ mod tests {
         assert_eq!(event.variable_str("rtp_use_codec_string"), None);
         assert!(event
             .headers()
+            .as_map()
             .values()
             .all(|v| v != "_undef_"));
     }
@@ -859,6 +861,7 @@ mod tests {
         assert_eq!(
             event
                 .headers()
+                .as_map()
                 .keys()
                 .collect::<Vec<_>>(),
             vec!["Unique-ID", "Channel-State"]

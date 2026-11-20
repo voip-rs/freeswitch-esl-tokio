@@ -558,6 +558,7 @@ async fn park_and_await(event_type: EslEventType) -> freeswitch_esl_tokio::EslEv
 fn distinct_lowercased_keys(evt: &freeswitch_esl_tokio::EslEvent) -> Vec<String> {
     let mut keys: Vec<String> = evt
         .headers()
+        .as_map()
         .keys()
         .map(|k| k.to_ascii_lowercase())
         .collect();
@@ -617,6 +618,7 @@ async fn live_codec_header_normalization() {
         distinct_lowercased_keys(&evt).len(),
         "CODEC event has duplicate keys with different casing: {:?}",
         evt.headers()
+            .as_map()
             .keys()
             .collect::<Vec<_>>()
     );

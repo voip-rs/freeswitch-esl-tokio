@@ -129,6 +129,30 @@ impl EslHeaders {
             .is_empty()
     }
 
+    /// Entries whose key starts with `prefix`, under the rule lookups use: a
+    /// key without `_` matches in any ASCII casing, a key with `_` exactly.
+    ///
+    /// Yields the stored key, whose casing may differ from `prefix`, so
+    /// `key.strip_prefix(prefix)` can fail on a matched entry; slice off
+    /// `prefix.len()` bytes instead.
+    ///
+    /// ```
+    /// use freeswitch_types::EslHeaders;
+    ///
+    /// let h: EslHeaders = [("C911P-Action", "dispatch"), ("Unique-ID", "abc")]
+    ///     .into_iter()
+    ///     .collect();
+    /// let custom: Vec<_> = h.with_prefix("c911p-").collect();
+    /// assert_eq!(custom.len(), 1);
+    /// assert_eq!(custom[0].1, "dispatch");
+    /// ```
+    pub fn with_prefix<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = (&'a str, &'a str)> {
+        self.map
+            .iter()
+            .filter(move |(key, _)| key_has_prefix(key, prefix))
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+    }
+
     fn get(&self, name: &str) -> Option<&str> {
         if let Some(value) = self
             .map
@@ -143,6 +167,26 @@ impl EslHeaders {
                     .get(canonical)
             })
             .map(|s| s.as_str())
+    }
+}
+
+/// The stored key decides the rule, since a prefix such as `X-` can begin a
+/// key of either kind; `get` keeps a non-char boundary from panicking.
+fn key_has_prefix(key: &str, prefix: &str) -> bool {
+    if case_alias_key(key).is_none() {
+        return key.starts_with(prefix);
+    }
+    key.get(..prefix.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+}
+
+impl<'a> IntoIterator for &'a EslHeaders {
+    type Item = (&'a String, &'a String);
+    type IntoIter = indexmap::map::Iter<'a, String, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map
+            .iter()
     }
 }
 
@@ -320,6 +364,73 @@ mod tests {
             h.sip_header_str("call-info"),
             Ok(Some("<sip:a@example.test>;purpose=icon"))
         );
+    }
+
+    #[test]
+    fn with_prefix_matches_dash_keys_in_any_casing() {
+        let h: EslHeaders = [
+            ("C911P-Action", "dispatch"),
+            ("C911P-Incident-Id", "inc-1"),
+            ("Unique-ID", "abc"),
+        ]
+        .into_iter()
+        .collect();
+        for prefix in ["C911P-", "c911p-", "C911p-"] {
+            let values: Vec<&str> = h
+                .with_prefix(prefix)
+                .map(|(_, v)| v)
+                .collect();
+            assert_eq!(values, ["dispatch", "inc-1"], "{prefix}");
+        }
+    }
+
+    #[test]
+    fn with_prefix_compares_underscore_keys_exactly() {
+        let h: EslHeaders = [("X-Foo_Bar", "under"), ("X-Plain", "dash")]
+            .into_iter()
+            .collect();
+        let keys: Vec<&str> = h
+            .with_prefix("x-")
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(keys, ["X-Plain"]);
+        assert_eq!(
+            h.with_prefix("X-")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn with_prefix_survives_a_multibyte_key() {
+        let h: EslHeaders = [("É-Header", "x")]
+            .into_iter()
+            .collect();
+        assert_eq!(
+            h.with_prefix("a")
+                .count(),
+            0
+        );
+        assert_eq!(
+            h.with_prefix("é-")
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn with_prefix_reaches_an_event_header_by_its_family() {
+        let h: EslHeaders = [
+            ("caller-caller-id-name", "Alice"),
+            ("Other-Leg-Unique-ID", "x"),
+        ]
+        .into_iter()
+        .collect();
+        let keys: Vec<&str> = h
+            .with_prefix("CALLER-")
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(keys, ["Caller-Caller-ID-Name"]);
     }
 
     /// A gRPC hop hands consumers a plain map; the store rebuilt from it must
