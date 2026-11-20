@@ -309,7 +309,8 @@ See [docs/design-rationale.md](docs/design-rationale.md) for the full
 motivation and production lessons behind these decisions.
 
 - **No coupling to `EslEvent`**: accept closures or `HeaderLookup` trait,
-  not `&EslEvent`. Callers store headers in `HashMap`, not `EslEvent`.
+  not `&EslEvent`. Callers store headers in `EslHeaders`, not `EslEvent`;
+  nothing reads headers by exact key.
 - **Transport only**: `EslClient` sends strings, returns `EslResponse`.
   No response parsing. Future wrapper crate owns typed command-and-response.
 - **Command builders are strings with no transport dependency**: a value whose
