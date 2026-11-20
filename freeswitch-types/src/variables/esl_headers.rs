@@ -322,6 +322,32 @@ mod tests {
         );
     }
 
+    /// A gRPC hop hands consumers a plain map; the store rebuilt from it must
+    /// answer an unknown header and a configured name in any casing.
+    #[test]
+    fn a_store_from_a_wire_cased_map_answers_every_casing() {
+        let map: std::collections::HashMap<String, String> = [
+            ("C911P-Action", "dispatch"),
+            ("caller-direction", "inbound"),
+            ("variable_sip_h_X-Incident-Id", "inc-1"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let h: EslHeaders = map
+            .into_iter()
+            .collect();
+
+        for name in ["C911P-Action", "C911p-Action", "c911p-action"] {
+            assert_eq!(h.header_str(name), Some("dispatch"), "{name}");
+        }
+        for name in ["caller-direction", "Caller-Direction", "CALLER-DIRECTION"] {
+            assert_eq!(h.header_str(name), Some("inbound"), "{name}");
+        }
+        assert_eq!(h.variable_str("sip_h_X-Incident-Id"), Some("inc-1"));
+        assert_eq!(h.variable_str("sip_h_x-incident-id"), None);
+    }
+
     #[test]
     fn underscore_keys_keep_their_wire_casing() {
         let mut h = EslHeaders::new();

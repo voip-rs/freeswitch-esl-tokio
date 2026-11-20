@@ -82,7 +82,6 @@ mod tests {
     use super::*;
     use crate::{HeaderLookup, VARIABLE_PREFIX};
     use sip_header_catalog::SipHeader;
-    use std::collections::HashMap;
 
     #[test]
     fn header_name_composes_the_wire_key() {
@@ -123,8 +122,8 @@ mod tests {
 
     #[test]
     fn header_name_is_the_key_a_header_store_holds() {
-        let mut map: HashMap<String, String> = HashMap::new();
-        map.insert(ChannelVariable::ReadCodec.header_name(), "PCMU".into());
+        let mut map = crate::EslHeaders::new();
+        map.insert(ChannelVariable::ReadCodec.header_name(), "PCMU");
         assert_eq!(map.variable(ChannelVariable::ReadCodec), Some("PCMU"));
     }
 }

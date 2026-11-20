@@ -88,33 +88,37 @@ fn parse_sip_status_code(raw: &str) -> Result<u16, ParseSipStatusCodeError> {
 /// # Example
 ///
 /// ```
-/// use std::collections::HashMap;
-/// use freeswitch_types::{HeaderLookup, EventHeader, ChannelVariable, VARIABLE_PREFIX};
+/// use freeswitch_types::{ChannelVariable, EslHeaders, EventHeader, HeaderLookup};
 /// use freeswitch_types::{RowError, SipHeaderRows};
 ///
-/// struct MyStore(HashMap<String, String>);
+/// // A store of its own wraps EslHeaders, which keeps the case contract.
+/// struct MyStore {
+///     headers: EslHeaders,
+/// }
 ///
-/// // HeaderLookup has SipHeaderRows as a supertrait. The map already is a
-/// // row store, matching names as the catalog does.
+/// // HeaderLookup has SipHeaderRows as a supertrait.
 /// impl SipHeaderRows for MyStore {
 ///     fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
-///         self.0.sip_header_rows_str(name)
+///         self.headers.sip_header_rows_str(name)
 ///     }
 /// }
 ///
 /// impl HeaderLookup for MyStore {
 ///     fn header_str(&self, name: &str) -> Option<&str> {
-///         self.0.get(name).map(|s| s.as_str())
+///         self.headers.header_str(name)
 ///     }
 ///     fn variable_str(&self, name: &str) -> Option<&str> {
-///         self.0.get(&format!("{VARIABLE_PREFIX}{name}")).map(|s| s.as_str())
+///         self.headers.variable_str(name)
 ///     }
 /// }
 ///
-/// let mut map = HashMap::new();
-/// map.insert("Channel-State".into(), "CS_EXECUTE".into());
-/// map.insert("variable_read_codec".into(), "PCMU".into());
-/// let store = MyStore(map);
+/// // Keys arrive in whatever casing the source spelled them.
+/// let headers = [("channel-state", "CS_EXECUTE"), ("variable_read_codec", "PCMU")]
+///     .into_iter()
+///     .collect();
+/// let store = MyStore { headers };
+///
+/// assert_eq!(store.header_str("CHANNEL-STATE"), Some("CS_EXECUTE"));
 ///
 /// // Typed accessor from the trait (returns Result<Option<T>, E>):
 /// assert!(store.channel_state().unwrap().is_some());
@@ -501,20 +505,8 @@ pub trait HeaderLookup: SipHeaderRows {
     }
 }
 
-impl HeaderLookup for std::collections::HashMap<String, String> {
-    fn header_str(&self, name: &str) -> Option<&str> {
-        self.get(name)
-            .map(|s| s.as_str())
-    }
-
-    fn variable_str(&self, name: &str) -> Option<&str> {
-        self.get(&variable_key(name))
-            .map(|s| s.as_str())
-    }
-}
-
-// No blanket impl on `indexmap::IndexMap<String, String>`: both traits are
-// external, so the orphan rules forbid the pair. Wrap in `EslHeaders`.
+// No impl on a bare `HashMap` or `IndexMap`: an exact-key map breaks the case
+// contract in this module's notes. Wrap in `EslHeaders`.
 
 /// The union a caller reaches when `?`-ing several typed [`HeaderLookup`]
 /// accessors into one error type.
@@ -603,16 +595,16 @@ parse_header_error_impls! {
 mod tests {
     use super::*;
     use crate::variables::{LoopbackChannelName, LoopbackHangupCause, LoopbackLeg};
-    use std::collections::HashMap;
+    use crate::EslHeaders;
     use std::error::Error;
 
     #[test]
     fn sip_status_code_keeps_the_rejected_value() {
-        let mut map = HashMap::new();
+        let mut map = EslHeaders::new();
         assert_eq!(map.sip_status_code(), Ok(None));
-        map.insert("Status".to_string(), "486".to_string());
+        map.insert("Status", "486");
         assert_eq!(map.sip_status_code(), Ok(Some(486)));
-        map.insert("Status".to_string(), "70000".to_string());
+        map.insert("Status", "70000");
         assert_eq!(
             map.sip_status_code(),
             Err(ParseSipStatusCodeError("70000".into()))
@@ -622,13 +614,13 @@ mod tests {
     /// RFC 3261 §7.2: a status code is three digits; the 9xx nua reports are kept.
     #[test]
     fn sip_status_code_takes_three_digits_with_a_nonzero_first() {
-        let mut map = HashMap::new();
+        let mut map = EslHeaders::new();
         for (raw, code) in [("100", 100), ("699", 699), ("904", 904), ("999", 999)] {
-            map.insert("Status".to_string(), raw.to_string());
+            map.insert("Status", raw);
             assert_eq!(map.sip_status_code(), Ok(Some(code)), "{raw}");
         }
         for raw in ["+200", "0200", "042", "42", "1000", "20 0", "", "099"] {
-            map.insert("Status".to_string(), raw.to_string());
+            map.insert("Status", raw);
             assert_eq!(
                 map.sip_status_code(),
                 Err(ParseSipStatusCodeError(raw.into())),
@@ -710,37 +702,11 @@ mod tests {
         assert_eq!(err.to_string(), expected);
     }
 
-    struct TestStore(HashMap<String, String>);
-
-    impl SipHeaderRows for TestStore {
-        fn sip_header_rows_str<'a>(
-            &'a self,
-            name: &str,
-        ) -> Result<Vec<&'a str>, sip_header_catalog::RowError> {
-            self.0
-                .sip_header_rows_str(name)
-        }
-    }
-
-    impl HeaderLookup for TestStore {
-        fn header_str(&self, name: &str) -> Option<&str> {
-            self.0
-                .get(name)
-                .map(|s| s.as_str())
-        }
-        fn variable_str(&self, name: &str) -> Option<&str> {
-            self.0
-                .get(&variable_key(name))
-                .map(|s| s.as_str())
-        }
-    }
-
-    fn store_with(pairs: &[(&str, &str)]) -> TestStore {
-        let map: HashMap<String, String> = pairs
+    fn store_with(pairs: &[(&str, &str)]) -> EslHeaders {
+        pairs
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-        TestStore(map)
+            .copied()
+            .collect()
     }
 
     #[test]
@@ -1302,9 +1268,13 @@ mod tests {
     }
 
     /// Accessor under test, named for the assertion message.
-    type RawAccessor = (&'static str, fn(&TestStore) -> Option<&str>);
+    type RawAccessor = (&'static str, fn(&EslHeaders) -> Option<&str>);
     /// An accessor reported as two booleans: parsed to nothing, and refused.
-    type TypedAccessor = (&'static str, fn(&TestStore) -> bool, fn(&TestStore) -> bool);
+    type TypedAccessor = (
+        &'static str,
+        fn(&EslHeaders) -> bool,
+        fn(&EslHeaders) -> bool,
+    );
 
     const RAW_ACCESSORS: &[RawAccessor] = &[
         ("channel_name", |s| s.channel_name()),
