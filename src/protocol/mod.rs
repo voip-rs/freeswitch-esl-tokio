@@ -767,6 +767,27 @@ mod tests {
         ));
     }
 
+    /// Framing resolves through the store's case rule, not the normaliser's
+    /// spelling of the framing headers.
+    #[test]
+    fn lowercase_framing_headers_still_frame_the_body() {
+        let mut parser = EslParser::new();
+        parser
+            .add_data(b"content-type: api/response\ncontent-length: 5\n\nhello")
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .expect("a complete message");
+        assert_eq!(message.message_type, MessageType::ApiResponse);
+        assert_eq!(
+            message
+                .body
+                .as_deref(),
+            Some("hello")
+        );
+    }
+
     #[test]
     fn test_waiting_for_body_multi_chunk() {
         let mut parser = EslParser::new();
