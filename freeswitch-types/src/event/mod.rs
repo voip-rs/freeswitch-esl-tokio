@@ -11,7 +11,7 @@ pub use subscription::{
     FilterHeaderFault,
 };
 
-use crate::headers::{EventHeader, EventHeaderName};
+use crate::headers::{case_alias_key, EventHeader, EventHeaderName};
 use crate::lookup::{variable_key, HeaderLookup};
 use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
@@ -331,12 +331,17 @@ impl PartialEq for EslEvent {
     }
 }
 
+/// Hashes what `PartialEq` compares: entries regardless of order, and a dash
+/// key by its lowercase alias, so equal events hash alike.
 impl std::hash::Hash for EslEvent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for (k, v) in self.headers() {
-            k.hash(state);
-            v.hash(state);
-        }
+        let mut entries: Vec<(String, &str)> = self
+            .headers()
+            .into_iter()
+            .map(|(k, v)| (case_alias_key(k).unwrap_or_else(|| k.clone()), v.as_str()))
+            .collect();
+        entries.sort_unstable();
+        entries.hash(state);
         self.body
             .hash(state);
     }
@@ -413,6 +418,15 @@ mod tests {
         assert_eq!(a, b);
         let state = RandomState::new();
         assert_eq!(state.hash_one(&a), state.hash_one(&b));
+
+        let mut c = EslEvent::new();
+        c.set_header("Unique-ID", "u");
+        c.set_header("Event-Name", "CUSTOM");
+        let mut d = EslEvent::new();
+        d.set_header("Event-Name", "CUSTOM");
+        d.set_header("Unique-ID", "u");
+        assert_eq!(c, d);
+        assert_eq!(state.hash_one(&c), state.hash_one(&d));
     }
 
     #[test]

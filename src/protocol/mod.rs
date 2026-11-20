@@ -889,7 +889,7 @@ mod tests {
                 .next()
                 .unwrap()
                 .key(),
-            "Key1"
+            "key1"
         );
         assert_eq!(
             deserialized
@@ -940,7 +940,7 @@ mod tests {
             .iter()
             .map(|v| v.key())
             .collect();
-        assert_eq!(keys, vec!["User-Data", "Key1"]);
+        assert_eq!(keys, vec!["User-Data", "key1"]);
     }
 
     #[test]
@@ -1001,7 +1001,7 @@ mod tests {
         let display = event
             .lossy_values()
             .to_string();
-        assert_eq!(display, "Key1, Key2");
+        assert_eq!(display, "key1, key2");
         assert!(!display.contains("%E9"));
         assert!(!display.contains("foo"));
     }

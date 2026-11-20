@@ -270,7 +270,7 @@ mod tests {
             .headers
             .header_str("Allowed-Events")
             .is_some());
-        // Truncated value is preserved (normalize_header_key title-cases "API" → "Api")
+        // Truncated value is preserved
         assert_eq!(
             msg.headers
                 .header_str("Allowed-Api"),

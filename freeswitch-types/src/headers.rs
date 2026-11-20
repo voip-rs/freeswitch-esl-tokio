@@ -244,48 +244,22 @@ pub fn case_alias_key(key: &str) -> Option<String> {
     }
 }
 
-/// Normalize a header key to its canonical form for case-insensitive storage.
+/// Spell a known [`EventHeader`] canonically; return any other key verbatim.
 ///
-/// FreeSWITCH's C ESL uses case-insensitive header lookups (`strcasecmp`), but
-/// stores header names verbatim. Multiple C code paths emit the same logical
-/// header with different casing (e.g. `switch_channel.c` sends `Unique-ID`
-/// while `switch_event.c` sends `unique-id`). This function normalizes keys
-/// so that both resolve to the same `HashMap` entry.
-///
-/// **Strategy:**
-/// 1. Known [`EventHeader`] variants are matched first (case-insensitive) and
-///    returned in their canonical wire form (e.g. `unique-id` → `Unique-ID`).
-/// 2. Keys containing underscores pass through verbatim (see [`case_alias_key`]).
-/// 3. Unknown dash-separated keys are Title-Cased to match FreeSWITCH's
-///    dominant convention for event and framing headers.
+/// FreeSWITCH's C ESL looks headers up with `strcasecmp` but stores names
+/// verbatim, and several C code paths emit one header in different casings
+/// (`switch_channel.c` sends `Unique-ID`, `switch_event.c` `unique-id`). A
+/// known header takes its [`as_str()`](EventHeader::as_str) spelling. An
+/// unknown key keeps its wire spelling, since nothing else records it;
+/// [`EslHeaders`](crate::EslHeaders) folds its other casings onto the first
+/// one stored.
 pub fn normalize_header_key(raw: &str) -> String {
-    if let Ok(eh) = raw.parse::<EventHeader>() {
-        return eh
+    match raw.parse::<EventHeader>() {
+        Ok(eh) => eh
             .as_str()
-            .to_string();
+            .to_string(),
+        Err(_) => raw.to_string(),
     }
-    if case_alias_key(raw).is_none() {
-        raw.to_string()
-    } else {
-        title_case_dashes(raw)
-    }
-}
-
-fn title_case_dashes(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut capitalize_next = true;
-    for c in s.chars() {
-        if c == '-' {
-            result.push('-');
-            capitalize_next = true;
-        } else if capitalize_next {
-            result.push(c.to_ascii_uppercase());
-            capitalize_next = false;
-        } else {
-            result.push(c.to_ascii_lowercase());
-        }
-    }
-    result
 }
 
 #[cfg(test)]

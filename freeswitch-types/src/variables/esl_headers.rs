@@ -48,12 +48,15 @@ use crate::variables::{EslArray, MAX_ARRAY_ITEMS};
 /// row, whole. Commas are left to the accessor, which knows whether a header
 /// is a list. An `ARRAY::` past [`MAX_ARRAY_ITEMS`] is a [`RowError`].
 ///
-/// Every write normalizes its key with
-/// [`normalize_header_key`](crate::normalize_header_key), so a payload
-/// spelling one header two ways collapses to one entry, and every read falls
-/// back to a lowercase alias, so a query in any casing resolves. Keys
-/// containing `_` are exempt from both: their suffix carries SIP wire casing.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Every write runs its key through
+/// [`normalize_header_key`](crate::normalize_header_key), so a known header
+/// takes its canonical spelling and any other keeps the one it arrived in.
+/// A later write in another casing lands on the entry already stored, under
+/// its first spelling, and every read falls back to a lowercase alias, so a
+/// query in any casing resolves. Keys containing `_` are exempt from both:
+/// their suffix carries SIP wire casing. Equality follows the same rule, so
+/// two stores that first saw one header in different casings are equal.
+#[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize), serde(transparent))]
 pub struct EslHeaders {
     map: IndexMap<String, String>,
@@ -75,25 +78,35 @@ impl EslHeaders {
             .collect()
     }
 
-    /// Access the underlying map, keyed canonically.
+    /// Access the underlying map, keyed by stored spelling.
     pub fn as_map(&self) -> &IndexMap<String, String> {
         &self.map
     }
 
-    /// Consume and return the underlying map, keyed canonically.
+    /// Consume and return the underlying map, keyed by stored spelling.
     pub fn into_map(self) -> IndexMap<String, String> {
         self.map
     }
 
-    /// Insert a header under its canonical key, replacing any entry there.
+    /// Insert a header, replacing the value of any entry it matches in another
+    /// casing and keeping that entry's spelling.
+    ///
+    /// Collecting from a map that holds one header in two casings keeps
+    /// whichever the map yields first, with the value of the last.
     pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
         let key = normalize_header_key(&key.into());
-        if let Some(alias) = case_alias_key(&key) {
-            self.aliases
-                .insert(alias, key.clone());
-        }
+        let value = value.into();
+        let Some(alias) = case_alias_key(&key) else {
+            self.map
+                .insert(key, value);
+            return;
+        };
+        let stored = self
+            .aliases
+            .entry(alias)
+            .or_insert(key);
         self.map
-            .insert(key, value.into());
+            .insert(stored.clone(), value);
     }
 
     /// Remove a header, by canonical key or by any other casing of it.
@@ -179,6 +192,18 @@ fn key_has_prefix(key: &str, prefix: &str) -> bool {
     key.get(..prefix.len())
         .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
 }
+
+impl PartialEq for EslHeaders {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .map
+                .iter()
+                .all(|(key, value)| other.get(key) == Some(value.as_str()))
+    }
+}
+
+impl Eq for EslHeaders {}
 
 impl<'a> IntoIterator for &'a EslHeaders {
     type Item = (&'a String, &'a String);

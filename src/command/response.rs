@@ -205,8 +205,7 @@ pub struct EslResponse {
 }
 
 impl EslResponse {
-    /// Keys are canonicalized with
-    /// [`normalize_header_key`](freeswitch_types::normalize_header_key), so a
+    /// Keys are stored as [`EslHeaders`] stores them, so a
     /// map carrying the same logical header in two casings collapses to one
     /// entry — the same way [`EslEvent`](crate::event::EslEvent) treats it.
     ///

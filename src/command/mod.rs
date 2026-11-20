@@ -488,21 +488,21 @@ impl EslCommand {
                 options,
             } => {
                 let mut event = EslEvent::new();
-                event.set_header("call-command", "execute");
-                event.set_header("execute-app-name", app.clone());
+                event.set_header("Call-Command", "execute");
+                event.set_header("Execute-App-Name", app.clone());
 
                 if let Some(args) = args {
-                    event.set_header("execute-app-arg", args.clone());
+                    event.set_header("Execute-App-Arg", args.clone());
                 }
 
                 if options.event_lock {
-                    event.set_header("event-lock", "true");
+                    event.set_header("Event-Lock", "true");
                 }
                 if options.async_mode {
-                    event.set_header("async", "true");
+                    event.set_header("Async", "true");
                 }
                 if let Some(loops) = options.loops {
-                    event.set_header("loops", loops.to_string());
+                    event.set_header("Loops", loops.to_string());
                 }
 
                 EslCommand::SendMsg {
@@ -999,7 +999,7 @@ mod tests {
         let redacted = cmd.redact_wire(&wire);
         // SendMsg is not sensitive, wire content is preserved (minus terminator)
         assert!(redacted.contains("sendmsg"));
-        assert!(redacted.contains("Execute-App-Name: answer"));
+        assert!(redacted.contains("execute-app-name: answer"));
         assert!(!redacted.ends_with("\n\n"));
     }
 
