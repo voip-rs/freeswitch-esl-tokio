@@ -11,9 +11,28 @@
 //!
 //! [`EslHeaders`] wraps an [`IndexMap<String, String>`] and is a
 //! [`SipHeaderRows`] store whose rows have both quirks peeled, so sip-header's
-//! typed accessors read FreeSWITCH values as RFC header rows. The
-//! design-rationale doc §"EslHeaders: making the transport boundary visible"
-//! explains the layering.
+//! typed accessors read FreeSWITCH values as RFC header rows.
+//!
+//! Every carrier stores headers here, and nothing reads them by exact key. The
+//! switch looks headers up case-insensitively, emits one header in several
+//! casings (sometimes twice in one event), and a consumer queries in whatever
+//! casing its config holds. A known [`EventHeader`](crate::EventHeader) is
+//! stored in its canonical spelling. Any other key keeps the spelling it first
+//! arrived in, because nothing else records the wire spelling and a consumer
+//! forwarding keys needs it; a later casing lands on that entry. A key
+//! containing `_` is never folded: a `variable_*` name is a user variable in
+//! any case the dialplan chose, and a `sip_h_`-style suffix is the SIP header
+//! name the switch emits verbatim. Deserialization goes through `insert`, since
+//! a payload is an entry point like the wire. Equality and hashing fold the way
+//! lookup does.
+//!
+//! The rows of a header the catalog marks repeatable are its `ARRAY::` items
+//! with `[...]` wrapping removed; any other header is one row, whole. Commas
+//! are left to the accessor, which alone knows whether a header is a list, so
+//! an authentication header's parameters are never cut into rows. An `ARRAY::`
+//! past [`MAX_ARRAY_ITEMS`] is a row error rather than the whole value, so
+//! every accessor fails on it instead of reading garbage. A raw value goes
+//! through the same decoder ([`EslHeaders::decode_value`]).
 
 use indexmap::IndexMap;
 use sip_header_catalog::{RowError, SipHeader, SipHeaderField, SipHeaderRows};

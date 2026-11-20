@@ -196,70 +196,6 @@ macro that produces `Display`, `FromStr` (case-insensitive), `as_str()`, and
 `AsRef<str>` for each variant. Application-specific crates can use the same
 macro to define their own header enums without depending on core types.
 
-## Header key normalization
-
-FreeSWITCH's C ESL library stores header names verbatim but looks them up
-with `strcasecmp` and a case-insensitive hash (`esl_ci_hashfunc_default` in
-`esl_event.c`). This means FreeSWITCH itself doesn't care about header
-casing — but Rust's `HashMap<String, String>` does.
-
-The problem is pervasive. Multiple C code paths emit the same logical header
-with different casing:
-
-- `switch_channel.c` (`switch_channel_event_set_basic_data`) emits
-  `Unique-ID`, `Channel-State`, `Channel-Read-Codec-Bit-Rate` — Title-Case.
-- `switch_event.c` emits `unique-id`, `channel-state`, `answer-state` —
-  all lowercase.
-- `switch_core_codec.c` is internally inconsistent: read codec headers are
-  all lowercase (`channel-read-codec-bit-rate`), write codec headers are
-  mixed (`Channel-Write-Codec-Name` but `Channel-Write-codec-bit-rate`),
-  video codec headers are all lowercase.
-
-Because `switch_event_add_header` doesn't deduplicate, a CODEC event can
-contain *both* `Channel-Read-Codec-Bit-Rate` and `channel-read-codec-bit-rate`
-as separate entries. The C library finds whichever comes first via its
-linked-list scan with `strcasecmp`. A Rust `HashMap` stores both as distinct
-keys, and `event.header(EventHeader::ChannelReadCodecBitRate)` silently picks
-whichever one `HashMap::get` hashes to.
-
-`normalize_header_key()` canonicalizes header keys at parse time so that all
-casing variants collapse to a single `HashMap` entry:
-
-1. **Known `EventHeader` match** — the key is parsed through
-   `EventHeader::from_str()` (already case-insensitive). If it matches, the
-   canonical `as_str()` form is returned. This preserves acronyms (`Unique-ID`,
-   `DTMF-Digit`, `Channel-Call-UUID`) and special-case names (`priority`,
-   `pl_data`) exactly as defined in the enum.
-
-2. **Underscore passthrough** — keys containing underscores are returned
-   unchanged. These are channel variables (`variable_sip_call_id`) or
-   `sip_h_*` passthrough headers (`variable_sip_h_X-My-Custom-Header`) where
-   the suffix preserves the original SIP header casing from the wire.
-   FreeSWITCH emits all `variable_*` keys from a single code path
-   (`switch_channel_event_set_extended_data`), so casing is already consistent.
-
-3. **Title-Case fallback** — unknown dash-separated keys are Title-Cased
-   (capitalize first letter of each segment, lowercase the rest). This matches
-   FreeSWITCH's dominant convention for event and framing headers.
-
-The underscore passthrough is critical for `sip_h_*` variables. `sofia.c`
-and `sofia_glue.c` store raw SIP header names verbatim after the `sip_h_`
-prefix — `sip_h_X-My-Custom-Header` preserves the exact casing from the
-SIP peer. Lowercasing these would break outbound header passthrough, since
-`sofia_glue_get_extra_headers()` strips the prefix and emits the remainder
-as the SIP header name on the wire.
-
-Every header carrier holds one store type, `EslHeaders`, and that type
-normalizes on every write, deserialization included: a serialized payload is an
-entry point like the wire, so a store that derives its `Deserialize` brings the
-two-key problem back for whatever the payload spelled differently. Normalization
-is case-only — an underscore key passes through, a dashed key changes case and
-nothing else — so no stored spelling is lost, and applying it to a store that
-kept keys verbatim changes nothing a caller reads back except the case. Lookup
-is case-insensitive on every carrier through one lowercase alias index per
-store, so the same query on an event, a command reply or a hand-built map
-answers alike.
-
 ### Two spellings of one field are two keys
 
 mod_sofia emits one logical field under both a hyphen and an underscore
@@ -678,32 +614,6 @@ ESL data is not the same thing as a `HashMap` holding standard SIP headers.
 The difference is real — ESL values can be ARRAY-encoded, bracket-wrapped,
 and carry `variable_` prefixed keys. Papering over that inside `sip-header`
 would hide a transport distinction that callers need to reason about.
-
-### EslHeaders: making the transport boundary visible
-
-[`EslHeaders`](../freeswitch-types/src/variables/esl_headers.rs) wraps
-`IndexMap<String, String>` and answers the catalog's row trait: a header the
-catalog marks repeatable yields one row per occurrence, with FreeSWITCH's
-`[...]` wrapping and `ARRAY::` encoding peeled, and any other header is one row,
-whole. Commas stay for the accessor, which alone knows whether a header is a
-list; splitting them here would cut an authentication header's parameters into
-rows, which RFC 3261 section 7.3.1 forbids joining in the first place. An
-`ARRAY::` value past the item cap is a row error, never a fallback to the whole
-value, so every accessor fails on it rather than reading garbage. The rows are
-the decoded view; the stored value is `HeaderLookup::header_str`. `EslEvent` and
-`EslResponse` are carriers around an `EslHeaders`; there is no second store.
-
-The type makes visible what was previously hidden:
-
-| Type | `call_info()` handles | `variable_str()` | ARRAY decoding |
-|------|----------------------|-------------------|----------------|
-| `HashMap<String, String>` | RFC comma-separated | no | no |
-| `EslHeaders` | RFC + ARRAY + brackets | yes (`variable_` prefix) | yes |
-
-A raw channel-variable value, such as `sip_call_info` fetched over ESL, goes
-through the same decoder into the catalog's single-header holder, which the
-caller types with its own sip-header. There is one decoder for the map and the
-raw value, and neither returns a sip-header value type.
 
 ### HeaderLookup requires only the catalog's row trait
 
