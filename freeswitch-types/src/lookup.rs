@@ -4,6 +4,13 @@
 //! call direction, timetable extraction, etc.) to any type that can look up
 //! headers and variables by name. Implement the two required methods and get
 //! everything else for free.
+//!
+//! `header_str` resolves a name in any casing unless it contains `_`, which
+//! is compared exactly ([`case_alias_key`](crate::case_alias_key) states the
+//! rule). The switch spells one header several ways and a consumer queries
+//! in whatever casing its config holds, so an exact store misses silently.
+//! Every implementor keeps that contract; a store of its own wraps
+//! [`EslHeaders`](crate::EslHeaders), which does, rather than a bare map.
 
 use crate::channel::{
     channel_driver, AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable,

@@ -1,4 +1,9 @@
 //! ESL protocol parsing and message handling
+//!
+//! A parsed message holds its envelope in an `EslHeaders`, the store every
+//! other carrier uses, so framing reads resolve in any casing the same way an
+//! event lookup does. A raw map read by exact key misses any header the
+//! normaliser respells.
 
 // qual:allow(coupling, sdp) reason: "the parser owns its read buffer"
 use crate::{
