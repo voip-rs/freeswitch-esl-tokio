@@ -455,17 +455,10 @@ mod tests {
     }
 
     #[test]
-    fn normalize_unknown_dash_keys_title_case() {
-        // Framing and unknown event headers get Title-Cased
-        assert_eq!(normalize_header_key("content-type"), "Content-Type");
-        assert_eq!(normalize_header_key("Content-Type"), "Content-Type");
-        assert_eq!(normalize_header_key("CONTENT-TYPE"), "Content-Type");
-        assert_eq!(normalize_header_key("x-custom-header"), "X-Custom-Header");
-        assert_eq!(
-            normalize_header_key("Content-Disposition"),
-            "Content-Disposition"
-        );
-        assert_eq!(normalize_header_key("reply-text"), "Reply-Text");
+    fn normalize_unknown_dash_keys_pass_through() {
+        assert_eq!(normalize_header_key("content-type"), "content-type");
+        assert_eq!(normalize_header_key("C911P-Action"), "C911P-Action");
+        assert_eq!(normalize_header_key("x-custom-header"), "x-custom-header");
     }
 
     #[test]

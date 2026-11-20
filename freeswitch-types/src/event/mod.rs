@@ -403,6 +403,19 @@ mod tests {
     }
 
     #[test]
+    fn events_differing_only_in_first_spelling_hash_alike() {
+        use std::hash::{BuildHasher, RandomState};
+
+        let mut a = EslEvent::new();
+        a.set_header("C911P-Action", "x");
+        let mut b = EslEvent::new();
+        b.set_header("c911p-action", "x");
+        assert_eq!(a, b);
+        let state = RandomState::new();
+        assert_eq!(state.hash_one(&a), state.hash_one(&b));
+    }
+
+    #[test]
     fn headers_preserve_insertion_order() {
         let mut event = EslEvent::new();
         event.set_header("Zebra", "last");

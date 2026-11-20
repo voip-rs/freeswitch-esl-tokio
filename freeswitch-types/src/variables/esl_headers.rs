@@ -518,6 +518,55 @@ mod tests {
     }
 
     #[test]
+    fn an_unknown_dash_key_keeps_its_first_spelling() {
+        let mut h = EslHeaders::new();
+        h.insert("C911P-Action", "first");
+        h.insert("c911p-action", "second");
+        assert_eq!(
+            h.as_map()
+                .iter()
+                .collect::<Vec<_>>(),
+            [(&"C911P-Action".to_string(), &"second".to_string())]
+        );
+
+        h.insert("unique-id", "abc");
+        assert!(h
+            .as_map()
+            .contains_key("Unique-ID"));
+    }
+
+    #[test]
+    fn one_header_under_two_first_spellings_is_one_store() {
+        let a: EslHeaders = [("C911P-Action", "x")]
+            .into_iter()
+            .collect();
+        let b: EslHeaders = [("c911p-action", "x")]
+            .into_iter()
+            .collect();
+        assert_eq!(a, b);
+
+        let c: EslHeaders = [("c911p-action", "y")]
+            .into_iter()
+            .collect();
+        assert_ne!(a, c);
+        let d: EslHeaders = [("variable_X-a", "x")]
+            .into_iter()
+            .collect();
+        let e: EslHeaders = [("variable_x-a", "x")]
+            .into_iter()
+            .collect();
+        assert_ne!(d, e);
+    }
+
+    /// Spools written before first-seen spelling hold Title-Cased keys.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn a_title_cased_spool_record_answers_the_wire_spelling() {
+        let h: EslHeaders = serde_json::from_str(r#"{"C911p-Action":"dispatch"}"#).expect("record");
+        assert_eq!(h.header_str("C911P-Action"), Some("dispatch"));
+    }
+
+    #[test]
     fn array_encoding_decodes_for_every_multi_value_header() {
         let mut h = EslHeaders::new();
         h.insert(
