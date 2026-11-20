@@ -11,6 +11,19 @@
 //! in whatever casing its config holds, so an exact store misses silently.
 //! Every implementor keeps that contract; a store of its own wraps
 //! [`EslHeaders`](crate::EslHeaders), which does, rather than a bare map.
+//!
+//! Accessors live on a trait rather than on [`EslEvent`](crate::EslEvent)
+//! because a consumer rarely keeps events: it accumulates headers from many of
+//! them into a store of its own, which gets every accessor by implementing two
+//! methods. Helpers that only read headers, such as
+//! [`ChannelTimetable::from_lookup`], take a closure for the same reason.
+//!
+//! The supertrait is the catalog's [`SipHeaderRows`], so a consumer's own
+//! sip-header types every store; this crate names no sip-header type. Where the
+//! switch spells one field two ways (hyphen and underscore), each spelling is
+//! its own [`EventHeader`] variant and an accessor unions them with
+//! [`first_header`](HeaderLookup::first_header); the store never folds them,
+//! which would alias every dash/underscore pair.
 
 use crate::channel::{
     channel_driver, AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable,

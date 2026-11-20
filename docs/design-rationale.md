@@ -166,19 +166,6 @@ Typed state enums (`ChannelState`, `CallState`, `AnswerState`, `CallDirection`),
 `FromStr`/`Display`. Typos surface at compile time; comparisons are exhaustive
 match arms instead of fragile string equality.
 
-### Decoupling from EslEvent
-
-`ChannelTimetable::from_lookup()` accepts a closure `|key| -> Option<&str>`
-rather than requiring `&EslEvent`. This lets callers use the same extraction
-logic with `HashMap`, `BTreeMap`, JSON objects, or any other key-value store.
-`EslEvent` convenience methods (`caller_timetable()`, `other_leg_timetable()`)
-are thin wrappers, not the primary API.
-
-The same principle applies to the state enums: `ChannelState::from_str("CS_EXECUTE")`
-works on any string, not just one pulled from an `EslEvent`. The `channel_tracker`
-example demonstrates this — it stores headers in a flat `HashMap` and parses
-typed state on demand without going through `EslEvent`.
-
 ### No silent failures on protocol data
 
 Parsing channel state, timetable timestamps, and header names returns `Result`
@@ -195,13 +182,6 @@ something to silently ignore.
 macro that produces `Display`, `FromStr` (case-insensitive), `as_str()`, and
 `AsRef<str>` for each variant. Application-specific crates can use the same
 macro to define their own header enums without depending on core types.
-
-### Two spellings of one field are two keys
-
-mod_sofia emits one logical field under both a hyphen and an underscore
-spelling, so each is its own variant and normalization never folds one into the
-other. A `HeaderLookup` accessor unions them where the caller wants the field
-rather than the key.
 
 ## A carrier-dependent value renders only for a named target
 
@@ -430,27 +410,6 @@ then returns the residual bytes for the new process to pre-seed its parser.
 
 See [docs/reexec.md](docs/reexec.md) for the full API and drain protocol.
 
-## HeaderLookup as a trait, not methods on EslEvent
-
-Production ESL daemons don't keep `EslEvent` objects around. fs-eventd's
-channel tracker stores headers in a flat `HashMap<String, String>` and
-accumulates them from multiple events over a channel's lifetime. The
-`HeaderLookup` trait provides typed accessor methods (`channel_state()`,
-`call_direction()`, `hangup_cause()`, etc.) that work on any type
-implementing two methods: `header_str(&str) -> Option<&str>` and
-`variable_str(&str) -> Option<&str>`.
-
-This means the same accessors work on:
-
-- `EslEvent` — direct event from the wire
-- `EslResponse` — connect_session response with channel data
-- `TrackedChannel` — accumulated state in a HashMap
-- Any custom type the caller defines
-
-The alternative — putting accessors only on `EslEvent` — would force callers
-to either keep `EslEvent` objects alive or reimplement the accessors on their
-own types. The trait makes the typed API composable.
-
 ## Stop on protocol desync rather than absorb
 
 NEventSocket (.NET) is the most mature high-level ESL client and absorbs
@@ -614,14 +573,6 @@ ESL data is not the same thing as a `HashMap` holding standard SIP headers.
 The difference is real — ESL values can be ARRAY-encoded, bracket-wrapped,
 and carry `variable_` prefixed keys. Papering over that inside `sip-header`
 would hide a transport distinction that callers need to reason about.
-
-### HeaderLookup requires only the catalog's row trait
-
-Every typed SIP accessor comes from sip-header's blanket implementation over the
-catalog's row trait, so any `HeaderLookup` store is typed by whichever sip-header
-the consumer depends on. There is no `HeaderLookup` impl for a bare `IndexMap`:
-ARRAY decoding, bracket stripping and `variable_` prefixes are right for ESL
-data and wrong for an arbitrary map.
 
 ## Unified SIP passthrough headers over per-prefix enums
 
