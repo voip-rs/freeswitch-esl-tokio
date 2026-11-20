@@ -102,15 +102,14 @@ let codec = event.variable(ChannelVariable::ReadCodec);    // Option<&str>
 
 ## Custom channel tracker with `HeaderLookup`
 
-The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share the same typed accessors as `EslEvent`. `HeaderLookup` requires the catalog's `SipHeaderRows` supertrait, which is also what sip-header's typed SIP accessors (`call_info()`, `p_asserted_identity()`, …) read, so implement three methods, get all typed accessors for free:
+The `HeaderLookup` trait lets a store of your own share the same typed accessors as `EslEvent`. `HeaderLookup` requires the catalog's `SipHeaderRows` supertrait, which is also what sip-header's typed SIP accessors (`call_info()`, `p_asserted_identity()`, …) read, so implement three methods, get all typed accessors for free. Hold the headers in an `EslHeaders`, not a bare map: it resolves a header in any casing, as every carrier in the crate does, where a map read by exact key misses whatever casing the switch or your config spelled differently:
 
 ```rust
-use std::collections::HashMap;
-use freeswitch_esl_tokio::{HeaderLookup, RowError, SipHeaderRows};
+use freeswitch_esl_tokio::{EslHeaders, HeaderLookup, RowError, SipHeaderRows};
 use sip_header::SipHeaderLookup;
 
 struct TrackedChannel {
-    data: HashMap<String, String>,
+    data: EslHeaders,
 }
 
 impl SipHeaderRows for TrackedChannel {
@@ -121,10 +120,10 @@ impl SipHeaderRows for TrackedChannel {
 
 impl HeaderLookup for TrackedChannel {
     fn header_str(&self, name: &str) -> Option<&str> {
-        self.data.get(name).map(|s| s.as_str())
+        self.data.header_str(name)
     }
     fn variable_str(&self, name: &str) -> Option<&str> {
-        self.data.get(&format!("variable_{}", name)).map(|s| s.as_str())
+        self.data.variable_str(name)
     }
 }
 
@@ -132,8 +131,8 @@ impl HeaderLookup for TrackedChannel {
 // ch.channel_state(), ch.call_direction(), ch.hangup_cause(),
 // ch.caller_timetable(), ch.header(EventHeader::UniqueId), etc.
 // and, through sip-header, the SIP ones:
-let mut data = HashMap::new();
-data.insert("Call-Info".to_string(), "<sip:pbx.example.com>;purpose=icon".to_string());
+let mut data = EslHeaders::new();
+data.insert("call-info", "<sip:pbx.example.com>;purpose=icon");
 let ch = TrackedChannel { data };
 assert_eq!(ch.call_info()?.unwrap().entries()[0].purpose(), Some("icon"));
 # Ok::<(), sip_header::ParseError>(())

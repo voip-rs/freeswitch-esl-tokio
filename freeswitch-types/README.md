@@ -146,12 +146,13 @@ the revision `render` takes, see
 ### Typed event accessors
 
 ```rust
-use freeswitch_types::{HeaderLookup, RowError, SipHeaderRows, EventHeader, ChannelVariable};
+use freeswitch_types::{EslHeaders, HeaderLookup, RowError, SipHeaderRows, EventHeader, ChannelVariable};
 
-// HeaderLookup works with any key-value store, not just EslEvent
-struct MyHeaders(std::collections::HashMap<String, String>);
+// HeaderLookup works on a store of your own, not just EslEvent. Wrap an
+// EslHeaders: it resolves a header in any casing, where an exact-key map misses.
+struct MyHeaders(EslHeaders);
 
-// The SIP row trait HeaderLookup requires; the map already implements it.
+// The SIP row trait HeaderLookup requires; EslHeaders implements it.
 impl SipHeaderRows for MyHeaders {
     fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
         self.0.sip_header_rows_str(name)
@@ -160,10 +161,10 @@ impl SipHeaderRows for MyHeaders {
 
 impl HeaderLookup for MyHeaders {
     fn header_str(&self, name: &str) -> Option<&str> {
-        self.0.get(name).map(|s| s.as_str())
+        self.0.header_str(name)
     }
     fn variable_str(&self, name: &str) -> Option<&str> {
-        self.0.get(&format!("variable_{}", name)).map(|s| s.as_str())
+        self.0.variable_str(name)
     }
 }
 

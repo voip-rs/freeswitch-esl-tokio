@@ -31,8 +31,8 @@ mod common;
 use freeswitch_esl_tokio::variables::SofiaVariable;
 use freeswitch_esl_tokio::{
     parse_channel_dump, BgJobResult, BgJobTracker, CallState, ChannelState, EslClient, EslError,
-    EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup, RowError, SipHeaderRows,
-    VARIABLE_PREFIX,
+    EslEvent, EslEventType, EslHeaders, EventFormat, EventHeader, HeaderLookup, RowError,
+    SipHeaderRows,
 };
 use tracing::{debug, error, info, warn};
 
@@ -109,19 +109,19 @@ struct PendingDump {
     sent: Instant,
 }
 
-/// Flat data map -- all event headers and uuid_dump variables accumulated over
-/// the channel's lifetime.
+/// All event headers and uuid_dump variables accumulated over the channel's
+/// lifetime, in an [`EslHeaders`] so a header resolves in any casing.
 ///
 /// Implements [`HeaderLookup`] to get all typed accessors (`channel_state()`,
 /// `call_direction()`, `hangup_cause()`, `timetable()`, etc.) from just two
 /// methods. Use `header(EventHeader::X)` for known headers, `header_str("X")`
 /// for arbitrary header names, and `variable_str("x")` for channel variables.
 struct TrackedChannel {
-    data: HashMap<String, String>,
+    data: EslHeaders,
 }
 
 // HeaderLookup requires the SIP row trait, which is what sip-header's typed
-// accessors (`call_info()`, ...) read. The map already implements it.
+// accessors (`call_info()`, ...) read. EslHeaders implements both.
 impl SipHeaderRows for TrackedChannel {
     fn sip_header_rows_str<'a>(&'a self, name: &str) -> Result<Vec<&'a str>, RowError> {
         self.data
@@ -132,21 +132,19 @@ impl SipHeaderRows for TrackedChannel {
 impl HeaderLookup for TrackedChannel {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.data
-            .get(name)
-            .map(|s| s.as_str())
+            .header_str(name)
     }
 
     fn variable_str(&self, name: &str) -> Option<&str> {
         self.data
-            .get(&format!("{VARIABLE_PREFIX}{name}"))
-            .map(|s| s.as_str())
+            .variable_str(name)
     }
 }
 
 impl TrackedChannel {
     fn new() -> Self {
         Self {
-            data: HashMap::new(),
+            data: EslHeaders::new(),
         }
     }
 

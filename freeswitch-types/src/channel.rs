@@ -445,25 +445,24 @@ macro_rules! channel_timetable_fields {
         /// Extract a timetable by looking up prefixed header names via a closure.
         ///
         /// The closure receives full header names (e.g. `"Caller-Channel-Created-Time"`)
-        /// and should return the raw value if present. Works with any key-value store:
-        /// `HashMap<String, String>`, `EslEvent`, `BTreeMap`, etc.
+        /// and should return the raw value if present, in any casing the store holds
+        /// it: a [`HeaderLookup`](crate::HeaderLookup) store's `header_str` does.
         ///
         /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
         /// Returns `Err` if a header is present but contains an invalid (non-`i64`) value.
         ///
         /// ```
-        /// use std::collections::HashMap;
-        /// use freeswitch_types::{ChannelTimetable, TimetablePrefix};
+        /// use freeswitch_types::{ChannelTimetable, EslHeaders, HeaderLookup, TimetablePrefix};
         ///
-        /// let mut headers: HashMap<String, String> = HashMap::new();
-        /// headers.insert("Caller-Channel-Created-Time".into(), "1700000001000000".into());
+        /// let mut headers = EslHeaders::new();
+        /// headers.insert("caller-channel-created-time", "1700000001000000");
         ///
         /// // With enum:
-        /// let tt = ChannelTimetable::from_lookup(TimetablePrefix::Caller, |k| headers.get(k).map(|v: &String| v.as_str()));
+        /// let tt = ChannelTimetable::from_lookup(TimetablePrefix::Caller, |k| headers.header_str(k));
         /// assert!(tt.unwrap().unwrap().created.is_some());
         ///
         /// // With raw string (e.g. for dynamic "Call-1" prefix):
-        /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.get(k).map(|v: &String| v.as_str()));
+        /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.header_str(k));
         /// assert!(tt.unwrap().unwrap().created.is_some());
         /// ```
         pub fn from_lookup<'a>(

@@ -37,7 +37,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `SipGeolocationRef` | `sip_header::SipGeolocationEntry` |
 | `extract_header` at the crate root | `sip_header::extract_header`, or `SipMessageHeaders` as a row store |
 | `SipHeaderLookup` at the root and in the prelude | `sip_header::SipHeaderLookup` in scope (`use sip_header::SipHeaderLookup`); this crate's root and prelude carry the catalog's `SipHeaderRows` and `SipHeaderRowsExt` |
-| `impl SipHeaderLookup for Store { fn sip_header_str(..) }` beside `HeaderLookup` | `impl SipHeaderRows for Store { fn sip_header_rows_str(..) -> Result<Vec<&str>, RowError> }`; a `HashMap<String, String>` field already implements it |
+| `impl SipHeaderLookup for Store { fn sip_header_str(..) }` beside `HeaderLookup` | `impl SipHeaderRows for Store { fn sip_header_rows_str(..) -> Result<Vec<&str>, RowError> }`; an `EslHeaders` field already implements it |
 | `sip_header_str()` returns `Option<&str>` | `Result<Option<&str>, RowError>`, the first decoded row; the stored value is `HeaderLookup::header_str` |
 | `EslHeaders::parse_uri_info(raw)`, `parse_history_info(raw)`, `split_entries(raw)` | `EslHeaders::decode_value(SipHeader::CallInfo, raw)?` gives a `SipHeaderField`; call `.call_info()`, `.history_info()`, … on it. `decode_value_raw(name, raw)` takes a header the catalog does not register |
 | an over-cap `ARRAY::` value handed whole to the parser | `RowError` with `RowErrorKind::TooManyRows`, through every accessor as `sip_header::ParseError::Row` |
@@ -49,6 +49,20 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 
 - sip-header 1.0 parses through traits: `SipHeaderAddr::parse(s)` with `HeaderParse` in scope, never `s.parse::<SipHeaderAddr>()`.
 - Every sip-header accessor returns `Result<Option<T>, ParseError>`; list and auth accessors that returned a bare `Vec` are wrapped too.
+
+## Header stores and header names
+
+| 2.x | 3.0 |
+|---|---|
+| `HeaderLookup` on a bare `HashMap<String, String>`, matching names exactly | `EslHeaders::from_iter(map)` at the boundary, then read through it; every lookup resolves a dash key in any casing |
+| a store of your own reading a `HashMap` by exact key | wrap an `EslHeaders` and delegate `header_str` / `variable_str` to it |
+| `EslEvent::headers()`, `EslResponse::headers()` return `&IndexMap<String, String>` | they return `&EslHeaders`; `.as_map()` for the map, `with_prefix("X-")` for one family of headers in any casing |
+| `header(EventHeader)` on `HeaderLookup` and `EslEvent`; `EslResponse::header(impl AsRef<str>)` | `header(impl EventHeaderName)` on all three; a string name goes through `header_str` |
+| an unknown dash key stored Title-Cased (`C911P-Action` as `C911p-Action`) | stored as first spelled; a later write in another casing replaces the value under that key. A store or spool written by 2.x still answers every casing |
+| `DisconnectReason::ServerNotice` with `controlled_session_uuid: None` on a session-bound notice | carries the UUID the switch sent |
+
+- A `define_header_enum!` enum of your own headers reads through `header()` once it implements `EventHeaderName` (one `as_str`), as a variable enum does with `VariableName`.
+- A hand-built `sendmsg` or `sendevent` goes out with the header spellings you set rather than Title-Cased ones; the switch reads them case-insensitively.
 
 ## Command builders
 
