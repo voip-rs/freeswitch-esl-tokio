@@ -150,8 +150,8 @@ async fn parent() -> Result<(), Box<dyn std::error::Error>> {
     // CUSTOM is terminal in the event grammar, so the subclass has to be added
     // as one rather than spelled into the token list.
     let sub = EventSubscription::new(EventFormat::Plain)
-        .event(EslEventType::ChannelHangupComplete)
-        .custom_subclass("loopback::bowout")?;
+        .with_event(EslEventType::ChannelHangupComplete)
+        .with_custom_subclass("loopback::bowout")?;
     client
         .apply_subscription(&sub)
         .await?;

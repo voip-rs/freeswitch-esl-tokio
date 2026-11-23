@@ -426,9 +426,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Build an EventSubscription combining events and filters into one unit
-    let mut sub = EventSubscription::new(format).events(event_types);
+    let mut sub = EventSubscription::new(format).with_events(event_types);
     for (header, value) in &args.filters {
-        sub = sub.filter_raw(header, value)?;
+        sub = sub.with_filter_raw(header, value)?;
     }
     eprintln!("Subscribing to events: {:?}", args.events);
     for (header, value) in &args.filters {

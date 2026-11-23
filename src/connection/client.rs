@@ -221,8 +221,8 @@ impl EslClient {
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), Box<dyn std::error::Error>> {
     /// use freeswitch_esl_tokio::{EventFormat, EventSubscription};
     /// let sub = EventSubscription::new(EventFormat::Plain)
-    ///     .custom_subclass("sofia::register")?
-    ///     .custom_subclass("sofia::unregister")?;
+    ///     .with_custom_subclass("sofia::register")?
+    ///     .with_custom_subclass("sofia::unregister")?;
     /// client.apply_subscription(&sub).await?;
     /// # Ok(())
     /// # }
@@ -232,7 +232,7 @@ impl EslClient {
         format: EventFormat,
         events: impl IntoIterator<Item = T>,
     ) -> EslResult<()> {
-        let sub = freeswitch_types::EventSubscription::new(format).events(events);
+        let sub = freeswitch_types::EventSubscription::new(format).with_events(events);
         self.send_subscription_events(&sub)
             .await?;
         info!("Subscribed to events with format {:?}", format);
@@ -445,12 +445,12 @@ impl EslClient {
         use std::collections::HashSet;
 
         let old_types: HashSet<EslEventType> = old
-            .event_types()
+            .events()
             .iter()
             .copied()
             .collect();
         let new_types: HashSet<EslEventType> = new
-            .event_types()
+            .events()
             .iter()
             .copied()
             .collect();
@@ -476,16 +476,12 @@ impl EslClient {
         }
 
         // Step 4: nixevent removed raw-named events
-        self.nixevent_str_diff(old.event_types_raw(), new.event_types_raw(), "")
+        self.nixevent_str_diff(old.events_raw(), new.events_raw(), "")
             .await?;
 
         // Step 5: nixevent removed custom subclasses
-        self.nixevent_str_diff(
-            old.custom_subclass_list(),
-            new.custom_subclass_list(),
-            "CUSTOM ",
-        )
-        .await
+        self.nixevent_str_diff(old.custom_subclasses(), new.custom_subclasses(), "CUSTOM ")
+            .await
     }
 
     /// Execute application on channel.

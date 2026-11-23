@@ -32,9 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         EventSubscription::all(EventFormat::Plain)
     } else {
         EventSubscription::new(EventFormat::Plain)
-            .events(EslEventType::CHANNEL_EVENTS)
-            .event(EslEventType::Dtmf)
-            .event(EslEventType::Heartbeat)
+            .with_events(EslEventType::CHANNEL_EVENTS)
+            .with_event(EslEventType::Dtmf)
+            .with_event(EslEventType::Heartbeat)
     };
     client
         .apply_subscription(&subscription)

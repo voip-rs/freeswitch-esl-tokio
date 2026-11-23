@@ -282,9 +282,9 @@ let (client, mut events) = EslClient::connect(&host, port, &password).await?;
 // Subscribe only to the subclasses needed to track registrations.
 // custom_subclass() returns Err if the string contains spaces or newlines.
 let subscription = EventSubscription::new(EventFormat::Plain)
-    .custom_subclass("sofia::register").unwrap()
-    .custom_subclass("sofia::unregister").unwrap()
-    .custom_subclass("sofia::expire").unwrap();
+    .with_custom_subclass("sofia::register").unwrap()
+    .with_custom_subclass("sofia::unregister").unwrap()
+    .with_custom_subclass("sofia::expire").unwrap();
 
 // Sends: event plain CUSTOM sofia::register sofia::unregister sofia::expire
 client.apply_subscription(&subscription).await?;

@@ -58,8 +58,8 @@ async fn main() {
     // HEARTBEAT is subscribed separately in run_session (it gates the liveness
     // timer and may be permission-denied) -- keep only functional events here.
     let subscription = EventSubscription::new(EventFormat::Plain)
-        .event(EslEventType::ChannelAnswer)
-        .event(EslEventType::ChannelHangupComplete);
+        .with_event(EslEventType::ChannelAnswer)
+        .with_event(EslEventType::ChannelHangupComplete);
 
     let mut backoff = BACKOFF_INITIAL;
 

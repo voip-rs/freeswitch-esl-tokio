@@ -117,11 +117,11 @@
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Build once, reuse on every (re)connection
 //!     let subscription = EventSubscription::new(EventFormat::Plain)
-//!         .event(EslEventType::ChannelAnswer)
-//!         .event(EslEventType::ChannelHangup)
-//!         .event(EslEventType::Heartbeat)
-//!         .custom_subclass("sofia::register")?
-//!         .filter(EventHeader::CallDirection, "inbound")?;
+//!         .with_event(EslEventType::ChannelAnswer)
+//!         .with_event(EslEventType::ChannelHangup)
+//!         .with_event(EslEventType::Heartbeat)
+//!         .with_custom_subclass("sofia::register")?
+//!         .with_filter(EventHeader::CallDirection, "inbound")?;
 //!
 //!     let (client, mut events) = EslClient::connect(
 //!         "localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD,

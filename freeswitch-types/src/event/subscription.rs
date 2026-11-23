@@ -144,10 +144,10 @@ impl std::error::Error for EventSubscriptionError {}
 /// use freeswitch_types::{EventSubscription, EventFormat, EslEventType, EventHeader};
 ///
 /// let sub = EventSubscription::new(EventFormat::Plain)
-///     .events(EslEventType::CHANNEL_EVENTS)
-///     .event(EslEventType::Heartbeat)
-///     .custom_subclass("sofia::register").unwrap()
-///     .filter(EventHeader::CallDirection, "inbound").unwrap();
+///     .with_events(EslEventType::CHANNEL_EVENTS)
+///     .with_event(EslEventType::Heartbeat)
+///     .with_custom_subclass("sofia::register").unwrap()
+///     .with_filter(EventHeader::CallDirection, "inbound").unwrap();
 ///
 /// assert!(!sub.is_empty());
 /// assert!(!sub.is_all());
@@ -321,14 +321,14 @@ impl EventSubscription {
     }
 
     /// Add a single event type.
-    pub fn event(mut self, event: EslEventType) -> Self {
+    pub fn with_event(mut self, event: EslEventType) -> Self {
         self.events
             .push(event);
         self
     }
 
     /// Add multiple event types (e.g. from group constants like `EslEventType::CHANNEL_EVENTS`).
-    pub fn events<T: IntoIterator<Item = impl std::borrow::Borrow<EslEventType>>>(
+    pub fn with_events<T: IntoIterator<Item = impl std::borrow::Borrow<EslEventType>>>(
         mut self,
         events: T,
     ) -> Self {
@@ -349,7 +349,10 @@ impl EventSubscription {
     ///
     /// Raw events appear on the wire alongside typed events when
     /// [`to_event_string()`](Self::to_event_string) is called.
-    pub fn event_raw(mut self, event: impl Into<String>) -> Result<Self, EventSubscriptionError> {
+    pub fn with_event_raw(
+        mut self,
+        event: impl Into<String>,
+    ) -> Result<Self, EventSubscriptionError> {
         let s = event.into();
         validate_raw_event(&s)?;
         self.raw_events
@@ -360,7 +363,7 @@ impl EventSubscription {
     /// Add multiple events by wire name.
     ///
     /// Returns `Err` on the first invalid entry.
-    pub fn events_raw<I, S>(mut self, events: I) -> Result<Self, EventSubscriptionError>
+    pub fn with_events_raw<I, S>(mut self, events: I) -> Result<Self, EventSubscriptionError>
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
@@ -377,7 +380,7 @@ impl EventSubscription {
     /// Add a custom subclass (e.g. `"sofia::register"`).
     ///
     /// Returns `Err` if the subclass contains spaces, line breaks, NUL, or is empty.
-    pub fn custom_subclass(
+    pub fn with_custom_subclass(
         mut self,
         subclass: impl Into<String>,
     ) -> Result<Self, EventSubscriptionError> {
@@ -391,7 +394,7 @@ impl EventSubscription {
     /// Add multiple custom subclasses.
     ///
     /// Returns `Err` on the first invalid subclass.
-    pub fn custom_subclasses(
+    pub fn with_custom_subclasses(
         mut self,
         subclasses: impl IntoIterator<Item = impl Into<String>>,
     ) -> Result<Self, EventSubscriptionError> {
@@ -406,9 +409,9 @@ impl EventSubscription {
 
     /// Subscribe to a single Sofia event subclass.
     ///
-    /// Convenience wrapper around [`custom_subclass()`](Self::custom_subclass) that
+    /// Convenience wrapper around [`with_custom_subclass()`](Self::with_custom_subclass) that
     /// accepts a typed [`SofiaEventSubclass`] instead of a raw string.
-    pub fn sofia_event(mut self, subclass: SofiaEventSubclass) -> Self {
+    pub fn with_sofia_event(mut self, subclass: SofiaEventSubclass) -> Self {
         self.custom_subclasses
             .push(
                 subclass
@@ -419,7 +422,7 @@ impl EventSubscription {
     }
 
     /// Subscribe to multiple Sofia event subclasses.
-    pub fn sofia_events(
+    pub fn with_sofia_events(
         mut self,
         subclasses: impl IntoIterator<Item = impl std::borrow::Borrow<SofiaEventSubclass>>,
     ) -> Self {
@@ -439,7 +442,7 @@ impl EventSubscription {
     /// Add a filter with a typed header.
     ///
     /// The header enum is always valid; only the value is validated.
-    pub fn filter(
+    pub fn with_filter(
         self,
         header: EventHeader,
         value: impl Into<String>,
@@ -461,7 +464,7 @@ impl EventSubscription {
     ///
     /// Both are refused a line break or NUL, and the header any
     /// [`FilterHeaderFault`]; config load runs the same check.
-    pub fn filter_raw(
+    pub fn with_filter_raw(
         self,
         header: impl Into<String>,
         value: impl Into<String>,
@@ -487,28 +490,18 @@ impl EventSubscription {
         self.format
     }
 
-    /// Mutable reference to the event format.
-    pub fn format_mut(&mut self) -> &mut EventFormat {
-        &mut self.format
-    }
-
     /// The subscribed event types.
-    pub fn event_types(&self) -> &[EslEventType] {
+    pub fn events(&self) -> &[EslEventType] {
         &self.events
     }
 
-    /// Mutable access to the event types list.
-    pub fn event_types_mut(&mut self) -> &mut Vec<EslEventType> {
-        &mut self.events
-    }
-
-    /// Events subscribed by raw wire name (see [`event_raw`](Self::event_raw)).
-    pub fn event_types_raw(&self) -> &[String] {
+    /// Events subscribed by raw wire name (see [`with_event_raw`](Self::with_event_raw)).
+    pub fn events_raw(&self) -> &[String] {
         &self.raw_events
     }
 
     /// The subscribed custom subclasses.
-    pub fn custom_subclass_list(&self) -> &[String] {
+    pub fn custom_subclasses(&self) -> &[String] {
         &self.custom_subclasses
     }
 
@@ -657,10 +650,10 @@ mod tests {
         assert!(!sub.is_all());
         assert_eq!(sub.format(), EventFormat::Plain);
         assert!(sub
-            .event_types()
+            .events()
             .is_empty());
         assert!(sub
-            .custom_subclass_list()
+            .custom_subclasses()
             .is_empty());
         assert!(sub
             .filters()
@@ -678,8 +671,8 @@ mod tests {
     #[test]
     fn event_string_typed_only() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::ChannelCreate)
-            .event(EslEventType::ChannelAnswer);
+            .with_event(EslEventType::ChannelCreate)
+            .with_event(EslEventType::ChannelAnswer);
         assert_eq!(
             sub.to_event_string(),
             Some("CHANNEL_CREATE CHANNEL_ANSWER".to_string())
@@ -689,9 +682,9 @@ mod tests {
     #[test]
     fn event_string_custom_only() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .custom_subclass("sofia::register")
+            .with_custom_subclass("sofia::register")
             .unwrap()
-            .custom_subclass("sofia::unregister")
+            .with_custom_subclass("sofia::unregister")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -702,8 +695,8 @@ mod tests {
     #[test]
     fn event_string_mixed() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .custom_subclass("sofia::register")
+            .with_event(EslEventType::Heartbeat)
+            .with_custom_subclass("sofia::register")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -714,8 +707,8 @@ mod tests {
     #[test]
     fn event_string_custom_not_duplicated() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Custom)
-            .custom_subclass("sofia::register")
+            .with_event(EslEventType::Custom)
+            .with_custom_subclass("sofia::register")
             .unwrap();
         // Should not have "CUSTOM" twice
         assert_eq!(
@@ -784,9 +777,9 @@ mod tests {
     #[test]
     fn custom_first_serialises_last() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Custom)
-            .event(EslEventType::ChannelCreate)
-            .event(EslEventType::ChannelAnswer);
+            .with_event(EslEventType::Custom)
+            .with_event(EslEventType::ChannelCreate)
+            .with_event(EslEventType::ChannelAnswer);
         assert_eq!(
             sub.to_event_string(),
             Some("CHANNEL_CREATE CHANNEL_ANSWER CUSTOM".to_string())
@@ -796,9 +789,9 @@ mod tests {
     #[test]
     fn custom_in_middle_serialises_last() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .event(EslEventType::Custom)
-            .event(EslEventType::ChannelCreate);
+            .with_event(EslEventType::Heartbeat)
+            .with_event(EslEventType::Custom)
+            .with_event(EslEventType::ChannelCreate);
         assert_eq!(
             sub.to_event_string(),
             Some("HEARTBEAT CHANNEL_CREATE CUSTOM".to_string())
@@ -808,12 +801,12 @@ mod tests {
     #[test]
     fn custom_and_subclasses_follow_every_event_type() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .event(EslEventType::BackgroundJob)
-            .event(EslEventType::Custom)
-            .event(EslEventType::Unpublish)
-            .event(EslEventType::ChannelCreate)
-            .custom_subclass("sofia::gateway_state")
+            .with_event(EslEventType::Heartbeat)
+            .with_event(EslEventType::BackgroundJob)
+            .with_event(EslEventType::Custom)
+            .with_event(EslEventType::Unpublish)
+            .with_event(EslEventType::ChannelCreate)
+            .with_custom_subclass("sofia::gateway_state")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -827,10 +820,10 @@ mod tests {
     #[test]
     fn raw_events_order_before_custom() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Custom)
-            .event_raw("FUTURE_EVENT")
+            .with_event(EslEventType::Custom)
+            .with_event_raw("FUTURE_EVENT")
             .unwrap()
-            .custom_subclass("sofia::register")
+            .with_custom_subclass("sofia::register")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -843,10 +836,10 @@ mod tests {
     #[test]
     fn raw_custom_token_is_the_terminal_marker() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Custom)
-            .event_raw("custom")
+            .with_event(EslEventType::Custom)
+            .with_event_raw("custom")
             .unwrap()
-            .event_raw("CHANNEL_CREATE")
+            .with_event_raw("CHANNEL_CREATE")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -857,10 +850,10 @@ mod tests {
     #[test]
     fn order_preserved_without_custom() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .event(EslEventType::ChannelAnswer)
-            .event(EslEventType::ChannelCreate)
-            .event(EslEventType::BackgroundJob);
+            .with_event(EslEventType::Heartbeat)
+            .with_event(EslEventType::ChannelAnswer)
+            .with_event(EslEventType::ChannelCreate)
+            .with_event(EslEventType::BackgroundJob);
         assert_eq!(
             sub.to_event_string(),
             Some("HEARTBEAT CHANNEL_ANSWER CHANNEL_CREATE BACKGROUND_JOB".to_string())
@@ -870,34 +863,34 @@ mod tests {
     #[test]
     fn all_wins_from_any_position() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Custom)
-            .event(EslEventType::ChannelCreate)
-            .event(EslEventType::All)
-            .custom_subclass("sofia::register")
+            .with_event(EslEventType::Custom)
+            .with_event(EslEventType::ChannelCreate)
+            .with_event(EslEventType::All)
+            .with_custom_subclass("sofia::register")
             .unwrap();
         assert_eq!(sub.to_event_string(), Some("ALL".to_string()));
     }
 
     /// The property FreeSWITCH's grammar requires, asserted against
-    /// `event_types()` rather than against the emitted tokens: a subclass may
+    /// `events()` rather than against the emitted tokens: a subclass may
     /// legitimately be named like an event type, and the flat string cannot
     /// tell the two apart.
     #[test]
     fn no_requested_event_type_lands_after_custom() {
         let subs = [
             EventSubscription::new(EventFormat::Plain)
-                .event(EslEventType::Custom)
-                .event(EslEventType::ChannelCreate),
+                .with_event(EslEventType::Custom)
+                .with_event(EslEventType::ChannelCreate),
             EventSubscription::new(EventFormat::Plain)
-                .event(EslEventType::Heartbeat)
-                .event(EslEventType::Custom)
-                .event(EslEventType::Unpublish)
-                .custom_subclass("sofia::register")
+                .with_event(EslEventType::Heartbeat)
+                .with_event(EslEventType::Custom)
+                .with_event(EslEventType::Unpublish)
+                .with_custom_subclass("sofia::register")
                 .unwrap(),
             EventSubscription::new(EventFormat::Plain)
-                .events(EslEventType::CHANNEL_EVENTS)
-                .event(EslEventType::Custom)
-                .sofia_events(SofiaEventSubclass::GATEWAY_EVENTS),
+                .with_events(EslEventType::CHANNEL_EVENTS)
+                .with_event(EslEventType::Custom)
+                .with_sofia_events(SofiaEventSubclass::GATEWAY_EVENTS),
         ];
 
         for sub in subs {
@@ -911,7 +904,7 @@ mod tests {
                 .iter()
                 .position(|t| *t == "CUSTOM")
                 .expect("CUSTOM present");
-            for want in sub.event_types() {
+            for want in sub.events() {
                 if *want == EslEventType::Custom {
                     continue;
                 }
@@ -937,11 +930,11 @@ mod tests {
     #[test]
     fn filters_preserve_order() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .filter(EventHeader::CallDirection, "inbound")
+            .with_filter(EventHeader::CallDirection, "inbound")
             .unwrap()
-            .filter_raw("X-Custom", "value1")
+            .with_filter_raw("X-Custom", "value1")
             .unwrap()
-            .filter(EventHeader::ChannelState, "CS_EXECUTE")
+            .with_filter(EventHeader::ChannelState, "CS_EXECUTE")
             .unwrap();
         assert_eq!(
             sub.filters(),
@@ -956,11 +949,11 @@ mod tests {
     #[test]
     fn builder_chain() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .events(EslEventType::CHANNEL_EVENTS)
-            .event(EslEventType::Heartbeat)
-            .custom_subclass("sofia::register")
+            .with_events(EslEventType::CHANNEL_EVENTS)
+            .with_event(EslEventType::Heartbeat)
+            .with_custom_subclass("sofia::register")
             .unwrap()
-            .filter(EventHeader::CallDirection, "inbound")
+            .with_filter(EventHeader::CallDirection, "inbound")
             .unwrap()
             .with_format(EventFormat::Json);
 
@@ -968,12 +961,12 @@ mod tests {
         assert!(!sub.is_empty());
         assert!(!sub.is_all());
         assert!(sub
-            .event_types()
+            .events()
             .contains(&EslEventType::ChannelCreate));
         assert!(sub
-            .event_types()
+            .events()
             .contains(&EslEventType::Heartbeat));
-        assert_eq!(sub.custom_subclass_list(), &["sofia::register"]);
+        assert_eq!(sub.custom_subclasses(), &["sofia::register"]);
         assert_eq!(
             sub.filters()
                 .len(),
@@ -984,11 +977,11 @@ mod tests {
     #[test]
     fn serde_round_trip_subscription() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::ChannelCreate)
-            .event(EslEventType::Heartbeat)
-            .custom_subclass("sofia::register")
+            .with_event(EslEventType::ChannelCreate)
+            .with_event(EslEventType::Heartbeat)
+            .with_custom_subclass("sofia::register")
             .unwrap()
-            .filter(EventHeader::CallDirection, "inbound")
+            .with_filter(EventHeader::CallDirection, "inbound")
             .unwrap();
 
         let json = serde_json::to_string(&sub).unwrap();
@@ -1025,7 +1018,7 @@ mod tests {
     #[test]
     fn error_display_names_the_character_class_only() {
         let err = EventSubscription::new(EventFormat::Plain)
-            .custom_subclass("bad subclass")
+            .with_custom_subclass("bad subclass")
             .unwrap_err();
         assert_eq!(
             err.to_string(),
@@ -1034,12 +1027,12 @@ mod tests {
         assert_eq!(err, EventSubscriptionError::Token("bad subclass".into()));
 
         let err = EventSubscription::new(EventFormat::Plain)
-            .custom_subclass("")
+            .with_custom_subclass("")
             .unwrap_err();
         assert_eq!(err.to_string(), "event subscription token is empty");
 
         let err = EventSubscription::new(EventFormat::Plain)
-            .filter_raw("Header", "val\n")
+            .with_filter_raw("Header", "val\n")
             .unwrap_err();
         assert_eq!(
             err.to_string(),
@@ -1050,31 +1043,35 @@ mod tests {
 
     #[test]
     fn custom_subclass_rejects_space() {
-        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("bad subclass");
+        let result =
+            EventSubscription::new(EventFormat::Plain).with_custom_subclass("bad subclass");
         assert!(result.is_err());
     }
 
     #[test]
     fn custom_subclass_rejects_newline() {
-        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("bad\nsubclass");
+        let result =
+            EventSubscription::new(EventFormat::Plain).with_custom_subclass("bad\nsubclass");
         assert!(result.is_err());
     }
 
     #[test]
     fn custom_subclass_rejects_empty() {
-        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("");
+        let result = EventSubscription::new(EventFormat::Plain).with_custom_subclass("");
         assert!(result.is_err());
     }
 
     #[test]
     fn filter_raw_rejects_newline_in_header() {
-        let result = EventSubscription::new(EventFormat::Plain).filter_raw("Bad\nHeader", "value");
+        let result =
+            EventSubscription::new(EventFormat::Plain).with_filter_raw("Bad\nHeader", "value");
         assert!(result.is_err());
     }
 
     #[test]
     fn filter_raw_rejects_newline_in_value() {
-        let result = EventSubscription::new(EventFormat::Plain).filter_raw("Header", "bad\nvalue");
+        let result =
+            EventSubscription::new(EventFormat::Plain).with_filter_raw("Header", "bad\nvalue");
         assert!(result.is_err());
     }
 
@@ -1085,13 +1082,13 @@ mod tests {
         for header in ["Event Name", " Event-Name", "", "add", "DELETE"] {
             assert!(
                 EventSubscription::new(EventFormat::Plain)
-                    .filter_raw(header, "x")
+                    .with_filter_raw(header, "x")
                     .is_err(),
                 "{header:?}"
             );
             assert!(
                 matches!(
-                    EventSubscription::new(EventFormat::Plain).filter_raw(header, "x"),
+                    EventSubscription::new(EventFormat::Plain).with_filter_raw(header, "x"),
                     Err(EventSubscriptionError::FilterHeader { .. })
                 ),
                 "{header:?}"
@@ -1103,31 +1100,31 @@ mod tests {
             );
         }
         assert!(EventSubscription::new(EventFormat::Plain)
-            .filter_raw("Event-Name", "a value with spaces")
+            .with_filter_raw("Event-Name", "a value with spaces")
             .is_ok());
     }
 
     #[test]
     fn filter_raw_rejects_nul() {
         assert!(EventSubscription::new(EventFormat::Plain)
-            .filter_raw("Header", "bad\0value")
+            .with_filter_raw("Header", "bad\0value")
             .is_err());
         assert!(EventSubscription::new(EventFormat::Plain)
-            .filter_raw("Bad\0Header", "value")
+            .with_filter_raw("Bad\0Header", "value")
             .is_err());
     }
 
     #[test]
     fn filter_typed_rejects_newline_in_value() {
         let result = EventSubscription::new(EventFormat::Plain)
-            .filter(EventHeader::CallDirection, "bad\nvalue");
+            .with_filter(EventHeader::CallDirection, "bad\nvalue");
         assert!(result.is_err());
     }
 
     #[test]
     fn sofia_event_single() {
-        let sub =
-            EventSubscription::new(EventFormat::Plain).sofia_event(SofiaEventSubclass::Register);
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .with_sofia_event(SofiaEventSubclass::Register);
         assert_eq!(
             sub.to_event_string(),
             Some("CUSTOM sofia::register".to_string())
@@ -1137,7 +1134,7 @@ mod tests {
     #[test]
     fn sofia_events_group() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .sofia_events(SofiaEventSubclass::GATEWAY_EVENTS);
+            .with_sofia_events(SofiaEventSubclass::GATEWAY_EVENTS);
         let event_str = sub
             .to_event_string()
             .unwrap();
@@ -1151,8 +1148,8 @@ mod tests {
     #[test]
     fn event_raw_wire_string() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .event_raw("NEW_EVENT_NOT_IN_ENUM")
+            .with_event(EslEventType::Heartbeat)
+            .with_event_raw("NEW_EVENT_NOT_IN_ENUM")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -1163,7 +1160,7 @@ mod tests {
     #[test]
     fn events_raw_wire_string() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .events_raw(["FUTURE_A", "FUTURE_B"])
+            .with_events_raw(["FUTURE_A", "FUTURE_B"])
             .unwrap();
         assert_eq!(sub.to_event_string(), Some("FUTURE_A FUTURE_B".to_string()));
     }
@@ -1171,9 +1168,9 @@ mod tests {
     #[test]
     fn event_raw_with_custom_subclass() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event_raw("NEW_EVENT")
+            .with_event_raw("NEW_EVENT")
             .unwrap()
-            .custom_subclass("sofia::register")
+            .with_custom_subclass("sofia::register")
             .unwrap();
         assert_eq!(
             sub.to_event_string(),
@@ -1184,35 +1181,38 @@ mod tests {
     #[test]
     fn event_raw_rejects_newline() {
         assert!(EventSubscription::new(EventFormat::Plain)
-            .event_raw("bad\nevent")
+            .with_event_raw("bad\nevent")
             .is_err());
     }
 
     #[test]
     fn event_raw_rejects_space() {
         assert!(EventSubscription::new(EventFormat::Plain)
-            .event_raw("bad event")
+            .with_event_raw("bad event")
             .is_err());
     }
 
     #[test]
     fn event_raw_rejects_empty() {
         assert!(EventSubscription::new(EventFormat::Plain)
-            .event_raw("")
+            .with_event_raw("")
             .is_err());
     }
 
     #[test]
     fn events_raw_errors_on_first_invalid() {
-        let result =
-            EventSubscription::new(EventFormat::Plain).events_raw(["GOOD", "bad event", "OTHER"]);
+        let result = EventSubscription::new(EventFormat::Plain).with_events_raw([
+            "GOOD",
+            "bad event",
+            "OTHER",
+        ]);
         assert!(result.is_err());
     }
 
     #[test]
     fn is_empty_sees_raw_events() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event_raw("ONLY_RAW")
+            .with_event_raw("ONLY_RAW")
             .unwrap();
         assert!(!sub.is_empty());
     }
@@ -1220,10 +1220,10 @@ mod tests {
     #[test]
     fn serde_round_trip_with_raw_events() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::ChannelCreate)
-            .event_raw("FUTURE_EVENT")
+            .with_event(EslEventType::ChannelCreate)
+            .with_event_raw("FUTURE_EVENT")
             .unwrap()
-            .custom_subclass("sofia::register")
+            .with_custom_subclass("sofia::register")
             .unwrap();
 
         let json = serde_json::to_string(&sub).unwrap();
@@ -1246,15 +1246,15 @@ mod tests {
             r#"{"format":"Plain","events":["Heartbeat"],"custom_subclasses":[],"filters":[]}"#;
         let sub: EventSubscription = serde_json::from_str(json).unwrap();
         assert!(sub
-            .event_types_raw()
+            .events_raw()
             .is_empty());
     }
 
     #[test]
     fn sofia_event_mixed_with_typed_events() {
         let sub = EventSubscription::new(EventFormat::Plain)
-            .event(EslEventType::Heartbeat)
-            .sofia_event(SofiaEventSubclass::GatewayState);
+            .with_event(EslEventType::Heartbeat)
+            .with_sofia_event(SofiaEventSubclass::GatewayState);
         assert_eq!(
             sub.to_event_string(),
             Some("HEARTBEAT CUSTOM sofia::gateway_state".to_string())

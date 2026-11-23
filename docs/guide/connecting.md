@@ -80,7 +80,7 @@ use freeswitch_esl_tokio::{BgJobTracker, EventSubscription};
 
 client.apply_subscription(
     &EventSubscription::new(EventFormat::Plain)
-        .event(EslEventType::BackgroundJob),
+        .with_event(EslEventType::BackgroundJob),
 ).await?;
 
 let mut bg = BgJobTracker::new();

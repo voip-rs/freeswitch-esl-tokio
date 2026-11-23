@@ -729,9 +729,9 @@ async fn live_custom_first_does_not_swallow_later_event_types() {
     let subclass = format!("esl_test::ordering_{}", std::process::id());
 
     let sub = EventSubscription::new(EventFormat::Plain)
-        .event(EslEventType::Custom)
-        .event(EslEventType::Heartbeat)
-        .custom_subclass(subclass.as_str())
+        .with_event(EslEventType::Custom)
+        .with_event(EslEventType::Heartbeat)
+        .with_custom_subclass(subclass.as_str())
         .unwrap();
     client
         .apply_subscription(&sub)

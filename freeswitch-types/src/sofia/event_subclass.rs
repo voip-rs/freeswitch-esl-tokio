@@ -4,7 +4,7 @@ wire_enum! {
     /// Sofia event subclass values from `mod_sofia.h` `MY_EVENT_*` defines.
     ///
     /// These appear as the `Event-Subclass` header on `CUSTOM` events fired by
-    /// mod_sofia. Use with [`EventSubscription::sofia_event()`](crate::EventSubscription::sofia_event)
+    /// mod_sofia. Use with [`EventSubscription::with_sofia_event()`](crate::EventSubscription::with_sofia_event)
     /// for typed subscriptions, or parse from received events via
     /// [`HeaderLookup::sofia_event_subclass()`](crate::HeaderLookup::sofia_event_subclass).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

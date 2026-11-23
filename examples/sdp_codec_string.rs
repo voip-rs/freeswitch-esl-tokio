@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // format, typed event names, and optional subclass filters into a single call to
     // apply_subscription(). Never construct "event plain CHANNEL_ANSWER" by hand.
     let subscription =
-        EventSubscription::new(EventFormat::Plain).event(EslEventType::ChannelAnswer);
+        EventSubscription::new(EventFormat::Plain).with_event(EslEventType::ChannelAnswer);
     client
         .apply_subscription(&subscription)
         .await?;
