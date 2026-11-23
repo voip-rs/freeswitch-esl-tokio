@@ -458,6 +458,39 @@ mod tests {
         assert_eq!(cmd.to_string(), format!("uuid_transfer {} 1000 XML", UUID));
     }
 
+    /// What `transfer_function` reads off a `uuid_transfer` line: the destination and
+    /// dialplan back as built, and no leg selector, which it takes from any leading `-`.
+    #[test]
+    fn uuid_transfer_reads_back_as_built() {
+        let mut misread = Vec::new();
+        for destination in [
+            "1000", "a b", "it's", "a\\\\b", "", "-bleg", "-1000", "-BOTH",
+        ] {
+            for dialplan in [None, Some("XML"), Some("my plan")] {
+                let mut cmd = UuidTransfer::new(UUID, destination);
+                if let Some(name) = dialplan {
+                    cmd = cmd.with_dialplan(DialplanType::named(name).unwrap());
+                }
+                let line = cmd.to_string();
+                let read: Option<Vec<String>> = originate_split(&line, ' ')
+                    .ok()
+                    .map(|tokens| {
+                        tokens
+                            .iter()
+                            .map(|t| originate_unquote(t))
+                            .collect()
+                    });
+                let mut expected =
+                    vec!["uuid_transfer".to_string(), UUID.into(), destination.into()];
+                expected.extend(dialplan.map(String::from));
+                if read.as_ref() != Some(&expected) || destination.starts_with('-') {
+                    misread.push(format!("{line:?} -> {read:?}"));
+                }
+            }
+        }
+        assert!(misread.is_empty(), "{misread:#?}");
+    }
+
     #[test]
     fn uuid_send_dtmf() {
         let cmd = UuidSendDtmf::new(UUID, "1234#");
