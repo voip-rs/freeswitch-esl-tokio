@@ -22,6 +22,7 @@ EslClient (Clone + Send)         EslEventStream
 Background reader task
 ├ owns the read half + parser
 ├ routes CommandReply/ApiResponse → pending oneshot
+├ routes a reply with no command pending → event stream
 ├ routes Event → mpsc channel
 ├ tracks liveness (any TCP traffic resets timer)
 └ broadcasts ConnectionStatus on disconnect
@@ -360,7 +361,8 @@ add complexity with no throughput benefit.
 - Neither: a retry and a reconnect meet the same refusal, whether caller input
   refused before anything was sent, a credential refused at connect, or a value
   the switch sent that does not parse while the framing held. Fix the input or the
-  configuration.
+  configuration. A report about a session that outlives it, such as a reply with
+  no command pending, sits here too.
 
 A timeout on the way to a session is never the command timeout: that one is
 recoverable, and it would tell a caller to retry on a session that never existed.
@@ -442,6 +444,13 @@ propagate via `EslResult` with `is_connection_error()` /
 `is_recoverable()` so the caller can disconnect and reconnect from a
 known-good state. The one carve-out — lossy decode of non-UTF-8 event *values* —
 is the next section.
+
+A reply with no command pending is not absorbed either, and it does not end the
+connection. ESL carries no correlation IDs, so the reader cannot tell a switch
+that answered unprompted, possibly a newer one, from one reply too many. The
+whole reply reaches the event stream as an error that is neither a connection
+error nor recoverable, and whether the session can still be trusted is the
+caller's call.
 
 ## Lossy event-value decode is not a desync
 
