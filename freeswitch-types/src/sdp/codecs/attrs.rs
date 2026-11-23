@@ -395,6 +395,36 @@ mod tests {
         );
     }
 
+    /// The switch's `atoi` gives an overflowing count whatever its C library decides, so the
+    /// count reads 0 with a warning naming the line; the largest `u32` reads as itself.
+    #[test]
+    fn rtpmap_channel_count_past_u32_warns() {
+        let past_u32 = (u64::from(u32::MAX) + 1).to_string();
+        let sdp = format!(
+            "{}m=audio 5004 RTP/AVP 96 97\r\na=rtpmap:96 L16/8000/{}\r\n\
+             a=rtpmap:97 L16/8000/{past_u32}\r\n",
+            sdp_header(),
+            u32::MAX
+        );
+        let codecs = SdpCodecs::parse(&sdp).unwrap();
+        let rtp = rtp_codec(codecs.entries());
+        let channels: Vec<_> = rtp
+            .iter()
+            .map(|c| (c.payload_type(), c.channels()))
+            .collect();
+        assert_eq!(channels, [(96, Some(u32::MAX)), (97, Some(0))]);
+        let overflow = sdp
+            .find("a=rtpmap:97")
+            .unwrap();
+        assert_eq!(
+            codecs.warnings(),
+            [SdpWarning::RtpmapChannelsOverflow { offset: overflow }]
+        );
+        let shown = codecs.warnings()[0].to_string();
+        assert!(shown.contains(&overflow.to_string()), "{shown}");
+        assert!(!shown.contains(&past_u32), "{shown}");
+    }
+
     #[test]
     fn rtpmap_interior_whitespace_in_name_is_refused_and_the_rtpmap_ignored() {
         // The name ends at the space and parse_rtpmap reads no rate after it, refusing the
