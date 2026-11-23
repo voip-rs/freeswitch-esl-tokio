@@ -451,7 +451,8 @@ macro_rules! channel_timetable_fields {
         /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
         /// Returns `Err` if a header is present but contains an invalid (non-`i64`) value.
         ///
-        /// ```
+        #[cfg_attr(feature = "esl", doc = "```")]
+        #[cfg_attr(not(feature = "esl"), doc = "```ignore")]
         /// use freeswitch_types::{ChannelTimetable, EslHeaders, HeaderLookup, TimetablePrefix};
         ///
         /// let mut headers = EslHeaders::new();

@@ -100,7 +100,8 @@ fn parse_sip_status_code(raw: &str) -> Result<u16, ParseSipStatusCodeError> {
 ///
 /// # Example
 ///
-/// ```
+#[cfg_attr(feature = "esl", doc = "```")]
+#[cfg_attr(not(feature = "esl"), doc = "```ignore")]
 /// use freeswitch_types::{ChannelVariable, EslHeaders, EventHeader, HeaderLookup};
 /// use freeswitch_types::{RowError, SipHeaderRows};
 ///

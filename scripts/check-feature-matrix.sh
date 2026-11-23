@@ -1,5 +1,6 @@
 #!/bin/bash
-# Verify every freeswitch-types feature compiles on its own.
+# Verify every freeswitch-types feature compiles on its own, and that its
+# tests pass with no default features.
 #
 # Usage: ./check-feature-matrix.sh
 #
@@ -18,6 +19,11 @@ FEATURES=(esl serde sdp)
 
 echo "checking freeswitch-types with no default features"
 cargo check -p freeswitch-types --no-default-features --message-format=short
+
+# The hook tests with every feature on, so an example needing one passes there.
+echo "testing freeswitch-types doctests and unit tests with no default features"
+cargo test -p freeswitch-types --no-default-features --doc
+cargo test -p freeswitch-types --no-default-features --lib
 
 for feature in "${FEATURES[@]}"; do
     echo "checking freeswitch-types with only --features $feature"
