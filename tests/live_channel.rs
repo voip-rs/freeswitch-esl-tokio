@@ -522,6 +522,8 @@ async fn live_channel_timetable_on_create() {
 #[tokio::test]
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_uuid_setvar_getvar_round_trip() {
+    // A space, quotes and a backslash: each is read by uuid_setvar's blank split.
+    const VALUE: &str = "hello world 'quoted' back\\slash";
     let (client, mut events, _permit) = connect().await;
 
     client
@@ -534,28 +536,28 @@ async fn live_uuid_setvar_getvar_round_trip() {
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
 
     // Set a variable on the channel
-    let set_cmd = UuidSetVar::new(&uuid, "esl_test_var", "hello_world").unwrap();
-    let resp = client
+    let set_cmd = UuidSetVar::new(&uuid, "esl_test_var", VALUE).unwrap();
+    let set = client
         .api(&set_cmd.to_string())
         .await
         .unwrap();
-    resp.api_result()
-        .expect("uuid_setvar failed");
 
     // Get the variable back (uuid_getvar returns the raw value, no +OK prefix)
     let get_cmd = UuidGetVar::new(&uuid, "esl_test_var");
-    let resp = client
+    let got = client
         .api(&get_cmd.to_string())
         .await
         .unwrap();
+    kill_channel(&client, &uuid).await;
+
+    set.api_result()
+        .expect("uuid_setvar failed");
     assert_eq!(
-        resp.api_result()
+        got.api_result()
             .unwrap(),
-        "hello_world",
+        VALUE,
         "uuid_getvar should return the value we set"
     );
-
-    kill_channel(&client, &uuid).await;
 }
 
 #[tokio::test]

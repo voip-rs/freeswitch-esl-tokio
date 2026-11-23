@@ -347,6 +347,7 @@ impl fmt::Display for UuidSendDtmf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::{originate_split, originate_unquote, quote_for_uuid_setvar};
 
     const UUID: &str = "abc12345-6789-0abc-def0-123456789abc";
     const OTHER: &str = "def12345-6789-0abc-def0-123456789abc";
@@ -420,8 +421,24 @@ mod tests {
         let cmd = UuidSetVar::new(UUID, "hangup_after_bridge", "true").unwrap();
         assert_eq!(
             cmd.to_string(),
-            format!("uuid_setvar {} hangup_after_bridge true", UUID)
+            format!("uuid_setvar {} hangup_after_bridge 'true'", UUID)
         );
+    }
+
+    /// The value goes through the switch's blank split, so `Display` quotes it and
+    /// `value()` keeps what the channel will hold.
+    #[test]
+    fn uuid_setvar_quotes_the_value_for_the_blank_split() {
+        let value = "a b 'c' \\d";
+        let cmd = UuidSetVar::new(UUID, "probe", value).unwrap();
+        assert_eq!(cmd.value(), value);
+        assert_eq!(
+            cmd.to_string(),
+            format!("uuid_setvar {UUID} probe {}", quote_for_uuid_setvar(value))
+        );
+        let tokens = originate_split(&cmd.to_string(), ' ').unwrap();
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(originate_unquote(&tokens[3]), value);
     }
 
     #[test]
