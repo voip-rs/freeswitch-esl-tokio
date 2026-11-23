@@ -358,6 +358,37 @@ mod tests {
         );
     }
 
+    /// A colonless line inside a plain event body leaves the framing intact: the
+    /// error names the body and the line's length, never the line.
+    #[test]
+    fn a_colonless_line_in_an_event_body_is_a_body_fault() {
+        let mut parser = EslParser::new();
+        let event_body = "Event-Name: HEARTBEAT\nno-colon-sentinel\n\n";
+        let data = format!(
+            "Content-Type: text/event-plain\nContent-Length: {}\n\n{event_body}",
+            event_body.len()
+        );
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+        let err = parser
+            .parse_event(message, EventFormat::Plain)
+            .expect_err("a colonless line is refused");
+        assert!(!matches!(err, EslError::InvalidHeader { .. }), "{err:?}");
+        assert!(!err.is_connection_error(), "{err:?}");
+        assert!(!err.is_recoverable(), "{err:?}");
+        let shown = err.to_string();
+        assert!(
+            shown.contains("event body") && shown.contains("bytes"),
+            "{shown}"
+        );
+        assert!(!shown.contains("no-colon-sentinel"), "{shown}");
+    }
+
     #[test]
     fn test_plain_event_non_utf8_inner_body_lossy() {
         // sendevent payloads ride as a raw inner body after the

@@ -889,6 +889,23 @@ mod tests {
         );
     }
 
+    /// A colonless line in a dump leaves the connection usable: the error names
+    /// the body and the line's length, never the line.
+    #[test]
+    fn a_colonless_line_in_a_channel_dump_is_a_body_fault() {
+        let err = parse_channel_dump("Unique-ID: abc\nno-colon-sentinel\n")
+            .expect_err("a colonless line is refused");
+        assert!(!matches!(err, EslError::InvalidHeader { .. }), "{err:?}");
+        assert!(!err.is_connection_error(), "{err:?}");
+        assert!(!err.is_recoverable(), "{err:?}");
+        let shown = err.to_string();
+        assert!(
+            shown.contains("response body") && shown.contains("bytes"),
+            "{shown}"
+        );
+        assert!(!shown.contains("no-colon-sentinel"), "{shown}");
+    }
+
     #[test]
     fn channel_dump_empty_body_is_a_protocol_error() {
         assert!(matches!(
