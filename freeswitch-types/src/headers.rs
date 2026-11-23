@@ -1,5 +1,7 @@
 //! Typed event header names for FreeSWITCH ESL events.
 
+use std::sync::OnceLock;
+
 sip_header_catalog::define_header_enum! {
     tests_mod: event_header_generated_tests,
     serde(cfg(feature = "serde")),
@@ -258,12 +260,37 @@ pub fn normalize_header_key(raw: &str) -> String {
     if raw.starts_with(crate::VARIABLE_PREFIX) {
         return raw.to_string();
     }
-    match raw.parse::<EventHeader>() {
-        Ok(eh) => eh
+    match lookup_event_header(raw) {
+        Some(eh) => eh
             .as_str()
             .to_string(),
-        Err(_) => raw.to_string(),
+        None => raw.to_string(),
     }
+}
+
+/// `EventHeader::from_str` without the error allocation, comparing only
+/// wire names of `s`'s length; each bucket keeps `ALL` order, so the first
+/// match is the one `from_str` returns.
+pub(crate) fn lookup_event_header(s: &str) -> Option<EventHeader> {
+    static BY_LEN: OnceLock<Vec<Vec<EventHeader>>> = OnceLock::new();
+    BY_LEN
+        .get_or_init(|| {
+            let mut by_len: Vec<Vec<EventHeader>> = Vec::new();
+            for v in EventHeader::ALL {
+                let len = v
+                    .as_str()
+                    .len();
+                if by_len.len() <= len {
+                    by_len.resize_with(len + 1, Vec::new);
+                }
+                by_len[len].push(*v);
+            }
+            by_len
+        })
+        .get(s.len())?
+        .iter()
+        .copied()
+        .find(|v| s.eq_ignore_ascii_case(v.as_str()))
 }
 
 #[cfg(test)]
@@ -369,6 +396,34 @@ pub(crate) mod tests {
             assert!(
                 !head.is_some_and(|h| h.eq_ignore_ascii_case(prefix)),
                 "{v:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn lookup_event_header_agrees_with_from_str() {
+        let hits = EventHeader::ALL
+            .iter()
+            .flat_map(|v| casings(v.as_str()));
+        let misses = KEY_TABLE
+            .iter()
+            .flat_map(|&(input, _, _)| casings(input));
+        let near = EventHeader::ALL
+            .iter()
+            .flat_map(|v| {
+                let s = v.as_str();
+                [format!("{s}x"), s[1..].to_string(), s.replace('-', "_")]
+            });
+        for input in hits
+            .chain(misses)
+            .chain(near)
+        {
+            assert_eq!(
+                lookup_event_header(&input),
+                input
+                    .parse::<EventHeader>()
+                    .ok(),
+                "{input:?}"
             );
         }
     }
