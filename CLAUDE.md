@@ -43,6 +43,9 @@ which `cargo semver-checks` flags as a breaking change (callers using
 within a single commit that introduces the enum, but subsequent additions
 always go at the tail.
 
+A new wire enum goes through `wire_enum!` or `header_enum!`, never a serde
+derive, so it serializes as its wire name and reads the variant name too.
+
 ## `#[non_exhaustive]` Policy
 
 All public enums and public structs **with public fields** have
@@ -169,6 +172,10 @@ and the enum/source-ref sync checks. The source-ref check needs
 commit `hooks/source-refs.yaml` pins for it, and refuses the commit without them.
 The C oracle reads both pins from git objects, so neither clone needs to be
 checked out at its pin.
+freeswitch-types' C-oracle modules (every `c_oracle.rs` and `commands/proptests`)
+compile only under `--cfg freeswitch_oracle`, set by the workspace's
+`.cargo/config.toml`; the published crate omits them. A `RUSTFLAGS` in the
+environment replaces that cfg, and the hook fails when no `c_oracle::` test ran.
 Do not re-run any of those separately — a failing hook rejects the commit and
 prints the same thing.
 

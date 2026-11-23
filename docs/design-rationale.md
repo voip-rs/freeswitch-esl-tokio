@@ -183,6 +183,17 @@ macro that produces `Display`, `FromStr` (case-insensitive), `as_str()`, and
 `AsRef<str>` for each variant. Application-specific crates can use the same
 macro to define their own header enums without depending on core types.
 
+### A wire enum serializes as its wire name
+
+Every enum with a wire spelling serializes as that spelling, the form a config
+author and the switch write. It deserializes from the wire name in any ASCII case
+and from the Rust variant name, the form earlier releases wrote, so stored data
+keeps loading: exact wire name first, then the variant name, then the case-folded
+wire name, so a variant name that equals another variant's wire name in some
+casing still reads as its own variant. The rule lives once and is reached only
+through the generating macros. `SipHeader` comes from sip-header-catalog and reads
+wire names only.
+
 ## A carrier-dependent value renders only for a named target
 
 Command builders in `commands/`, `app/`, and `variables/` produce and parse
