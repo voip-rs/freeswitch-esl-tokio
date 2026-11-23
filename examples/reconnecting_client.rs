@@ -1,14 +1,20 @@
 //! Reconnecting ESL client -- production pattern for persistent event listeners.
 //!
-//! The library never reconnects on its own; it classifies the failure and the
-//! caller sets policy. This example is that policy:
+//! The library never reconnects on its own; it sorts every `EslError` into one
+//! of three classes and the caller sets policy. This example is that policy:
 //!
-//! - **Auth / ACL** (`AuthenticationFailed`, `AccessDenied`) -- permanent
-//!   config error, exit with `EX_CONFIG` (78) so systemd keeps the unit down.
-//! - **Session ended** -- anything but a disconnect we asked for is a reason to
-//!   reconnect, with exponential backoff.
-//! - **Recoverable** (`is_recoverable()`) -- a command failed, the connection
-//!   is still good.
+//! - **Connection error** (`is_connection_error()`) -- no usable session:
+//!   reconnect, with exponential backoff. `AccessDenied` is one too, but the
+//!   ACL refuses every reconnect, so it exits with `EX_CONFIG` (78) and systemd
+//!   keeps the unit down.
+//! - **Recoverable** (`is_recoverable()`) -- the session is up and one command
+//!   failed: retry it, or carry on without it.
+//! - **Neither** -- a refusal: a retry and a reconnect meet it again. A wrong
+//!   credential or a subscription the switch cannot take is configuration, and
+//!   exits with `EX_CONFIG`. A command built from call data that the library
+//!   refuses is answered where it is built: that call is skipped and the
+//!   session goes on. An event the switch sent that does not parse is skipped
+//!   too; the reader keeps the connection.
 //!
 //! What it cannot do is recover the events that fired while it was away. See
 //! docs/design-rationale.md on why that makes transparent reconnection unsound
@@ -22,8 +28,8 @@ use std::time::{Duration, Instant};
 mod env;
 
 use freeswitch_esl_tokio::{
-    ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventType, EventFormat,
-    EventHeader, EventSubscription, HeaderLookup,
+    ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventType, EslResult,
+    EventFormat, EventHeader, EventSubscription, HeaderLookup, UuidSetVar,
 };
 use tracing::{error, info, warn};
 
@@ -41,6 +47,10 @@ const LIVENESS_TIMEOUT: Duration = Duration::from_secs(60);
 /// sysexits.h EX_CONFIG -- systemd RestartPreventExitStatus=78 keeps the
 /// service down on permanent config errors.
 const EX_CONFIG: i32 = 78;
+
+/// Set on each answered channel, so the BYE carries the caller number this
+/// monitor saw. mod_sofia sends a `sip_bye_h_` variable as a SIP header.
+const BYE_HEADER_VARIABLE: &str = "sip_bye_h_X-Monitor-Caller";
 
 #[tokio::main]
 async fn main() {
@@ -75,18 +85,18 @@ async fn main() {
                 return;
             }
             Ok(reason) => warn!("session ended: {reason}"),
-            Err(EslError::AuthenticationFailed { reason }) => {
-                error!("authentication failed: {reason}");
-                std::process::exit(EX_CONFIG);
-            }
+            // A connection error, but the ACL answers every reconnect the same way.
             Err(EslError::AccessDenied { reason }) => {
                 error!("access denied (ACL): {reason}");
                 std::process::exit(EX_CONFIG);
             }
             Err(e) if e.is_connection_error() => warn!("connection lost: {}", e.display_chain()),
+            // A setup command failed on a live session; a fresh session retries it.
+            Err(e) if e.is_recoverable() => warn!("session setup failed: {}", e.display_chain()),
+            // AuthenticationFailed, or a subscription the switch refuses as written.
             Err(e) => {
-                error!("unexpected error: {}", e.display_chain());
-                std::process::exit(1);
+                error!("refused, fix the configuration: {}", e.display_chain());
+                std::process::exit(EX_CONFIG);
             }
         }
 
@@ -102,7 +112,7 @@ async fn main() {
 /// One ESL session: connect, subscribe, process events until the stream ends.
 ///
 /// Returns why the stream ended. `Err` is reserved for a failure that stopped
-/// the session from running at all, or one the event loop could not absorb.
+/// the session from running at all, or a connection error during it.
 async fn run_session(
     host: &str,
     port: u16,
@@ -142,9 +152,11 @@ async fn run_session(
         .await
     {
         match result {
-            Ok(event) => handle_event(&event),
-            Err(e) if e.is_recoverable() => warn!("recoverable event error: {}", e.display_chain()),
-            Err(e) => return Err(e),
+            Ok(event) => handle_event(&client, &event).await?,
+            Err(e) if e.is_connection_error() => return Err(e),
+            // A body line that did not parse, or a value the reader could not
+            // decode: this event is lost, the connection is not.
+            Err(e) => warn!("event skipped: {}", e.display_chain()),
         }
     }
 
@@ -159,7 +171,9 @@ async fn run_session(
     })
 }
 
-fn handle_event(event: &EslEvent) {
+/// Handle one event. `Err` only for a connection error, which ends the session;
+/// anything else concerns this event alone and is logged here.
+async fn handle_event(client: &EslClient, event: &EslEvent) -> EslResult<()> {
     match event.event_type() {
         Some(EslEventType::ChannelAnswer) => {
             let uuid = short_uuid(event);
@@ -170,6 +184,9 @@ fn handle_event(event: &EslEvent) {
                 .destination_number()
                 .unwrap_or("?");
             info!("{uuid}: {caller} -> {dest} answered");
+            if let (Some(full_uuid), Some(number)) = (event.unique_id(), event.caller_id_number()) {
+                tag_caller(client, full_uuid, number).await?;
+            }
         }
         Some(EslEventType::ChannelHangupComplete) => {
             let uuid = short_uuid(event);
@@ -189,6 +206,37 @@ fn handle_event(event: &EslEvent) {
             info!("heartbeat, sessions: {sessions}");
         }
         _ => {}
+    }
+    Ok(())
+}
+
+/// Copy the caller number into a header of the channel's BYE.
+///
+/// The number is call data: a control character in it is refused before
+/// anything is sent. That refusal, and a failure of the command itself, skip
+/// this call only. A connection error goes back up and ends the session.
+async fn tag_caller(client: &EslClient, uuid: &str, caller: &str) -> EslResult<()> {
+    let command = match UuidSetVar::new(uuid, BYE_HEADER_VARIABLE, caller) {
+        Ok(command) => command,
+        Err(e) => {
+            warn!("{uuid}: caller number not tagged: {e}");
+            return Ok(());
+        }
+    };
+    let reply = client
+        .api(&command.to_string())
+        .await;
+    match reply.and_then(|response| {
+        response
+            .api_result()
+            .map(drop)
+    }) {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_connection_error() => Err(e),
+        Err(e) => {
+            warn!("{uuid}: caller number not tagged: {}", e.display_chain());
+            Ok(())
+        }
     }
 }
 
