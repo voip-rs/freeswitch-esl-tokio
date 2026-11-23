@@ -207,7 +207,7 @@ impl SofiaEndpoint {
     }
 
     /// [`channel_name`](Self::channel_name) on a tree whose encoder runs with `double_encode`.
-    fn channel_name_encoding(
+    pub(super) fn channel_name_encoding(
         &self,
         encoding: DestinationEncoding,
         double_encode: bool,

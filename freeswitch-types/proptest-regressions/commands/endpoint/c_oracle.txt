@@ -18,3 +18,4 @@ cc 06dd097712a3be0d0f93cd30511ec4c612405e2fd551c6d55d2fbc1671776580 # shrinks to
 cc 036f7f80f1f76ac1005d698059ee426faaa600ccd1d41d49be03f1247bcf042a # shrinks to ("internal", ";/^%4A@", false)
 cc 5c5518f9cf0193259b0c3b2e0c1879d69bde5324d3b9f04eb6f275e1e7d6b4da # shrinks to ("internal", "%^/^@", false)
 cc 29ac2f8c45830a7bdfb6d58d1c5c31468bd6e09b20158cb2c5dd69a4fc0c0696 # shrinks to ("internal", "sip:%", false)
+cc 4d693162f3d6fa34e55c391fb2f0b4ad14bc9131c7a4f5f967f732a0640ab5e7 # shrinks to ("internal", "%20sip:@", false)

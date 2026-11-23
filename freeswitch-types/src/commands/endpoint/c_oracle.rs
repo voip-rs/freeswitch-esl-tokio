@@ -495,12 +495,18 @@ fn a_sofia_leg_is_named_as_the_switch_names_it() {
             };
             let read = sofia_leg(c, &ep, encoding);
             let Some(name) = ep.channel_name(encoding) else {
-                let names: Vec<Option<Vec<u8>>> = oracles()
-                    .map(|(_, c)| sofia_leg(c, &ep, encoding).channel_name)
-                    .collect();
-                let apart = names
-                    .windows(2)
-                    .any(|pair| pair[0] != pair[1]);
+                // Judged on the crate's two encoders, not on the built trees: CI builds only the
+                // public ones, which all keep a valid `%XX`.
+                let upstream = ep.channel_name_encoding(encoding, false);
+                let fork = ep.channel_name_encoding(encoding, true);
+                let c_name = read
+                    .channel_name
+                    .as_deref()
+                    .map(String::from_utf8_lossy);
+                let apart = upstream != fork
+                    && [&upstream, &fork]
+                        .iter()
+                        .any(|model| model.as_deref() == c_name.as_deref());
                 let full = read
                     .channel_name
                     .as_ref()
