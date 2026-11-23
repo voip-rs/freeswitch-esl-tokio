@@ -757,9 +757,9 @@ mod tests {
         let wire = cmd
             .to_wire_format()
             .unwrap();
-        assert!(!wire.contains("event-lock"));
-        assert!(!wire.contains("async"));
-        assert!(!wire.contains("loops"));
+        assert!(!wire.contains("Event-Lock"));
+        assert!(!wire.contains("Async"));
+        assert!(!wire.contains("Loops"));
     }
 
     #[test]
