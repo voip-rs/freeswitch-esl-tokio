@@ -268,17 +268,18 @@ ring, and sequential failover. Implements `render`/`parse_for` at a `BlockParse`
 `Serialize` and `Deserialize`.
 
 Structure: `Vec<Vec<Endpoint>>` — outer vec is sequential groups (`|`),
-inner vec is simultaneous endpoints (`,`). Global `{variables}` apply to
-all endpoints. Per-endpoint `[variables]` are carried on each `Endpoint`.
+inner vec is simultaneous endpoints (`,`). A leading `{variables}` or
+`<variables>` block applies to all endpoints; `with_variables` refuses a
+`[variables]` one, which the switch reads as the first leg's, and keeps an
+empty one as none, and config load runs the same check. Per-endpoint
+`[variables]` are carried on each `Endpoint`.
 
 ```rust
-let bridge = BridgeDialString {
-    variables: Some(vars),
-    groups: vec![
-        vec![ep1, ep2],  // ring ep1 and ep2 simultaneously
-        vec![ep3],       // if both fail, try ep3
-    ],
-};
+let bridge = BridgeDialString::new(vec![
+    vec![ep1, ep2],  // ring ep1 and ep2 simultaneously
+    vec![ep3],       // if both fail, try ep3
+])?
+.with_variables(vars)?;
 // Wire: {vars}ep1,ep2|ep3
 ```
 

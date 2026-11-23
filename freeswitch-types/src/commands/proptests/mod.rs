@@ -514,7 +514,9 @@ fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
     }
     let bridge = BridgeDialString::new(groups).ok()?;
     Some(match &spec.global {
-        Some(vars) => bridge.with_variables(block(VariablesType::Default, vars)?),
+        Some(vars) => bridge
+            .with_variables(block(VariablesType::Default, vars)?)
+            .ok()?,
         None => bridge,
     })
 }

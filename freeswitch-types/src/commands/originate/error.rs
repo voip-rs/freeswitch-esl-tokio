@@ -108,6 +108,8 @@ pub enum OriginateError {
         /// The variable and its fault.
         variable: UndeliverableVariable,
     },
+    /// A `[]` block heading a bridge dial string, which the switch reads as the first leg's.
+    ChannelScopeGlobalVariables,
 }
 
 impl std::fmt::Display for OriginateError {
@@ -195,6 +197,9 @@ impl std::fmt::Display for OriginateError {
             Self::UndeliverableVariable { index, variable } => {
                 write!(f, "pair {index} of a variable block: {variable}")
             }
+            Self::ChannelScopeGlobalVariables => f.write_str(
+                "a [] block heads the dial string, where the switch reads it as the first leg's",
+            ),
         }
     }
 }
@@ -222,7 +227,8 @@ impl std::error::Error for OriginateError {
             | Self::UnexpandedExpression { .. }
             | Self::UndeliverableExecuteOn { .. }
             | Self::TooManyLegs { .. }
-            | Self::UndeliverableVariable { .. } => None,
+            | Self::UndeliverableVariable { .. }
+            | Self::ChannelScopeGlobalVariables => None,
         }
     }
 }

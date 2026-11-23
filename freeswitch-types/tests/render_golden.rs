@@ -537,7 +537,8 @@ fn bridge_corpus(records: &mut Vec<String>) {
     let ep3: Endpoint = ErrorEndpoint::new(HangupCause::NoRouteDestination).into();
     let bridge = BridgeDialString::new(vec![vec![ep1, ep2], vec![ep3]])
         .unwrap()
-        .with_variables(vars);
+        .with_variables(vars)
+        .unwrap();
     let block_parse = BlockParse::PairSplitCleans;
     let rendered = bridge.render(block_parse);
     rec(records, "bridge/basic/display", &rendered);

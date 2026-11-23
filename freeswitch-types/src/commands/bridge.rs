@@ -9,6 +9,7 @@ use super::endpoint::{DialString, Endpoint};
 use super::originate::OriginateError;
 use super::variables::{
     installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,
+    VariablesType,
 };
 use crate::switch_passes::brackets::Block;
 use crate::switch_passes::originate_legs::{Leg, MAX_PEERS};
@@ -25,7 +26,7 @@ const CARRIER: DialStringCarrier = DialStringCarrier::Dialplan;
 /// - `,` separates endpoints rung simultaneously (within a group)
 /// - `|` separates groups tried sequentially (failover)
 /// - Each endpoint may have channel-scope `[variables]`
-/// - Global `{variables}` apply to all endpoints
+/// - A leading `{variables}` or `<variables>` block applies to all endpoints
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "config::BridgeDialString"))]
@@ -52,13 +53,14 @@ impl BridgeDialString {
         Ok(bridge)
     }
 
-    /// Set global default-scope variables.
-    pub fn with_variables(mut self, variables: Variables) -> Self {
-        self.variables = Some(variables);
-        self
+    /// Set the block heading the dial string, which applies to every leg. An empty block is
+    /// none; a `[]` block is refused, since the switch reads it as the first leg's.
+    pub fn with_variables(mut self, variables: Variables) -> Result<Self, OriginateError> {
+        self.variables = global_variables(Some(variables))?;
+        Ok(self)
     }
 
-    /// Default-scope variables applied to all endpoints.
+    /// The `{}` or `<>` block applied to every leg.
     pub fn variables(&self) -> Option<&Variables> {
         self.variables
             .as_ref()
@@ -68,11 +70,6 @@ impl BridgeDialString {
     /// endpoints ring simultaneously (`,`-separated).
     pub fn groups(&self) -> &[Vec<Endpoint>] {
         &self.groups
-    }
-
-    /// Mutable reference to the default-scope variables.
-    pub fn variables_mut(&mut self) -> &mut Option<Variables> {
-        &mut self.variables
     }
 }
 
@@ -278,6 +275,18 @@ impl BridgeDialString {
     }
 }
 
+/// `variables` as a dial string's head holds it: an empty block is none, and a `[]` block,
+/// which the switch reads as the first leg's, is refused.
+fn global_variables(variables: Option<Variables>) -> Result<Option<Variables>, OriginateError> {
+    match variables {
+        Some(vars) if vars.is_empty() => Ok(None),
+        Some(vars) if vars.scope() == VariablesType::Channel => {
+            Err(OriginateError::ChannelScopeGlobalVariables)
+        }
+        other => Ok(other),
+    }
+}
+
 /// What the switch installs on a leg and the endpoint text it dials.
 type LegReading = (Vec<Block>, String);
 
@@ -363,7 +372,7 @@ impl TryFrom<config::BridgeDialString> for BridgeDialString {
 
     fn try_from(config: config::BridgeDialString) -> Result<Self, Self::Error> {
         let mut bridge = Self::new(config.groups)?;
-        bridge.variables = config.variables;
+        bridge.variables = global_variables(config.variables)?;
         Ok(bridge)
     }
 }
@@ -451,7 +460,8 @@ mod tests {
             .with_variables(ep_vars)
             .into()]])
         .unwrap()
-        .with_variables(vars);
+        .with_variables(vars)
+        .unwrap();
 
         let rendered = bridge.render(BlockParse::PairSplitCleans);
         assert_eq!(
@@ -472,7 +482,8 @@ mod tests {
         let ep = SofiaGateway::new("gw", "18005551234").unwrap();
         let bridge = BridgeDialString::new(vec![vec![ep.into()]])
             .unwrap()
-            .with_variables(vars.clone());
+            .with_variables(vars.clone())
+            .unwrap();
 
         assert_eq!(
             bridge.render(BlockParse::MEASURED),
@@ -604,7 +615,8 @@ mod tests {
                 .unwrap()
                 .into()]])
             .unwrap()
-            .with_variables(vars);
+            .with_variables(vars)
+            .unwrap();
         assert_eq!(
             bridge.render(BlockParse::MEASURED),
             "{hangup_after_bridge=true}sofia/internal/1000@domain"
@@ -872,7 +884,8 @@ mod tests {
             vec![ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into()],
         ])
         .unwrap()
-        .with_variables(vars);
+        .with_variables(vars)
+        .unwrap();
         let json = serde_json::to_string(&bridge).unwrap();
         let parsed: BridgeDialString = serde_json::from_str(&json).unwrap();
         assert_eq!(bridge, parsed);
@@ -1034,8 +1047,8 @@ mod tests {
         assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
     }
 
-    /// A `[]` block at the head renders as the first leg's block, and an empty block of any
-    /// scope renders as nothing and reads back as `None`.
+    /// A `[]` block at the head would render as the first leg's block, and an empty block of
+    /// any scope renders as nothing and reads back as `None`.
     #[test]
     fn global_variables_round_trip_in_every_scope() {
         let mut broken = Vec::new();
@@ -1050,9 +1063,17 @@ mod tests {
                     vars.insert(*k, *v)
                         .unwrap();
                 }
-                let bridge = BridgeDialString::new(vec![loopbacks(2)])
+                let refused = scope == VariablesType::Channel && !pairs.is_empty();
+                let bridge = match BridgeDialString::new(vec![loopbacks(2)])
                     .unwrap()
-                    .with_variables(vars);
+                    .with_variables(vars)
+                {
+                    Err(e) if refused => {
+                        assert_eq!(e, OriginateError::ChannelScopeGlobalVariables);
+                        continue;
+                    }
+                    bridge => bridge.unwrap(),
+                };
                 let rendered = bridge.render(BlockParse::MEASURED);
                 let back = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED);
                 if back != Ok(bridge) {
