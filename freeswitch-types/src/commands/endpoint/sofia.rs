@@ -1,3 +1,6 @@
+//! The sofia endpoints and what mod_sofia reads of them. A leg's name follows `sofia_glue_set_name`
+//! over the destination `sofia_outgoing_channel` keeps, under the profile as written, never resolved.
+
 use std::borrow::Cow;
 use std::ops::Range;
 
@@ -85,6 +88,52 @@ pub struct SofiaContact {
 /// `SWITCH_URL_UNSAFE`: a byte of it ahead of the user's `@` makes `protect_dest_uri` rewrite.
 pub(super) const URL_UNSAFE: &[u8] = b"\r\n #%&+:;<=>?@[\\]^`{|}\"";
 
+/// The digits an escape the switch's URL code leaves alone is written in: uppercase only.
+const ESCAPE_HEX: &[u8] = b"0123456789ABCDEF";
+
+/// Whether `bytes` opens with a `%XX` escape the switch's URL code leaves alone.
+fn opens_an_escape(bytes: &[u8]) -> bool {
+    matches!(bytes, [b'%', high, low, ..] if ESCAPE_HEX.contains(high) && ESCAPE_HEX.contains(low))
+}
+
+/// `switch_needs_url_encode`: a `SWITCH_URL_UNSAFE` byte outside a `%XX` escape.
+fn needs_url_encode(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut at = 0;
+    while let Some(&byte) = bytes.get(at) {
+        if opens_an_escape(&bytes[at..]) {
+            at += 3;
+            continue;
+        }
+        if URL_UNSAFE.contains(&byte) {
+            return true;
+        }
+        at += 1;
+    }
+    false
+}
+
+/// `switch_url_encode_opt`, writing a control, non-ASCII or `SWITCH_URL_UNSAFE` byte as `%XX`, and
+/// a `%XX` escape's `%` too when `double_encode`. The fork (since f47ca7c) always double-encodes.
+fn url_encode(text: &str, double_encode: bool) -> String {
+    let bytes = text.as_bytes();
+    let mut encoded = String::with_capacity(bytes.len() * 3);
+    for (at, &byte) in bytes
+        .iter()
+        .enumerate()
+    {
+        let kept = !double_encode && opens_an_escape(&bytes[at..]);
+        if !kept && (!(b' '..=b'~').contains(&byte) || URL_UNSAFE.contains(&byte)) {
+            encoded.push('%');
+            encoded.push(char::from(ESCAPE_HEX[usize::from(byte >> 4)]));
+            encoded.push(char::from(ESCAPE_HEX[usize::from(byte & 0x0f)]));
+        } else {
+            encoded.push(char::from(byte));
+        }
+    }
+    encoded
+}
+
 /// Whether `protect_dest_uri` rewrites a sofia destination before mod_sofia reads it, which
 /// moves where the dialed user ends.
 ///
@@ -138,11 +187,83 @@ impl SofiaEndpoint {
         dialed_user(&self.destination, encoding, DialPath::Profile)
     }
 
-    /// The name the switch gives this leg.
+    /// The name the switch gives this leg, `sofia/<profile>/<destination as mod_sofia keeps it>`,
+    /// as its `New Channel` log line and its `Channel-Name` header show it.
+    ///
+    /// The profile is as written: a leg dialed through a profile alias or domain carries the
+    /// profile's own name, which only the switch config knows. `None` where the dial string cannot
+    /// settle the name: the encoder runs on a user holding a valid uppercase `%XX`, which upstream
+    /// keeps and some builds encode again, and the name keeps the difference; the name fills
+    /// mod_sofia's 256-byte buffer before any `;`; or the leg would look up an empty registered
+    /// user. A later rename (`origination_channel_name`, `push_channel_name`) is not modelled; the
+    /// switch logs it as `Rename Channel`.
+    /// [`SofiaChannelName`](crate::sofia::SofiaChannelName) parses the result.
     pub fn channel_name(&self, encoding: DestinationEncoding) -> Option<String> {
-        let _ = encoding;
-        None
+        let upstream = self.channel_name_encoding(encoding, false);
+        let fork = self.channel_name_encoding(encoding, true);
+        (upstream == fork)
+            .then_some(upstream)
+            .flatten()
     }
+
+    /// [`channel_name`](Self::channel_name) on a tree whose encoder runs with `double_encode`.
+    fn channel_name_encoding(
+        &self,
+        encoding: DestinationEncoding,
+        double_encode: bool,
+    ) -> Option<String> {
+        // `encoded` is the `mod` flag `protect_dest_uri` returns, which turns off the `%` cut.
+        let (text, encoded) = match encoding {
+            DestinationEncoding::Encoded => match protect_dest_uri(&self.destination) {
+                (text, Some(user)) if needs_url_encode(&text[user.clone()]) => (
+                    Cow::Owned(format!(
+                        "{}{}{}",
+                        &text[..user.start],
+                        url_encode(&text[user.clone()], double_encode),
+                        &text[user.end..]
+                    )),
+                    true,
+                ),
+                (text, _) => (text, false),
+            },
+            DestinationEncoding::Suppressed => (Cow::Borrowed(self.destination()), false),
+        };
+        fn head(text: &str, cut: char) -> &str {
+            text.split_once(cut)
+                .map_or(text, |(head, _)| head)
+        }
+        let mut dest = head(&text, '^');
+        if scheme_len(dest) == 0 && !dest.contains('@') {
+            if !encoded {
+                dest = head(dest, '%');
+            }
+            if dest.is_empty() {
+                return None;
+            }
+        }
+        set_name(&self.profile, dest)
+    }
+}
+
+/// `char name[256]` in `sofia_glue_set_name`.
+const CHANNEL_NAME_BUFFER: usize = 256;
+
+/// `sofia_glue_set_name`: `sofia/<profile>/<dest>` cut at its first `;`, `None` where the buffer
+/// fills before one.
+fn set_name(profile: &str, dest: &str) -> Option<String> {
+    let mut name = format!("sofia/{profile}/{dest}");
+    let kept = name
+        .len()
+        .min(CHANNEL_NAME_BUFFER - 1);
+    match name.as_bytes()[..kept]
+        .iter()
+        .position(|&byte| byte == b';')
+    {
+        Some(semicolon) => name.truncate(semicolon),
+        None if name.len() > kept => return None,
+        None => {}
+    }
+    Some(name)
 }
 
 impl SofiaGateway {

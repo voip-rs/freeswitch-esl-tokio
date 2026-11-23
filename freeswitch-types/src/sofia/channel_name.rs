@@ -12,6 +12,9 @@
 /// Only `sofia/...` names parse; other drivers (`loopback/...`, `error/...`)
 /// return `None`. All accessors return verbatim slices of the input: no
 /// URL-decoding, no `sip:` stripping, no port splitting — callers decide.
+///
+/// The name `SofiaEndpoint::channel_name` (feature `esl`) builds for an
+/// outbound leg parses back into this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SofiaChannelName<'a> {
     profile: &'a str,

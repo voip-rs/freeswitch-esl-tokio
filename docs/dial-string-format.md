@@ -210,6 +210,19 @@ gateway's `destination-prefix`, `sip_destination_prefix` and
 whole. A `^` ahead of the first `@` is therefore a To override only with
 encoding suppressed: by default it is encoded into the user.
 
+The leg's name, which its `New Channel` log line and `Channel-Name` header
+carry, is `sofia/<profile>/<dest>` from `sofia_glue_set_name`. The profile is
+the one found, by its configured name, so a leg dialed through an alias or
+domain carries the profile's own. `dest` is what `sofia_outgoing_channel` kept
+of the text: `protect_dest_uri`'s rewrite, cut at the first `^`, a `sip:` or
+`sips:` scheme kept as written, and a `user%host` cut at the `%` unless the
+user was encoded. The name stops at its first `;` and at 255 bytes.
+`SofiaEndpoint::channel_name` builds it for a `DestinationEncoding`, and
+answers `None` where upstream and the fork encode the user apart, where the
+255-byte cut lands before any `;`, and where the leg would look up an empty
+registered user. A later `origination_channel_name` or `push_channel_name`
+renames the channel, logged as `Rename Channel`.
+
 On every tree `switch_needs_url_encode` reads only `SWITCH_URL_UNSAFE`, so a
 user part holding no byte of that set outside a valid uppercase `%XX` is sent
 as it stands, controls other than CR and LF, DEL and non-ASCII included; one
