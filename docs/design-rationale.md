@@ -264,9 +264,10 @@ a network connection:
 Pulling in `freeswitch-esl-tokio` for types alone would force tokio as a
 transitive dependency — unacceptable for a config parser or a static analysis
 tool. The split keeps the dependency boundary clean: `freeswitch-types` is
-pure data, `freeswitch-esl-tokio` is transport. The two crates version
-independently so a breaking change in either layer does not force a major
-bump on the other.
+pure data, `freeswitch-esl-tokio` is transport. Minor and patch releases
+version independently, but a major is taken in lockstep under one number:
+`freeswitch-esl-tokio` re-exports the types, so a break in them is a break in
+it, and a shared major tells a user which pair belongs together.
 
 ## User strings reach the wire without a line break or NUL
 
