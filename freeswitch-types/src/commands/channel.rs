@@ -5,6 +5,7 @@ use std::fmt;
 use crate::channel::HangupCause;
 use crate::commands::originate::DialplanType;
 use crate::commands::variables::UndeliverableVariable;
+use crate::switch_passes::api_argument::quote_for_uuid_setvar;
 use crate::wire_safety::check_header_value;
 
 /// Answer a channel: `uuid_answer <uuid>`.
@@ -221,6 +222,9 @@ impl fmt::Display for UuidGetVar {
 }
 
 /// Set a channel variable: `uuid_setvar <uuid> <key> <value>`.
+///
+/// `Display` single-quotes and escapes the value for the API's blank split, which would
+/// otherwise strip its quotes and read its backslashes as escapes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UuidSetVar {
     uuid: String,
@@ -255,7 +259,7 @@ impl UuidSetVar {
         &self.key
     }
 
-    /// Variable value.
+    /// Variable value as the channel will hold it, before the quoting `Display` adds.
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -263,7 +267,8 @@ impl UuidSetVar {
 
 impl fmt::Display for UuidSetVar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "uuid_setvar {} {} {}", self.uuid, self.key, self.value)
+        let value = quote_for_uuid_setvar(&self.value);
+        write!(f, "uuid_setvar {} {} {}", self.uuid, self.key, value)
     }
 }
 
@@ -347,7 +352,7 @@ impl fmt::Display for UuidSendDtmf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{originate_split, originate_unquote, quote_for_uuid_setvar};
+    use crate::commands::{originate_split, originate_unquote};
 
     const UUID: &str = "abc12345-6789-0abc-def0-123456789abc";
     const OTHER: &str = "def12345-6789-0abc-def0-123456789abc";

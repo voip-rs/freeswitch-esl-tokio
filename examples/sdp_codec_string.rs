@@ -14,7 +14,6 @@
 //! Connection (all optional, these are the defaults):
 //!   ESL_HOST=localhost  ESL_PORT=8021  ESL_PASSWORD=ClueCon
 
-use freeswitch_esl_tokio::commands::quote_for_uuid_setvar;
 use freeswitch_esl_tokio::sdp::{
     default_rate, CodecImplementation, CodecString, CodecStringOptions, SdpCodecEntry, SdpCodecs,
     SdpWarning,
@@ -344,10 +343,8 @@ fn short_uuid(uuid: &str) -> String {
         .collect()
 }
 
-/// Set a channel variable through `uuid_setvar`.
-///
-/// `UuidSetVar`'s `Display` is a bare wire builder and adds no quotes, so rendering
-/// the value for this carrier is the caller's job: `quote_for_uuid_setvar` does it.
+/// Set a channel variable through `uuid_setvar`; `UuidSetVar` quotes the value for
+/// the API's blank split, so a codec string with spaces arrives whole.
 ///
 /// The reply is read with `api_result()`: the channel can hang up between the
 /// event and this write, and `-ERR No such channel!` arrives in the body.
@@ -357,7 +354,7 @@ async fn set_channel_var(
     name: ChannelVariable,
     value: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let cmd = UuidSetVar::new(uuid, name.to_string(), quote_for_uuid_setvar(value))?;
+    let cmd = UuidSetVar::new(uuid, name.to_string(), value)?;
     client
         .api(&cmd.to_string())
         .await?

@@ -9,7 +9,7 @@ Off by default -- add `features = ["sdp"]` to the `freeswitch-esl-tokio` depende
 use freeswitch_esl_tokio::sdp::{
     CodecImplementation, CodecString, CodecStringOptions, SdpCodecs,
 };
-use freeswitch_esl_tokio::ChannelVariable;
+use freeswitch_esl_tokio::{ChannelVariable, UuidSetVar};
 # #[tokio::main]
 # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 # let (client, _events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
@@ -35,9 +35,10 @@ for dropped in codecs.retain_available(&loaded) {
     eprintln!("not offering {dropped}");
 }
 
-// Single-quote the value: uuid_setvar splits on spaces, and AMR format
+// UuidSetVar quotes the value for uuid_setvar's blank split, and AMR format
 // parameters routinely contain "; ".
-client.api(&format!("uuid_setvar {uuid} {} '{codecs}'", ChannelVariable::AbsoluteCodecString)).await?;
+let set = UuidSetVar::new(uuid, ChannelVariable::AbsoluteCodecString.to_string(), codecs.to_string())?;
+client.api(&set.to_string()).await?.api_result()?;
 # Ok(())
 # }
 ```

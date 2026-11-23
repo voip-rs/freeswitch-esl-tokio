@@ -237,7 +237,7 @@ write-only commands.
 | `UuidHold` | `uuid_hold [off\|toggle] {uuid}` |
 | `UuidKill` | `uuid_kill {uuid} [cause]` |
 | `UuidGetVar` | `uuid_getvar {uuid} {key}` |
-| `UuidSetVar` | `uuid_setvar {uuid} {key} {value}` |
+| `UuidSetVar` | `uuid_setvar {uuid} {key} '{value}'`, the value escaped as `quote_for_uuid_setvar()` does |
 | `UuidTransfer` | `uuid_transfer {uuid} {dest} [dialplan]` |
 | `UuidSendDtmf` | `uuid_send_dtmf {uuid} {dtmf}` |
 

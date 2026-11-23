@@ -64,10 +64,10 @@ pub fn originate_quote(token: &str) -> String {
 /// Escape and single-quote a value for the argument string of `uuid_setvar`.
 ///
 /// That command splits its arguments on spaces through `cleanup_separated_string`,
-/// which honours `'` grouping and processes `\` escapes inside the quoted region,
-/// so an unquoted value is silently truncated at its first space and a bare `'`
-/// or `\` inside the quotes ends or eats a character. The inline originate
-/// `{var=…}` block is a different carrier with different escaping.
+/// which strips `'` grouping and processes `\` escapes, so an unquoted value loses its
+/// quotes and backslashes. [`UuidSetVar`]'s `Display` applies this already; call it only
+/// for a line built by hand. The inline originate `{var=…}` block is a different carrier
+/// with different escaping.
 pub fn quote_for_uuid_setvar(value: &str) -> String {
     api_argument::quote_for_uuid_setvar(value)
 }

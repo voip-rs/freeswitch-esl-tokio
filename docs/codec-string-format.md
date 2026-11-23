@@ -299,7 +299,7 @@ channel variable may consume the escape first.
 
 | Path | Behaviour |
 |---|---|
-| `uuid_setvar` | splits on space, honours `'` quotes and `\` escapes (`switch_utils.c:2841-2845`); `\,` is not an escape under a space delimiter so it passes through (`:2720`). **Single-quote the value** — unquoted it truncates at the first space, and most AMR fmtp contains `; `. |
+| `uuid_setvar` | splits on space, honours `'` quotes and `\` escapes (`switch_utils.c:2841-2845`); `\,` is not an escape under a space delimiter so it passes through (`:2720`). Unquoted, the value loses its quotes and its backslashes are read as escapes (measured); `UuidSetVar` single-quotes and escapes it. |
 | inline originate `{var=…}` | `switch_event_create_brackets` (`switch_event.c:1665`) splits the variable list through the same helper, on the delimiter its caller passes — `,` for originate (`:1732`) — spending the escape when the variable is stored. Needs `\\,`. |
 
 ## Mapping an SDP offer onto the string
