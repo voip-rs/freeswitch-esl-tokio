@@ -253,11 +253,10 @@ pub(super) async fn reader_loop(
     ));
     let reason = match futures_util::FutureExt::catch_unwind(result).await {
         Ok(reason) => reason,
-        Err(_) => {
-            tracing::error!("reader task panicked");
-            Some(DisconnectReason::IoError(
-                "reader task panicked".to_string(),
-            ))
+        Err(payload) => {
+            let reason = describe_panic(payload.as_ref());
+            tracing::error!("{reason}");
+            Some(DisconnectReason::IoError(reason))
         }
     };
     // `event_tx` is still alive here: a consumer that sees recv() -> None must
@@ -272,6 +271,18 @@ pub(super) async fn reader_loop(
         }
     }
     fail_pending_reply(&shared).await;
+}
+
+/// `panic!` carries a `&'static str` for a literal message and a `String` for a
+/// formatted one; `panic_any` can carry anything else.
+fn describe_panic(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        format!("reader task panicked: {message}")
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        format!("reader task panicked: {message}")
+    } else {
+        "reader task panicked with a non-string payload".to_string()
+    }
 }
 
 /// Fail the in-flight waiter: dropping its `oneshot::Sender` resolves
