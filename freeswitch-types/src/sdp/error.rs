@@ -14,21 +14,15 @@ pub enum SdpCodecError {
     ///
     /// [`std::error::Error::source`] names the fault and its byte offset.
     ParseFailure {
-        /// Human-readable description of what failed.
-        message: String,
         /// The underlying parse error, preserved for `Error::source()`.
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 }
 
 impl SdpCodecError {
-    /// Construct a [`SdpCodecError::ParseFailure`] from a message and a source error.
-    pub(crate) fn parse_failure(
-        message: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    /// Construct a [`SdpCodecError::ParseFailure`] around the parser's error.
+    pub(crate) fn parse_failure(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::ParseFailure {
-            message: message.into(),
             source: Box::new(source),
         }
     }
@@ -37,7 +31,7 @@ impl SdpCodecError {
 impl fmt::Display for SdpCodecError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ParseFailure { message, .. } => write!(f, "SDP parse failure: {message}"),
+            Self::ParseFailure { .. } => f.write_str("SDP parse failure"),
         }
     }
 }
@@ -516,7 +510,7 @@ mod tests {
     // --- SdpCodecError ---
 
     #[test]
-    fn sdp_codec_error_parse_failure_display() {
+    fn parse_failure_display_leaves_the_fault_to_its_source() {
         use std::fmt;
 
         #[derive(Debug)]
@@ -528,10 +522,12 @@ mod tests {
         }
         impl std::error::Error for DummyErr {}
 
-        let e = SdpCodecError::parse_failure("missing v= line", DummyErr);
-        let msg = e.to_string();
-        assert!(msg.contains("SDP parse failure"));
-        assert!(msg.contains("missing v= line"));
+        let e = SdpCodecError::parse_failure(DummyErr);
+        assert!(
+            !e.to_string()
+                .contains("no version line"),
+            "{e}"
+        );
     }
 
     #[test]
@@ -547,7 +543,7 @@ mod tests {
         }
         impl std::error::Error for Root {}
 
-        let e = SdpCodecError::parse_failure("wrapper", Root);
+        let e = SdpCodecError::parse_failure(Root);
         let src = std::error::Error::source(&e).expect("source must be present");
         assert_eq!(src.to_string(), "root cause");
     }

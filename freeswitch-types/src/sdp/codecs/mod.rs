@@ -200,8 +200,7 @@ impl SdpCodecs {
         bytes: &[u8],
         options: &SdpParseOptions,
     ) -> Result<Self, SdpCodecError> {
-        let session = session::parse(bytes)
-            .map_err(|e| SdpCodecError::parse_failure("failed to parse SDP", e))?;
+        let session = session::parse(bytes).map_err(SdpCodecError::parse_failure)?;
         Ok(Self::from_session(session, options))
     }
 
