@@ -289,7 +289,7 @@ impl EslResponse {
             .header_str(name)
     }
 
-    /// The header store, for iteration and [`EslHeaders::with_prefix`].
+    /// The header store, for iteration and [`EslHeaders::prefixed`].
     pub fn headers(&self) -> &EslHeaders {
         &self.headers
     }

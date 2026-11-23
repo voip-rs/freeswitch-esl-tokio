@@ -11,7 +11,7 @@ pub use subscription::{
     FilterHeaderFault,
 };
 
-use crate::headers::{case_alias_key, EventHeader, EventHeaderName};
+use crate::headers::{EventHeader, EventHeaderName};
 use crate::lookup::{variable_key, HeaderLookup};
 use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
@@ -115,7 +115,7 @@ impl EslEvent {
         self.header_str(&variable_key(name))
     }
 
-    /// The header store, for iteration and [`EslHeaders::with_prefix`].
+    /// The header store, for iteration and [`EslHeaders::prefixed`].
     pub fn headers(&self) -> &EslHeaders {
         &self.headers
     }
@@ -276,11 +276,14 @@ impl EslEvent {
     pub fn to_plain_format(&self) -> String {
         let mut result = String::new();
 
-        for (key, value) in self.headers() {
+        for (key, value) in self
+            .headers
+            .iter()
+        {
             if key == "Content-Length" {
                 continue;
             }
-            result.extend([key.as_str(), ": "]);
+            result.extend([key, ": "]);
             result.extend(percent_encode(value.as_bytes(), NON_ALPHANUMERIC));
             result.push('\n');
         }
@@ -331,17 +334,10 @@ impl PartialEq for EslEvent {
     }
 }
 
-/// Hashes what `PartialEq` compares: entries regardless of order, and a dash
-/// key by its lowercase alias, so equal events hash alike.
 impl std::hash::Hash for EslEvent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let mut entries: Vec<(String, &str)> = self
-            .headers()
-            .into_iter()
-            .map(|(k, v)| (case_alias_key(k).unwrap_or_else(|| k.clone()), v.as_str()))
-            .collect();
-        entries.sort_unstable();
-        entries.hash(state);
+        self.headers
+            .hash(state);
         self.body
             .hash(state);
     }

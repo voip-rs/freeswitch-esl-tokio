@@ -356,7 +356,10 @@ impl EslCommand {
     fn build_from_event(cmd: &str, event: &EslEvent) -> EslResult<String> {
         let mut builder = CommandBuilder::new(cmd);
 
-        for (key, value) in event.headers() {
+        for (key, value) in event
+            .headers()
+            .iter()
+        {
             builder = builder.header(key, value)?;
         }
 

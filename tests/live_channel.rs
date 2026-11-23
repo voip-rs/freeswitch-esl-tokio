@@ -1785,8 +1785,11 @@ async fn live_show_bootstrap_rebuilds_channel_create() {
 
     let mut absent = Vec::new();
     let mut differs = Vec::new();
-    for (key, value) in created.headers() {
-        if key.starts_with("Event-") || volatile.contains(key.as_str()) || value == UNDEF_VALUE {
+    for (key, value) in created
+        .headers()
+        .iter()
+    {
+        if key.starts_with("Event-") || volatile.contains(key) || value == UNDEF_VALUE {
             continue;
         }
         match rebuilt.header_str(key) {

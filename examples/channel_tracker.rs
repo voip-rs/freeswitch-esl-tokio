@@ -150,9 +150,12 @@ impl TrackedChannel {
 
     /// Merge all event headers into the data map.
     fn update_from_event(&mut self, event: &EslEvent) {
-        for (key, value) in event.headers() {
+        for (key, value) in event
+            .headers()
+            .iter()
+        {
             self.data
-                .insert(key.clone(), value.clone());
+                .insert(key.to_string(), value.to_string());
         }
     }
 

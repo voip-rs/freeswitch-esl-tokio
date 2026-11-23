@@ -161,6 +161,13 @@ impl EslHeaders {
             .is_empty()
     }
 
+    /// Every entry in insertion order, under its stored spelling.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.map
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+    }
+
     /// Entries whose key starts with `prefix`, under the rule lookups use: a
     /// key without `_` matches in any ASCII casing, a key with `_` exactly.
     ///
@@ -174,11 +181,11 @@ impl EslHeaders {
     /// let h: EslHeaders = [("C911P-Action", "dispatch"), ("Unique-ID", "abc")]
     ///     .into_iter()
     ///     .collect();
-    /// let custom: Vec<_> = h.with_prefix("c911p-").collect();
+    /// let custom: Vec<_> = h.prefixed("c911p-").collect();
     /// assert_eq!(custom.len(), 1);
     /// assert_eq!(custom[0].1, "dispatch");
     /// ```
-    pub fn with_prefix<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = (&'a str, &'a str)> {
+    pub fn prefixed<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = (&'a str, &'a str)> {
         self.map
             .iter()
             .filter(move |(key, _)| key_has_prefix(key, prefix))
@@ -224,13 +231,16 @@ impl PartialEq for EslHeaders {
 
 impl Eq for EslHeaders {}
 
-impl<'a> IntoIterator for &'a EslHeaders {
-    type Item = (&'a String, &'a String);
-    type IntoIter = indexmap::map::Iter<'a, String, String>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.map
+/// Hashes what `PartialEq` compares: entries regardless of order, and a dash key by its
+/// lowercase alias, so equal stores hash alike.
+impl std::hash::Hash for EslHeaders {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut entries: Vec<(String, &str)> = self
             .iter()
+            .map(|(k, v)| (case_alias_key(k).unwrap_or_else(|| k.to_string()), v))
+            .collect();
+        entries.sort_unstable();
+        entries.hash(state);
     }
 }
 
@@ -366,6 +376,38 @@ mod tests {
     use sip_header::SipHeaderLookup;
     use sip_header_catalog::{RowErrorKind, SipHeaderRowsExt};
 
+    /// Equal stores hash alike, whichever spelling and order they first saw.
+    #[test]
+    fn stores_equal_under_folding_hash_alike() {
+        use std::hash::{BuildHasher, RandomState};
+
+        let a: EslHeaders = [("C911P-Action", "x"), ("Unique-ID", "u")]
+            .into_iter()
+            .collect();
+        let b: EslHeaders = [("unique-id", "u"), ("c911p-action", "x")]
+            .into_iter()
+            .collect();
+        assert_eq!(a, b);
+        let state = RandomState::new();
+        assert_eq!(state.hash_one(&a), state.hash_one(&b));
+    }
+
+    #[test]
+    fn iter_yields_stored_spellings_in_insertion_order() {
+        let h: EslHeaders = [
+            ("C911P-Action", "x"),
+            ("unique-id", "u"),
+            ("c911p-action", "y"),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            h.iter()
+                .collect::<Vec<_>>(),
+            [("C911P-Action", "y"), ("Unique-ID", "u")]
+        );
+    }
+
     #[test]
     fn every_write_path_normalizes_the_key() {
         let mut inserted = EslHeaders::new();
@@ -421,7 +463,7 @@ mod tests {
         .collect();
         for prefix in ["C911P-", "c911p-", "C911p-"] {
             let values: Vec<&str> = h
-                .with_prefix(prefix)
+                .prefixed(prefix)
                 .map(|(_, v)| v)
                 .collect();
             assert_eq!(values, ["dispatch", "inc-1"], "{prefix}");
@@ -434,12 +476,12 @@ mod tests {
             .into_iter()
             .collect();
         let keys: Vec<&str> = h
-            .with_prefix("x-")
+            .prefixed("x-")
             .map(|(k, _)| k)
             .collect();
         assert_eq!(keys, ["X-Plain"]);
         assert_eq!(
-            h.with_prefix("X-")
+            h.prefixed("X-")
                 .count(),
             2
         );
@@ -451,12 +493,12 @@ mod tests {
             .into_iter()
             .collect();
         assert_eq!(
-            h.with_prefix("a")
+            h.prefixed("a")
                 .count(),
             0
         );
         assert_eq!(
-            h.with_prefix("é-")
+            h.prefixed("é-")
                 .count(),
             0
         );
@@ -471,7 +513,7 @@ mod tests {
         .into_iter()
         .collect();
         let keys: Vec<&str> = h
-            .with_prefix("CALLER-")
+            .prefixed("CALLER-")
             .map(|(k, _)| k)
             .collect();
         assert_eq!(keys, ["Caller-Caller-ID-Name"]);

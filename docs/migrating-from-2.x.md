@@ -56,7 +56,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 |---|---|
 | `HeaderLookup` on a bare `HashMap<String, String>`, matching names exactly | `EslHeaders::from_iter(map)` at the boundary, then read through it; every lookup resolves a dash key in any casing |
 | a store of your own reading a `HashMap` by exact key | wrap an `EslHeaders` and delegate `header_str` / `variable_str` to it |
-| `EslEvent::headers()`, `EslResponse::headers()` return `&IndexMap<String, String>` | they return `&EslHeaders`; `.as_map()` for the map, `with_prefix("X-")` for one family of headers in any casing |
+| `EslEvent::headers()`, `EslResponse::headers()` return `&IndexMap<String, String>` | they return `&EslHeaders`; `.iter()` yields `(&str, &str)` in insertion order where iterating the map yielded `(&String, &String)`, `.as_map()` gives the map, `prefixed("X-")` one family of headers in any casing |
 | `header(EventHeader)` on `HeaderLookup` and `EslEvent`; `EslResponse::header(impl AsRef<str>)` | `header(impl EventHeaderName)` on all three; a string name goes through `header_str` |
 | an unknown dash key stored Title-Cased (`C911P-Action` as `C911p-Action`) | stored as first spelled; a later write in another casing replaces the value under that key. A store or spool written by 2.x still answers every casing |
 | `DisconnectReason::ServerNotice` with `controlled_session_uuid: None` on a session-bound notice | carries the UUID the switch sent |

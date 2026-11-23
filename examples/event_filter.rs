@@ -329,7 +329,10 @@ fn format_event_full(event: &freeswitch_esl_tokio::EslEvent) -> String {
     use std::fmt::Write;
 
     let mut output = String::from("---EVENT---\n");
-    for (key, value) in event.headers() {
+    for (key, value) in event
+        .headers()
+        .iter()
+    {
         // Writing to a String cannot fail, so there is no error to handle.
         let _ = writeln!(output, "{key}: {value}");
     }
