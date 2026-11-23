@@ -4,9 +4,9 @@ use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
 use crate::commands::{
-    check_transfer_arguments, BlockParse, BridgeDialString, UndeliverableVariable,
+    check_header_value, check_transfer_arguments, BlockParse, BridgeDialString,
+    UndeliverableVariable,
 };
-use freeswitch_types::wire_safety::check_header_value;
 
 pub use freeswitch_types::commands::{TransferArgumentError, TransferField};
 

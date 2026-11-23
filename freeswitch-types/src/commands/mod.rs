@@ -47,8 +47,8 @@ pub use originate::{
 };
 pub use transfer::{check_transfer_arguments, TransferArgumentError, TransferField};
 pub use variables::{
-    BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
-    UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart,
+    check_header_value, BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator,
+    ParseBlockParseError, UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart,
 };
 
 use crate::switch_passes::api_argument::{self, clean_argument, split_line};

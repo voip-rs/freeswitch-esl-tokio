@@ -5,9 +5,9 @@ use std::fmt;
 use crate::channel::HangupCause;
 use crate::commands::originate::DialplanType;
 use crate::commands::transfer::{check_fields, TransferArgumentError, TransferField, TransferLine};
+use crate::commands::variables::check_header_value;
 use crate::commands::variables::UndeliverableVariable;
 use crate::switch_passes::api_argument::quote_for_uuid_setvar;
-use crate::wire_safety::check_header_value;
 
 /// Answer a channel: `uuid_answer <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]

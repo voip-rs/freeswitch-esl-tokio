@@ -9,6 +9,8 @@ use std::fmt;
 
 use crate::commands::originate::OriginateError;
 use crate::switch_passes::originate_legs::ENTERPRISE_DELIM;
+use crate::variables::names_outgoing_header;
+use crate::wire_safety::contains_header_control;
 
 /// Which half of a `name=value` pair a [`VariableFault`] lies in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,6 +127,23 @@ impl UndeliverableVariable {
             index,
             variable: self,
         }
+    }
+}
+
+/// Refuse `value` when `name` opens with a [`SipHeaderPrefix`](crate::SipHeaderPrefix) mod_sofia
+/// copies into an outgoing SIP header, in any case, and `value` carries a control character other
+/// than tab, which no header field value may hold.
+///
+/// Every builder that sets a channel variable runs it, freeswitch-esl-tokio's
+/// `AppCommand::set_var` included. Run it on a `set`, `export` or `uuid_setvar` line built by
+/// hand, on the value the channel should hold rather than its quoted form.
+pub fn check_header_value(name: &str, value: &str) -> Result<(), UndeliverableVariable> {
+    match names_outgoing_header(name) && contains_header_control(value) {
+        true => Err(UndeliverableVariable::in_value(
+            name,
+            VariableFault::HeaderControl,
+        )),
+        false => Ok(()),
     }
 }
 

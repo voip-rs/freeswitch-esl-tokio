@@ -8,14 +8,13 @@ use crate::switch_passes::brackets::{check_separator, same_header, unbalanced, B
 use crate::switch_passes::escape::{escape_text, escape_value, EscapedField};
 use crate::switch_passes::originate_legs::splits_into_threads;
 use crate::switch_passes::{pipeline, PipelineError};
-use crate::wire_safety::check_header_value;
 
 mod fault;
 mod target;
 #[cfg(test)]
 mod tests;
 
-pub use fault::{UndeliverableVariable, VariableFault, VariablePart};
+pub use fault::{check_header_value, UndeliverableVariable, VariableFault, VariablePart};
 pub use target::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
     UnvouchedVersion,
