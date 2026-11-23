@@ -254,6 +254,10 @@ pub fn case_alias_key(key: &str) -> Option<String> {
 /// [`EslHeaders`](crate::EslHeaders) folds its other casings onto the first
 /// one stored.
 pub fn normalize_header_key(raw: &str) -> String {
+    // No EventHeader begins with the prefix; a test over ALL holds that.
+    if raw.starts_with(crate::VARIABLE_PREFIX) {
+        return raw.to_string();
+    }
     match raw.parse::<EventHeader>() {
         Ok(eh) => eh
             .as_str()
@@ -352,6 +356,21 @@ pub(crate) mod tests {
             s.to_ascii_uppercase(),
             alternating,
         ]
+    }
+
+    /// `normalize_header_key` passes a `variable_` key through unlooked-up.
+    #[test]
+    fn no_event_header_begins_with_the_variable_prefix() {
+        let prefix = crate::VARIABLE_PREFIX;
+        for v in EventHeader::ALL {
+            let head = v
+                .as_str()
+                .get(..prefix.len());
+            assert!(
+                !head.is_some_and(|h| h.eq_ignore_ascii_case(prefix)),
+                "{v:?}"
+            );
+        }
     }
 
     #[test]
