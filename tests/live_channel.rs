@@ -9,8 +9,8 @@ mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{
-    DialStringCarrier, ExecuteOn, LoopbackEndpoint, SofiaEndpoint, UserEndpoint, UuidGetVar,
-    UuidKill, UuidSetVar,
+    DestinationEncoding, DialStringCarrier, ExecuteOn, LoopbackEndpoint, SofiaEndpoint,
+    UserEndpoint, UuidGetVar, UuidKill, UuidSetVar,
 };
 use freeswitch_esl_tokio::variables::{SipHangupDisposition, SofiaVariable};
 use freeswitch_esl_tokio::ExecuteOptions;
@@ -887,6 +887,56 @@ async fn live_sofia_destination_encodes_the_user_part_by_tree() {
             created.variable(SofiaVariable::SipDestinationUrl),
             Some(format!("sip:{user}@127.0.0.1:9").as_str()),
             "{carrier:?}: {endpoint:?} on FreeSWITCH {version}"
+        );
+    }
+}
+
+/// The switch names a sofia leg as `SofiaEndpoint::channel_name` does, under either encoding: the
+/// space is encoded or kept, the scheme dropped or kept, and the name cut at the `;`. Read off a
+/// JSON event: upstream's plain serialization leaves the encoded `%20` reading as a space.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_sofia_leg_is_named_as_channel_name_says() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Json, &[EslEventType::ChannelCreate])
+        .await
+        .unwrap();
+
+    for (encoding, extra) in [
+        (DestinationEncoding::Encoded, &[][..]),
+        (
+            DestinationEncoding::Suppressed,
+            &[("sofia_suppress_url_encoding", "true")][..],
+        ),
+    ] {
+        let uuid = create_uuid(&client).await;
+        let sofia = SofiaEndpoint::new("lab-lo", "sip:a b@127.0.0.1:9;transport=udp").unwrap();
+        let expected = sofia
+            .channel_name(encoding)
+            .expect("the destination settles the name");
+        let endpoint = Endpoint::Sofia(sofia.with_variables(uuid_block(&uuid, extra)));
+
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&uuid);
+        if let Some(anchor) =
+            dial_without_waiting(&client, &endpoint, DialStringCarrier::EslApi).await
+        {
+            reaper.track(anchor);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created =
+            wait_for_own_event(&mut events, &uuid, EslEventType::ChannelCreate, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let created =
+            created.unwrap_or_else(|| panic!("{encoding:?}: {endpoint:?} was never created"));
+        assert_eq!(
+            created.channel_name(),
+            Some(expected.as_str()),
+            "{encoding:?}: {endpoint:?}"
         );
     }
 }
