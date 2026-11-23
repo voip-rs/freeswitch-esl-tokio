@@ -41,6 +41,7 @@ macro_rules! parse_error {
 }
 
 /// The test every generated enum carries: serde over each `Variant => "wire"` row.
+#[cfg(test)]
 macro_rules! wire_serde_test {
     ($Enum:ident, [$($Variant:ident => $wire:literal),+ $(,)?]) => {
         #[cfg(feature = "serde")]
@@ -49,6 +50,28 @@ macro_rules! wire_serde_test {
             crate::serde_name::tests::assert_wire_names(&[
                 $( ($Enum::$Variant, $wire, stringify!($Variant)), )+
             ]);
+        }
+    };
+}
+
+/// `Serialize` as the wire name and `Deserialize` through `serde_name`, from a
+/// `Variant => "wire"` list; `$what` names the value in error messages.
+macro_rules! wire_serde {
+    ($Enum:ident, $what:expr, [$($Variant:ident => $wire:literal),+ $(,)?]) => {
+        #[cfg(feature = "serde")]
+        impl serde::Serialize for $Enum {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de> serde::Deserialize<'de> for $Enum {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                const NAMES: &crate::serde_name::Names<$Enum> =
+                    &[$(($Enum::$Variant, $wire, stringify!($Variant)),)+];
+                crate::serde_name::deserialize(deserializer, $what, NAMES)
+            }
         }
     };
 }
@@ -62,7 +85,6 @@ macro_rules! header_enum {
     (
         tests_mod: $tests_mod:ident,
         serde_tests: $serde_tests:ident,
-        serde(cfg(feature = "serde")),
         error_type: $Err:ident => $err_msg:literal,
         $(#[$enum_meta:meta])*
         $vis:vis enum $Name:ident {
@@ -74,7 +96,6 @@ macro_rules! header_enum {
     ) => {
         sip_header_catalog::define_header_enum! {
             tests_mod: $tests_mod,
-            serde(cfg(feature = "serde")),
             error_type: $Err => $err_msg,
             $(#[$enum_meta])*
             $vis enum $Name {
@@ -84,6 +105,8 @@ macro_rules! header_enum {
                 ),+
             }
         }
+
+        wire_serde! { $Name, concat!(stringify!($Name), " name"), [$($variant => $wire),+] }
 
         #[cfg(test)]
         mod $serde_tests {
@@ -96,7 +119,7 @@ macro_rules! header_enum {
 
 /// Generate a wire-string enum with `ALL`, `as_str`, `Display`, `FromStr` and a
 /// `Parse<Name>Error`. The macro adds `#[non_exhaustive]`, `#[allow(missing_docs)]`
-/// and the serde derives; the caller supplies the rest.
+/// and serde; the caller supplies the rest, `Copy` among it.
 ///
 /// ```ignore
 /// wire_enum! {
@@ -260,7 +283,6 @@ macro_rules! wire_enum {
         }
         error $Error:ident($label:literal);
     ) => {
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         $(#[$enum_meta])*
         #[non_exhaustive]
         #[allow(missing_docs)]
@@ -304,6 +326,8 @@ macro_rules! wire_enum {
                 }
             }
         }
+
+        wire_serde! { $Enum, $label, [$($Variant => $wire),+] }
 
         parse_error! { $Error($label); }
     };

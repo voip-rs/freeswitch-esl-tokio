@@ -109,7 +109,6 @@ macro_rules! esl_event_types {
         ///
         /// Variant names are the canonical wire names (e.g. `ChannelCreate` = `CHANNEL_CREATE`).
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[non_exhaustive]
         #[allow(missing_docs)]
         pub enum EslEventType {
@@ -248,6 +247,12 @@ macro_rules! esl_event_types {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Self::parse_event_type(s).ok_or_else(|| ParseEventTypeError(s.to_string()))
             }
+        }
+
+        wire_serde! {
+            EslEventType,
+            "event type",
+            [$($variant => $wire,)+ $($extra_variant => $extra_wire),*]
         }
 
         #[cfg(test)]

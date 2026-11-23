@@ -741,9 +741,10 @@ fn serde_config_corpus(records: &mut Vec<String>) {
             r#"{"loopback":{"extension":"app=lua:script.lua"}}"#,
         ),
         ("error", r#"{"error":{"cause":"UserBusy"}}"#),
+        ("error-wire-name", r#"{"error":{"cause":"USER_BUSY"}}"#),
         (
-            "error-wire-name-refused",
-            r#"{"error":{"cause":"USER_BUSY"}}"#,
+            "error-wire-name-odd-case",
+            r#"{"error":{"cause":"user_Busy"}}"#,
         ),
         ("error-bad-cause", r#"{"error":{"cause":"not_a_cause"}}"#),
         ("unknown-tag", r#"{"bogus_type":{}}"#),

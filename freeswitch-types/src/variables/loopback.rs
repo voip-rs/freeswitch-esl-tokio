@@ -4,7 +4,6 @@
 header_enum! {
     tests_mod: loopback_variable_generated_tests,
     serde_tests: loopback_variable_serde_tests,
-    serde(cfg(feature = "serde")),
     error_type: ParseLoopbackVariableError => "unknown loopback variable",
     /// mod_loopback channel variable names (the part after the `variable_` prefix).
     ///

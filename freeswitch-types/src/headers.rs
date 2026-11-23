@@ -5,7 +5,6 @@ use std::sync::OnceLock;
 header_enum! {
     tests_mod: event_header_generated_tests,
     serde_tests: event_header_serde_tests,
-    serde(cfg(feature = "serde")),
     error_type: ParseEventHeaderError => "unknown event header",
     /// Top-level header names that appear in FreeSWITCH ESL events.
     ///

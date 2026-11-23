@@ -44,8 +44,9 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `SipPassthroughHeader::extract_from(&str) -> Vec<String>` | `extract_from(&store) -> Result<SipHeaderField, RowError>` over any row store, `sip_header::SipMessageHeaders::new(raw)` for a raw message |
 | `SipHeader::is_multi_valued()` | `is_list()` (a comma list) or `may_repeat()` (may occur more than once) |
 | `conference-info` feature | sip-header's own `conference-info` feature |
-| `SipHeader` serialized as its variant name (`"CallId"`) | its wire name (`"Call-ID"`); deserialize accepts any spelling |
-| `EventHeader` and the `*Variable` enums serialized as variant names (`"UniqueId"`) | their wire names (`"Unique-ID"`, `"sip_from_user"`); deserialize accepts any case |
+| `SipHeader` serialized as its variant name (`"CallId"`) | its wire name (`"Call-ID"`); deserialize accepts the wire name in any ASCII case and refuses the 2.x variant name unless it equals the wire name in some casing (`"Accept"` loads, `"CallId"` does not): rewrite stored `SipHeader` values to wire names before upgrading. Its serde is sip-header-catalog's |
+| `EventHeader` and the `*Variable` enums serialized as variant names (`"UniqueId"`) | their wire names (`"Unique-ID"`, `"sip_from_user"`); deserialize accepts the wire name in any ASCII case and the 2.x variant name, so stored 2.x data still loads. A reader of the serialized form that is not this crate, and a 2.x binary reading 3.0 output, see the wire name |
+| `EslEventType`, `HangupCause`, `ChannelState`, `CallState`, `AnswerState`, `CallDirection`, `LogLevel`, `EventFormat`, `GroupCallOrder`, `EslEventPriority` and the other wire enums serialized as variant names (`"ChannelCreate"`, `"UserBusy"`, `"Json"`) | their wire names (`"CHANNEL_CREATE"`, `"USER_BUSY"`, `"json"`), as a config author writes them; deserialize accepts those in any ASCII case and the 2.x variant name. A non-self-describing format (bincode, postcard) that stored a variant index does not read back |
 
 - sip-header 1.0 parses through traits: `SipHeaderAddr::parse(s)` with `HeaderParse` in scope, never `s.parse::<SipHeaderAddr>()`.
 - Every sip-header accessor returns `Result<Option<T>, ParseError>`; list and auth accessors that returned a bare `Vec` are wrapped too.
@@ -127,7 +128,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | 2.x | 3.0 |
 |---|---|
 | `SipPassthroughHeader::is_array_header()` returns `bool`, `false` for a header the catalog does not register | returns `Option<bool>`: `None` for an unregistered `sip_i_` header, which arrives as an `ARRAY::` value whenever the message repeats it; `Some(false)` for every other prefix |
-| `"JSON".parse::<EventFormat>()` and any other casing of `plain`, `json`, `xml` | refused; the token is parsed in its wire case only. Serde is unchanged: it reads the variant name (`"Json"`), as in 2.x |
+| `"JSON".parse::<EventFormat>()` and any other casing of `plain`, `json`, `xml` | refused; the token is parsed in its wire case only. Serde reads any casing and the variant name (`"Json"`), and writes `"json"` |
 | `EventSubscription::event_types_raw_mut()`, `custom_subclasses_mut()`, `filters_mut()` | removed, since a push through them skipped the wire checks; add through `with_event_raw`, `with_events_raw`, `with_custom_subclass`, `with_custom_subclasses`, `with_filter` or `with_filter_raw`, which refuse what would break the `event` or `filter` line |
 | `EventSubscription` builders `event`, `events`, `event_raw`, `events_raw`, `custom_subclass`, `custom_subclasses`, `sofia_event`, `sofia_events`, `filter`, `filter_raw` | `with_event`, `with_events`, `with_event_raw`, `with_events_raw`, `with_custom_subclass`, `with_custom_subclasses`, `with_sofia_event`, `with_sofia_events`, `with_filter`, `with_filter_raw`; the config field names are unchanged |
 | `EventSubscription` readers `event_types()`, `event_types_raw()`, `custom_subclass_list()` | `events()`, `events_raw()`, `custom_subclasses()`, now readers where `events` and `custom_subclasses` were builders |
