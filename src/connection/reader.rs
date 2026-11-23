@@ -9,6 +9,7 @@ use tokio::time::Instant;
 use tracing::{debug, info, warn};
 
 use crate::{
+    command::EslResponse,
     constants::{CONTENT_TYPE_LOG_DATA, HEADER_CONTENT_TYPE, READER_TICK_MS, SOCKET_BUF_SIZE},
     error::EslError,
     event::{EslEvent, EventFormat},
@@ -342,6 +343,26 @@ async fn dispatch_parsed_event(
     ControlFlow::Continue(())
 }
 
+/// Hands a reply no command was waiting for to the caller, who alone can tell
+/// what the switch answered. Called with the pending-reply lock released, since
+/// the dispatch may wait for queue capacity.
+async fn dispatch_unsolicited_reply(
+    message: EslMessage,
+    shared: &SharedState,
+    sink: &mut EventSink<'_>,
+) -> ControlFlow<Option<DisconnectReason>> {
+    let error = EslError::UnsolicitedReply {
+        response: Box::new(EslResponse::from_message(message)),
+    };
+    // Display names the content type and lengths, never the text.
+    warn!("{error}; delivered on the event stream");
+    if !dispatch_event(sink, shared, Err(error)).await {
+        debug!("Event channel closed, reader exiting");
+        return ControlFlow::Break(None);
+    }
+    ControlFlow::Continue(())
+}
+
 /// Routes one parsed message to the event channel or to the waiting command.
 ///
 /// `Break` ends the reader loop, carrying the same reason its exits return.
@@ -382,10 +403,8 @@ async fn dispatch_message(
                     debug!("Reply channel closed before delivery (timeout race); reply discarded");
                 }
             } else {
-                warn!(
-                    "Received unsolicited {:?} with no pending command",
-                    message.message_type,
-                );
+                drop(pending);
+                return dispatch_unsolicited_reply(message, shared, sink).await;
             }
         }
         MessageType::Disconnect => {

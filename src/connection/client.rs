@@ -912,7 +912,9 @@ impl EslEventStream {
     /// Returns `Err(EslError::QueueFull)` if events were dropped because the
     /// application was not draining events fast enough. This is a one-time
     /// notification per overflow episode -- subsequent calls return real events.
-    /// Parse errors from the reader task are also surfaced here.
+    /// Parse errors from the reader task are also surfaced here, and so is a
+    /// command reply no command was waiting for, as
+    /// [`EslError::UnsolicitedReply`]; the session stays up after either.
     ///
     /// Matching `Some(Ok(event))` in a `while let` ends the loop on a parse
     /// error as well as on disconnect, with nothing to tell the two apart; use

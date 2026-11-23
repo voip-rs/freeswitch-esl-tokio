@@ -14,11 +14,15 @@
 //!   `TransferArgument`, `Originate`, …), a credential the switch refused at
 //!   connect (`AuthenticationFailed`), or a value the switch sent that did not
 //!   parse (`HeaderParse`, an event or response body). Fix the input or the
-//!   configuration; a reconnect loop on these only spins.
+//!   configuration; a reconnect loop on these only spins. `UnsolicitedReply`
+//!   sits here too: a reply nothing waited for, reported while the session
+//!   carries on.
 
 use crate::app::dptools::TransferArgumentError;
+use crate::command::EslResponse;
 use crate::commands::OriginateError;
-use crate::constants::{REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
+use crate::constants::{HEADER_CONTENT_TYPE, REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
+use crate::HeaderLookup;
 use freeswitch_types::event::FilterHeaderFault;
 use freeswitch_types::variables::ParseLoopbackLegError;
 use freeswitch_types::UndeliverableVariable;
@@ -269,6 +273,27 @@ pub enum EslError {
         /// The line as received.
         line: String,
     },
+
+    /// A `command/reply` or `api/response` that arrived with no command
+    /// waiting for it. The session stays up and later replies still correlate,
+    /// but the switch answered something this client did not send.
+    #[error(
+        "unsolicited {} with no command pending (reply text {} bytes, body {} bytes)",
+        unsolicited_content_type(response),
+        response.reply_text().map_or(0, str::len),
+        response.body().map_or(0, str::len)
+    )]
+    UnsolicitedReply {
+        /// The reply as received.
+        response: Box<EslResponse>,
+    },
+}
+
+fn unsolicited_content_type(response: &EslResponse) -> &str {
+    response
+        .headers()
+        .header_str(HEADER_CONTENT_TYPE)
+        .unwrap_or("reply")
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -440,6 +465,7 @@ impl EslError {
             EslError::ColonInAuthUser { .. } => false,
             EslError::UndeliverableVariable(_) => false,
             EslError::InvalidBodyLine { .. } => false,
+            EslError::UnsolicitedReply { .. } => false,
         }
     }
 
@@ -497,6 +523,7 @@ impl EslError {
             EslError::ColonInAuthUser { .. } => false,
             EslError::UndeliverableVariable(_) => false,
             EslError::InvalidBodyLine { .. } => false,
+            EslError::UnsolicitedReply { .. } => false,
         }
     }
 
