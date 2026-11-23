@@ -163,9 +163,9 @@ pub trait HeaderLookup: SipHeaderRows {
     /// First of `names` the store carries, probed in order.
     ///
     /// For a field the switch spells more than one way: each spelling is its
-    /// own [`EventHeader`] variant, and this unions them without deciding
-    /// which event carries which.
-    fn first_header<const N: usize>(&self, names: [EventHeader; N]) -> Option<&str> {
+    /// own [`EventHeader`] variant (or a consumer enum's), and this unions them
+    /// without deciding which event carries which.
+    fn first_header<H: EventHeaderName, const N: usize>(&self, names: [H; N]) -> Option<&str> {
         names
             .into_iter()
             .find_map(|name| self.header(name))

@@ -377,6 +377,7 @@ mod tests {
         /// A deployment's own CUSTOM-event headers.
         enum SiteHeader {
             Action => "C911P-Action",
+            LegacyAction => "X-Action",
         }
     }
 
@@ -384,6 +385,16 @@ mod tests {
         fn as_str(&self) -> &str {
             SiteHeader::as_str(self)
         }
+    }
+
+    #[test]
+    fn first_header_probes_a_consumer_enum_in_order() {
+        let mut event = EslEvent::new();
+        event.set_header("X-Action", "legacy");
+        let names = [SiteHeader::Action, SiteHeader::LegacyAction];
+        assert_eq!(HeaderLookup::first_header(&event, names), Some("legacy"));
+        event.set_header("C911P-Action", "dispatch");
+        assert_eq!(HeaderLookup::first_header(&event, names), Some("dispatch"));
     }
 
     #[test]
