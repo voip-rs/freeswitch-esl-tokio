@@ -1,6 +1,6 @@
 use super::*;
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
-use crate::commands::{originate_quote, originate_split, originate_unquote, quote_for_uuid_setvar};
+use crate::commands::{originate_quote, originate_split, originate_unquote};
 use crate::switch_passes::{trace, untrace};
 
 fn tilde() -> DialStringTarget {

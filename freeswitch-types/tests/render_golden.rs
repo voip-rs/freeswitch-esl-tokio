@@ -9,13 +9,13 @@ use freeswitch_types::commands::endpoint::{
     SofiaGateway, UserEndpoint,
 };
 use freeswitch_types::commands::{
-    originate_quote, originate_split, originate_unquote, quote_for_uuid_setvar, CauseReading,
-    FlattenedDialString, FlattenedLeg, LegTarget,
+    originate_quote, originate_split, originate_unquote, CauseReading, FlattenedDialString,
+    FlattenedLeg, LegTarget,
 };
 use freeswitch_types::{
     Application, BlockParse, BridgeDialString, ChannelVariable, DialStringCarrier,
     DialStringTarget, DialplanType, Endpoint, GroupCallOrder, HangupCause, Originate,
-    OriginateError, Variables, VariablesType,
+    OriginateError, UuidSetVar, Variables, VariablesType,
 };
 
 /// One line per record: `id<TAB>debug-escaped value`, so any character in a rendered
@@ -567,11 +567,14 @@ fn quoting_corpus(records: &mut Vec<String>) {
         if unquoted != v {
             rec(records, format!("quote/originate_unquote/{name}"), unquoted);
         }
-        rec(
-            records,
-            format!("quote/uuid_setvar/{name}"),
-            quote_for_uuid_setvar(v),
-        );
+        let line = UuidSetVar::new("u", "k", v).map(|cmd| cmd.to_string());
+        let quoted = match &line {
+            Ok(line) => line
+                .strip_prefix("uuid_setvar u k ")
+                .unwrap_or(line),
+            Err(_) => "Err",
+        };
+        rec(records, format!("quote/uuid_setvar/{name}"), quoted);
     }
     let lines: &[(&str, &str)] = &[
         (

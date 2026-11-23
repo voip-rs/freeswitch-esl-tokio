@@ -184,7 +184,7 @@ back to `XML`/`default`. A line opening `^^ ` parses as the blank split.
 On the blank split every argument goes through `originate_quote()`: a token that
 is empty or carries a space, `'`, `\`, or whitespace the API strips from its
 line's edges is wrapped and escaped as
-`quote_for_uuid_setvar()` does, since `uuid_setvar` splits on the same blank
+`UuidSetVar` quotes its value, since `uuid_setvar` splits on the same blank
 tokenizer, so `\n`, `\\`, `\s` and `\t` arrive as written rather than read as
 escapes. `originate_unquote()` runs that split's cleanup and inverts it.
 
@@ -237,7 +237,7 @@ write-only commands.
 | `UuidHold` | `uuid_hold [off\|toggle] {uuid}` |
 | `UuidKill` | `uuid_kill {uuid} [cause]` |
 | `UuidGetVar` | `uuid_getvar {uuid} {key}` |
-| `UuidSetVar` | `uuid_setvar {uuid} {key} '{value}'`, the value escaped as `quote_for_uuid_setvar()` does |
+| `UuidSetVar` | `uuid_setvar {uuid} {key} '{value}'`, the value escaped for the blank split's cleanup: `\` and `'` take a backslash |
 | `UuidTransfer` | `uuid_transfer {uuid} {dest} [dialplan]` |
 | `UuidSendDtmf` | `uuid_send_dtmf {uuid} {dtmf}` |
 

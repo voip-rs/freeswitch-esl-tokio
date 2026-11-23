@@ -57,21 +57,10 @@ use crate::switch_passes::api_argument::{self, clean_argument, split_line};
 ///
 /// A token that is empty or carries a space, single quote, backslash, or a tab, vertical tab, CR
 /// or newline, which the API strips from the edges of its argument line, is escaped and wrapped
-/// as [`quote_for_uuid_setvar`] does, since that command splits on the same blank tokenizer;
+/// as [`UuidSetVar`] quotes its value, since that command splits on the same blank tokenizer;
 /// any other token is returned as-is.
 pub fn originate_quote(token: &str) -> String {
     api_argument::originate_quote(token)
-}
-
-/// Escape and single-quote a value for the argument string of `uuid_setvar`.
-///
-/// That command splits its arguments on spaces through `cleanup_separated_string`,
-/// which strips `'` grouping and processes `\` escapes, so an unquoted value loses its
-/// quotes and backslashes. [`UuidSetVar`]'s `Display` applies this already; call it only
-/// for a line built by hand. The inline originate `{var=…}` block is a different carrier
-/// with different escaping.
-pub fn quote_for_uuid_setvar(value: &str) -> String {
-    api_argument::quote_for_uuid_setvar(value)
 }
 
 /// What the switch delivers of one token of the blank split: its quotes stripped and its
