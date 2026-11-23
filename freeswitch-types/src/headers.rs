@@ -1,6 +1,6 @@
 //! Typed event header names for FreeSWITCH ESL events.
 
-use std::sync::OnceLock;
+use sip_header_catalog::HeaderName;
 
 header_enum! {
     tests_mod: event_header_generated_tests,
@@ -260,37 +260,12 @@ pub fn normalize_header_key(raw: &str) -> String {
     if raw.starts_with(crate::VARIABLE_PREFIX) {
         return raw.to_string();
     }
-    match lookup_event_header(raw) {
+    match <EventHeader as HeaderName>::lookup(raw) {
         Some(eh) => eh
             .as_str()
             .to_string(),
         None => raw.to_string(),
     }
-}
-
-/// `EventHeader::from_str` without the error allocation, comparing only
-/// wire names of `s`'s length; each bucket keeps `ALL` order, so the first
-/// match is the one `from_str` returns.
-pub(crate) fn lookup_event_header(s: &str) -> Option<EventHeader> {
-    static BY_LEN: OnceLock<Vec<Vec<EventHeader>>> = OnceLock::new();
-    BY_LEN
-        .get_or_init(|| {
-            let mut by_len: Vec<Vec<EventHeader>> = Vec::new();
-            for v in EventHeader::ALL {
-                let len = v
-                    .as_str()
-                    .len();
-                if by_len.len() <= len {
-                    by_len.resize_with(len + 1, Vec::new);
-                }
-                by_len[len].push(*v);
-            }
-            by_len
-        })
-        .get(s.len())?
-        .iter()
-        .copied()
-        .find(|v| s.eq_ignore_ascii_case(v.as_str()))
 }
 
 #[cfg(test)]
@@ -401,7 +376,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn lookup_event_header_agrees_with_from_str() {
+    fn header_name_lookup_agrees_with_from_str() {
         let hits = EventHeader::ALL
             .iter()
             .flat_map(|v| casings(v.as_str()));
@@ -419,7 +394,7 @@ pub(crate) mod tests {
             .chain(near)
         {
             assert_eq!(
-                lookup_event_header(&input),
+                <EventHeader as HeaderName>::lookup(&input),
                 input
                     .parse::<EventHeader>()
                     .ok(),
