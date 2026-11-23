@@ -51,7 +51,7 @@ impl LoopbackEndpoint {
     }
 
     /// Set the dialplan, refusing what parse refuses. It is the third positional segment, so
-    /// rendering one without a context emits [`DEFAULT_CONTEXT`] in the gap.
+    /// rendering one without a context emits the `default` context in the gap.
     pub fn with_dialplan(mut self, dialplan: impl Into<String>) -> Result<Self, OriginateError> {
         self.dialplan = Some(dialplan.into());
         self.checked()

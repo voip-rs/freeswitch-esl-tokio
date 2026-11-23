@@ -40,9 +40,9 @@ if ! cargo clippy --quiet --workspace --all-features --all-targets --message-for
     exit 1
 fi
 
-if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --workspace --all-features --no-deps 2>&1); then
+if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links" cargo doc --workspace --all-features --no-deps 2>&1); then
     echo "$doc_output" | grep -E '^error|^\s*= (note|help):' | head -20
-    echo "❌ Documentation errors. Run: RUSTDOCFLAGS='-D missing_docs -D rustdoc::broken_intra_doc_links' cargo doc --workspace --all-features --no-deps"
+    echo "❌ Documentation errors. Run: RUSTDOCFLAGS='-D missing_docs -D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links' cargo doc --workspace --all-features --no-deps"
     exit 1
 fi
 
