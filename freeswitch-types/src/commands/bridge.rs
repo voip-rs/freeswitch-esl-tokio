@@ -242,13 +242,26 @@ impl BridgeDialString {
         Ok(bridge)
     }
 
-    /// Refuse more legs or groups than the switch splits off, then a group whose legs the
-    /// switch's comma scan reads across.
+    /// Refuse no legs, an empty group, more legs or groups than the switch splits off, then a
+    /// group whose legs the switch's comma scan reads across.
     fn check_legs(&self, block_parse: BlockParse) -> Result<(), OriginateError> {
         let too_many = |group| OriginateError::TooManyLegs {
             group,
             max: MAX_PEERS,
         };
+        if self
+            .groups
+            .is_empty()
+        {
+            return Err(OriginateError::NoBridgeLegs);
+        }
+        if let Some(group) = self
+            .groups
+            .iter()
+            .position(Vec::is_empty)
+        {
+            return Err(OriginateError::EmptyBridgeGroup { group });
+        }
         if self
             .groups
             .len()

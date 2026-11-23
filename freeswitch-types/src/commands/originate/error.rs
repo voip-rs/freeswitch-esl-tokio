@@ -110,6 +110,13 @@ pub enum OriginateError {
     },
     /// A `[]` block heading a bridge dial string, which the switch reads as the first leg's.
     ChannelScopeGlobalVariables,
+    /// A bridge group with no legs, which renders as an empty field between `|`.
+    EmptyBridgeGroup {
+        /// Index of the group.
+        group: usize,
+    },
+    /// A bridge dial string with no groups, which renders as an empty argument.
+    NoBridgeLegs,
 }
 
 impl std::fmt::Display for OriginateError {
@@ -200,6 +207,8 @@ impl std::fmt::Display for OriginateError {
             Self::ChannelScopeGlobalVariables => f.write_str(
                 "a [] block heads the dial string, where the switch reads it as the first leg's",
             ),
+            Self::EmptyBridgeGroup { group } => write!(f, "bridge group {group} has no legs"),
+            Self::NoBridgeLegs => f.write_str("the bridge dial string has no legs"),
         }
     }
 }
@@ -228,7 +237,9 @@ impl std::error::Error for OriginateError {
             | Self::UndeliverableExecuteOn { .. }
             | Self::TooManyLegs { .. }
             | Self::UndeliverableVariable { .. }
-            | Self::ChannelScopeGlobalVariables => None,
+            | Self::ChannelScopeGlobalVariables
+            | Self::EmptyBridgeGroup { .. }
+            | Self::NoBridgeLegs => None,
         }
     }
 }
