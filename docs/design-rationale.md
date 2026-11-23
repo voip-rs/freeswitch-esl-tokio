@@ -227,11 +227,9 @@ command construction**. A deployment's originate command — which gateway,
 which SIP headers, which timeout — varies between environments and should
 live in a YAML config file, not hardcoded in Rust.
 
-The concrete driver was an NG911 abandoned-call callback daemon which
-previously hardcoded deployment-specific SIP headers in a
-`build_originate_command()` function. After adding serde to the command
-builders, the entire originate command became a YAML block with `${placeholder}`
-template substitution:
+With serde on the command builders, a callback service's whole originate
+command, deployment-specific SIP headers included, is a YAML block with
+`${placeholder}` template substitution:
 
 ```yaml
 originate:
@@ -247,7 +245,8 @@ originate:
 ```
 
 This is the pattern: **the library provides typed builders with serde, the
-caller deserializes from config and calls `.to_string()` at originate time**.
+caller deserializes from config and renders with `cmd.render(block_parse)` at
+originate time, naming the switch's parser revision**.
 No FreeSWITCH-specific knowledge is needed in the config layer.
 
 ## freeswitch-types as a separate, async-free crate
@@ -340,17 +339,25 @@ The simpler approach (hold the lock longer) was chosen over a queue-based
 design because ESL doesn't support pipelining anyway — a command queue would
 add complexity with no throughput benefit.
 
-## Error classification: auth vs transient
+## Every error is a reconnect, a retry, or a refusal
 
-`EslError` carries two classification helpers:
+`EslError`'s two predicates sort every error into exactly one of three classes:
 
-- `is_connection_error()` — TCP session is dead, must reconnect
-- `is_recoverable()` — connection is still usable, retry the command
+- `is_connection_error()`: there is no usable session, whether the socket or the
+  framing broke or the way to a session timed out. Reconnect.
+- `is_recoverable()`: the session is up and only this command failed. Retry it.
+- Neither: a retry and a reconnect meet the same refusal, whether caller input
+  refused before anything was sent, a credential refused at connect, or a value
+  the switch sent that does not parse while the framing held. Fix the input or the
+  configuration.
 
-`is_recoverable()` returns `false` for `AuthenticationFailed` and
-`AccessDenied`, which prevents reconnect loops on permanent configuration
-errors. The motivation: production ESL daemons (fs-eventd, noans-worker)
-were observed spinning in infinite reconnect loops on auth failure — retrying
+A timeout on the way to a session is never the command timeout: that one is
+recoverable, and it would tell a caller to retry on a session that never existed.
+Likewise a malformed line is a framing fault only in the envelope; inside a
+serialized body the message's own framing held, so the reader keeps going.
+
+Credentials sit in the third class to prevent reconnect loops on permanent
+configuration errors. The motivation: production ESL daemons were observed spinning in infinite reconnect loops on auth failure — retrying
 every 500ms with exponential backoff to 30s, forever. The fix was a pattern:
 auth failure exits with code 78 (`EX_CONFIG`), and systemd's
 `RestartPreventExitStatus=78` keeps it down. Transient failures (connection
@@ -388,7 +395,7 @@ returns.
 
 ## Re-exec preserves the authenticated socket across binary upgrades
 
-Production ESL daemons like fs-eventd maintain a persistent TCP connection to
+A production ESL daemon may keep a persistent TCP connection to
 FreeSWITCH and track live channel state (active calls, channel variables,
 timetables). A normal service restart loses the connection and all tracked
 state. The state can be rebuilt from `show channels as json`, but events
@@ -486,9 +493,8 @@ which is valid RFC 4575 (using the default namespace).
 
 ## BgJobTracker: bgapi correlation as a data structure
 
-Every production ESL daemon we've built — fs-eventd's channel tracker,
-noans-worker's originate monitor, the bgapi benchmark — contained the same
-boilerplate: a `HashMap<String, Context>` mapping Job-UUID to application
+Every production ESL daemon we've built, and the bgapi benchmark, contained
+the same boilerplate: a `HashMap<String, Context>` mapping Job-UUID to application
 state, a check for `BackgroundJob` type + Job-UUID match on every event,
 removal from the map, and `parse_api_body()` on the body. The pattern was
 identical each time, differing only in what context was attached (channel
@@ -649,17 +655,15 @@ engineered ceiling in FreeSWITCH itself (`switch_event_base_add_header()`
 silently drops index-addressed writes above 4000) and to prevent
 heap-amplification OOM from a crafted wire value — each `|:` separator
 is two bytes on the wire but ~56 bytes of heap per resulting `String`.
-The cap is a wire-parsing defense only; programmatic constructors
-(`new()`, `push()`, `unshift()`) build arrays in trusted code and do not
-enforce it.
+The cap holds on every path that builds an array, deserialization and the
+programmatic constructors included, so no array this crate holds renders a
+value its own parser would refuse.
 
 ## EventSubscription as a reusable, serializable builder
 
 Production ESL daemons don't subscribe to events once at startup and
 forget — they re-subscribe after every reconnect, and deployments vary
-which events matter. fs-eventd's channel tracker, noans-worker, and the
-NG9-1-1 abandoned-call monitor all load their subscription from a
-config file: which event types, which CUSTOM subclasses, which header
+which events matter, so they load their subscription from a config file: which event types, which CUSTOM subclasses, which header
 filters, what wire format. An earlier design bolted each piece onto the
 client separately (`client.subscribe_events(...)`, `client.filter(...)`,
 `client.filter(...)` again, etc.); on reconnect, the caller had to
@@ -673,15 +677,15 @@ and sends additive subscribes before removing the gone entries, so no
 desired event type is ever briefly unsubscribed during the transition.
 
 The serde impl exists for the same reason as on the command builders:
-YAML config is the source of truth for deployments. The NG9-1-1
-abandoned-call daemon's `subscription:` block deserializes directly
-into `EventSubscription`, the same value is passed to
+YAML config is the source of truth for deployments. A `subscription:`
+block deserializes directly into `EventSubscription`, and the same value
+is passed to
 `apply_subscription` on the initial connect and on every reconnect.
 Deserialization validates newline injection, space injection, and
 empty strings at the boundary — an invalid config fails at load time
 rather than on the wire.
 
-The `event_raw()` / `events_raw()` pair is the escape hatch for events
+The `with_event_raw()` / `with_events_raw()` pair is the escape hatch for events
 FreeSWITCH adds before we update [`EslEventType`](../freeswitch-types/src/event/event_type.rs).
 Without it, a freshly-added upstream event would force callers to bypass
 `EventSubscription` entirely and drop down to raw `subscribe_events_raw`,

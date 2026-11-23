@@ -188,7 +188,7 @@ stage and breaks only for a consumer on the default feature set.
 **When adding new `EslEventType` variants**, check whether they belong in any
 of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
 `PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in
-`freeswitch-types/src/event.rs` and update them accordingly.
+`freeswitch-types/src/event/event_type.rs` and update them accordingly.
 
 When a live test switch is available, also run live tests:
 `ESL_PORT=<port> cargo test --release --test 'live_*' -- --ignored`
