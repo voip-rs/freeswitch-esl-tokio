@@ -15,7 +15,15 @@ keywords = ["freeswitch", "esl", "voip", "tokio", "telephony"]
 categories = ["network-programming", "api-bindings"]
 readme = "README.md"
 rust-version = "1.86"
-exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
+# src/lib.rs's doctests read README.md and docs/guide; tests/ reads examples/.
+include = [
+    "src/**",
+    "examples/**",
+    "tests/**",
+    "/README.md",
+    "/LICENSE-*",
+    "docs/guide/**",
+]
 
 [features]
 sdp = ["freeswitch-types/sdp"]
@@ -53,3 +61,34 @@ sip-header = "1"
 name = "sdp_codec_string"
 path = "examples/sdp_codec_string.rs"
 required-features = ["sdp"]
+
+# The scripted peer these drive is behind test-util. In the workspace the self
+# dev-dependency enables it; the published crate drops that, so a plain
+# `cargo test` of the .crate skips them rather than failing to compile.
+[[test]]
+name = "command_wire_tests"
+required-features = ["test-util"]
+
+[[test]]
+name = "connection_failure_tests"
+required-features = ["test-util"]
+
+[[test]]
+name = "connection_tests"
+required-features = ["test-util"]
+
+[[test]]
+name = "mock_server"
+required-features = ["test-util"]
+
+[[test]]
+name = "mock_tests"
+required-features = ["test-util"]
+
+[[test]]
+name = "reexec_tests"
+required-features = ["test-util"]
+
+[[test]]
+name = "stale_reply_log"
+required-features = ["test-util"]
