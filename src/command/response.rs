@@ -156,6 +156,7 @@ pub fn parse_channel_dump_with_options(
     decode_serialized_event(
         payload,
         DecodeOptions {
+            body: "response body",
             strict_utf8: options.strict_header_utf8(),
             skip_undef: true,
         },

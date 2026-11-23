@@ -10,8 +10,11 @@ use crate::{
 };
 
 /// How [`decode_serialized_event`] reads a payload.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct DecodeOptions {
+    /// Which body the payload is (`"event body"`, `"response body"`), named by
+    /// [`EslError::InvalidBodyLine`].
+    pub(crate) body: &'static str,
     /// Hard-fail on a value that is not UTF-8 once percent-decoded, instead of
     /// substituting U+FFFD and recording the key.
     pub(crate) strict_utf8: bool,
@@ -49,7 +52,15 @@ pub(crate) fn decode_serialized_event(
         options.skip_undef,
         EslParser::lossy_sink(options.strict_utf8, &mut lossy),
         |key, value| event.set_header(key, value),
-    )?;
+    )
+    .map_err(|e| match e {
+        // The message framing held, so a colonless line is this body's fault.
+        EslError::InvalidHeader { header } => EslError::InvalidBodyLine {
+            context: options.body,
+            line: header,
+        },
+        other => other,
+    })?;
 
     event.set_lossy_values(lossy);
 
@@ -106,6 +117,7 @@ impl EslParser {
         let mut event = decode_serialized_event(
             body,
             DecodeOptions {
+                body: "event body",
                 strict_utf8: self.strict_header_utf8,
                 skip_undef: false,
             },

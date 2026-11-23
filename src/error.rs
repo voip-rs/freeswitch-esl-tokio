@@ -13,7 +13,7 @@
 //!   value the library refused before sending (`WireTerminatorInField`,
 //!   `TransferArgument`, `Originate`, …), a credential the switch refused at
 //!   connect (`AuthenticationFailed`), or a value the switch sent that did not
-//!   parse (`HeaderParse`, a JSON or XML event body). Fix the input or the
+//!   parse (`HeaderParse`, an event or response body). Fix the input or the
 //!   configuration; a reconnect loop on these only spins.
 
 use crate::app::dptools::TransferArgumentError;
@@ -144,7 +144,8 @@ pub enum EslError {
         limit: usize,
     },
 
-    /// Invalid header format
+    /// A message envelope line without a `:`, or a `Content-Length` that is not
+    /// a number. A body line is [`InvalidBodyLine`](Self::InvalidBodyLine).
     #[error("malformed header line ({} bytes)", header.len())]
     InvalidHeader {
         /// The malformed header line.
@@ -258,6 +259,16 @@ pub enum EslError {
     /// [`UuidSetVar::new`](crate::UuidSetVar::new). Nothing was sent.
     #[error("channel variable refused")]
     UndeliverableVariable(#[from] UndeliverableVariable),
+
+    /// A line without a `:` inside a serialized event or response body. The
+    /// message's own framing held, so the connection stays usable.
+    #[error("a line of {} bytes in the {context} has no colon", line.len())]
+    InvalidBodyLine {
+        /// Which body: `"event body"` or `"response body"`.
+        context: &'static str,
+        /// The line as received.
+        line: String,
+    },
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -428,6 +439,7 @@ impl EslError {
             EslError::HandshakeTimeout { .. } => false,
             EslError::ColonInAuthUser { .. } => false,
             EslError::UndeliverableVariable(_) => false,
+            EslError::InvalidBodyLine { .. } => false,
         }
     }
 
@@ -466,8 +478,8 @@ impl EslError {
             // Only built from bytes the framing reads as text.
             EslError::Utf8Error { .. } => true,
             EslError::InvalidUtf8InHeader { .. } => false,
-            // A colonless line or a non-numeric Content-Length in text the switch
-            // serialized, a body included: its framing is suspect.
+            // A colonless envelope line or a non-numeric Content-Length: the
+            // framing is lost, as with a missing Content-Type.
             EslError::InvalidHeader { .. } => true,
             EslError::HeaderParse(_) => false,
             EslError::Originate(_) => false,
@@ -484,6 +496,7 @@ impl EslError {
             EslError::HandshakeTimeout { .. } => true,
             EslError::ColonInAuthUser { .. } => false,
             EslError::UndeliverableVariable(_) => false,
+            EslError::InvalidBodyLine { .. } => false,
         }
     }
 
@@ -811,6 +824,14 @@ mod tests {
                 false,
                 false,
             ),
+            (
+                EslError::InvalidBodyLine {
+                    context: "response body",
+                    line: "NoColonHere".into(),
+                },
+                false,
+                false,
+            ),
             (EslError::protocol_error("bad framing"), true, false),
             (
                 EslError::InvalidHeader {
@@ -945,6 +966,10 @@ mod tests {
             },
             EslError::ColonInAuthUser {
                 user: format!("{secret}:x@example.com"),
+            },
+            EslError::InvalidBodyLine {
+                context: "event body",
+                line: secret.into(),
             },
         ];
         for err in cases {
