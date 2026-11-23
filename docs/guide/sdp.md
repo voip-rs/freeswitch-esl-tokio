@@ -45,4 +45,20 @@ client.api(&set.to_string()).await?.api_result()?;
 
 Ordering is whatever you concatenate, since `dedup()` keeps the first occurrence: offer-then-backup preserves the peer's preference and its qualifiers, backup-then-offer preserves yours.
 
+## What the switch read, or what the peer wrote
+
+`SdpCodecs::parse` reads an offer the way the switch's SIP stack does: a refusal or an early stop is a warning, not an error, and a port-0 section (a held or declined stream) names only the static payload types of its format list, because the switch reads none of its `a=` lines. That is the view to build a codec string from. A reader analyzing SDP taken from logs or traces, which wants the codecs the peer put on a held stream, opts in:
+
+```rust,ignore
+use freeswitch_esl_tokio::sdp::{SdpCodecs, SdpParseOptions};
+
+let options = SdpParseOptions::default().with_port_zero_attributes(true);
+let offer = SdpCodecs::parse_with_options(remote_sdp, &options)?;
+for section in offer.sections().iter().filter(|s| s.port() == 0) {
+    // codecs the peer named on the held stream; the switch ignored them
+}
+```
+
+The option reaches only port-0 sections, so the codec strings and every live section come out the same either way.
+
 See [codec-string-format.md](../codec-string-format.md) for the grammar, the characters a format-parameter value cannot carry, the G.722 rate/packetization trap, and the two places FreeSWITCH drops a codec-string entry without logging it.
