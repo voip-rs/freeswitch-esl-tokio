@@ -139,6 +139,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `EslArray::new`, `push`, `unshift` and deserialize accept an item holding `\|:` | refused with `EslArrayError::SeparatorInItem { index }`: the switch splits on every `\|:` with no escape, so the item would come back as two |
 | `EslArray::new(vec![])`, `new(vec!["".into()])` and `EslArray::parse("ARRAY::")` succeed | refused with `EslArrayError::Empty`: both render a bare `ARRAY::`, which the switch drops on input and never writes; two or more empty items (`ARRAY::\|:`) are still accepted |
 | `sip_status_code()` reads anything `u16::from_str` takes (`+200`, `0200`, `42`) | exactly three digits with a nonzero first one; anything else is `ParseSipStatusCodeError` with the raw value. 9xx stays legal: sofia-sip's nua reports its own failures as 9xx in `sofia::gateway_state` and `sofia::sip_user_state` |
+| `ParseHeaderError`'s `Display` was the inner parser's message (`unknown hangup cause (5 bytes)`) | names the value that did not parse (`hangup cause did not parse`); the parser's message is `source()`, so print the chain |
 | `EslEvent::push_header` / `unshift_header` onto a header holding `""` give `ARRAY::\|:v` / `ARRAY::v\|:` | set it to `v`: the switch deletes a header set to an empty value, so there is nothing to stack onto |
 
 ## SDP (`sdp` feature)

@@ -527,8 +527,8 @@ pub trait HeaderLookup: SipHeaderRows {
 ///
 /// Each accessor returns its own parser's error; a function calling more than
 /// one of them has nothing to name in its return type without this. `Display`
-/// and [`source`](std::error::Error::source) both defer to the inner error, so
-/// nothing is lost by going through it.
+/// names the value that did not parse; the parser's own error is the
+/// [`source`](std::error::Error::source), so a chain printer shows it once.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ParseHeaderError {
@@ -562,7 +562,7 @@ pub enum ParseHeaderError {
 /// one would relabel every unrelated parse in the caller as a header fault.
 macro_rules! parse_header_error_impls {
     (
-        $($(#[$attr:meta])* $Variant:ident($Error:ty)),+ $(,)?
+        $($(#[$attr:meta])* $Variant:ident($Error:ty) => $what:literal),+ $(,)?
     ) => {
         $(
             $(#[$attr])*
@@ -576,7 +576,7 @@ macro_rules! parse_header_error_impls {
         impl ::std::fmt::Display for ParseHeaderError {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                 match self {
-                    $($(#[$attr])* Self::$Variant(e) => e.fmt(f),)+
+                    $($(#[$attr])* Self::$Variant(_) => f.write_str(concat!($what, " did not parse")),)+
                 }
             }
         }
@@ -592,17 +592,17 @@ macro_rules! parse_header_error_impls {
 }
 
 parse_header_error_impls! {
-    ChannelState(ParseChannelStateError),
-    CallState(ParseCallStateError),
-    AnswerState(ParseAnswerStateError),
-    CallDirection(ParseCallDirectionError),
-    HangupCause(ParseHangupCauseError),
-    GatewayRegState(ParseGatewayRegStateError),
-    LoopbackLeg(ParseLoopbackLegError),
+    ChannelState(ParseChannelStateError) => "channel state",
+    CallState(ParseCallStateError) => "call state",
+    AnswerState(ParseAnswerStateError) => "answer state",
+    CallDirection(ParseCallDirectionError) => "call direction",
+    HangupCause(ParseHangupCauseError) => "hangup cause",
+    GatewayRegState(ParseGatewayRegStateError) => "gateway registration state",
+    LoopbackLeg(ParseLoopbackLegError) => "loopback leg",
     #[cfg(feature = "esl")]
-    Priority(ParsePriorityError),
-    Timetable(ParseTimetableError),
-    SipStatusCode(ParseSipStatusCodeError),
+    Priority(ParsePriorityError) => "event priority",
+    Timetable(ParseTimetableError) => "channel timetable",
+    SipStatusCode(ParseSipStatusCodeError) => "SIP status code",
 }
 
 #[cfg(test)]
