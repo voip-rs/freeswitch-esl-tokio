@@ -141,13 +141,6 @@ pub enum EslError {
         header: String,
     },
 
-    /// Missing required header
-    #[error("Missing required header: {header}")]
-    MissingHeader {
-        /// Name of the header that was expected.
-        header: String,
-    },
-
     /// Connection rejected by FreeSWITCH ACL (text/rude-rejection)
     #[error("Access denied: {reason}")]
     AccessDenied {
@@ -159,30 +152,9 @@ pub enum EslError {
     #[error("Connection closed by FreeSWITCH")]
     ConnectionClosed,
 
-    /// Heartbeat/liveness timeout expired
-    #[error("Heartbeat expired after {interval_ms}ms without traffic")]
-    HeartbeatExpired {
-        /// Configured liveness interval in milliseconds.
-        interval_ms: u64,
-    },
-
-    /// Invalid UUID format
-    #[error("Invalid UUID format: {uuid}")]
-    InvalidUuid {
-        /// The string that failed UUID validation.
-        uuid: String,
-    },
-
     /// Event queue full
     #[error("Event queue is full - dropping events")]
     QueueFull,
-
-    /// Generic error with custom message
-    #[error("ESL error: {message}")]
-    Generic {
-        /// Free-form error description.
-        message: String,
-    },
 
     /// Originate command builder error
     #[error("originate command refused")]
@@ -351,13 +323,6 @@ impl EslError {
         DisplayChain(self)
     }
 
-    /// Construct a generic error with a custom message.
-    pub fn generic(message: impl Into<String>) -> Self {
-        Self::Generic {
-            message: message.into(),
-        }
-    }
-
     /// Construct a protocol error with a description.
     pub fn protocol_error(message: impl Into<String>) -> Self {
         Self::ProtocolError {
@@ -385,7 +350,6 @@ impl EslError {
             EslError::ConnectionClosed => false,
             EslError::AuthenticationFailed { .. } => false,
             EslError::AccessDenied { .. } => false,
-            EslError::HeartbeatExpired { .. } => false,
             EslError::Timeout { .. } => true,
             EslError::CommandFailed { .. } => true,
             EslError::UnexpectedReply { .. } => true,
@@ -399,14 +363,11 @@ impl EslError {
             EslError::Utf8Error { .. } => false,
             EslError::InvalidUtf8InHeader { .. } => false,
             EslError::InvalidHeader { .. } => false,
-            EslError::MissingHeader { .. } => false,
-            EslError::InvalidUuid { .. } => false,
             EslError::HeaderParse(_) => false,
             // Stream resync impossible after BufferOverflow.
             EslError::BufferOverflow { .. } => false,
             // Per-call: don't retry the same command/originate as-is.
             EslError::Originate(_) => false,
-            EslError::Generic { .. } => false,
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
@@ -420,7 +381,7 @@ impl EslError {
     /// `true` if the TCP session is dead and the caller should reconnect.
     ///
     /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `AccessDenied`,
-    /// `HeartbeatExpired`, `ProtocolError`, `BufferOverflow`, `Utf8Error`.
+    /// `ProtocolError`, `BufferOverflow`, `Utf8Error`.
     ///
     /// Returns `true` for errors that indicate the TCP session is no longer
     /// usable, *during* an established connection. Authentication failures
@@ -437,7 +398,6 @@ impl EslError {
             EslError::NotConnected => true,
             EslError::ConnectionClosed => true,
             EslError::AccessDenied { .. } => true,
-            EslError::HeartbeatExpired { .. } => true,
             EslError::ProtocolError { .. } => true,
             // Stream resync impossible after BufferOverflow — the next
             // bytes have no recoverable framing.
@@ -457,11 +417,8 @@ impl EslError {
             EslError::Utf8Error { .. } => true,
             EslError::InvalidUtf8InHeader { .. } => false,
             EslError::InvalidHeader { .. } => false,
-            EslError::MissingHeader { .. } => false,
-            EslError::InvalidUuid { .. } => false,
             EslError::HeaderParse(_) => false,
             EslError::Originate(_) => false,
-            EslError::Generic { .. } => false,
             // Re-exec teardown attempt failed; the original socket is
             // still alive — caller can keep using it.
             #[cfg(unix)]
@@ -788,11 +745,6 @@ mod tests {
             (io(ErrorKind::UnexpectedEof), true, false),
             (EslError::ConnectionClosed, true, false),
             (EslError::NotConnected, true, false),
-            (
-                EslError::HeartbeatExpired { interval_ms: 60000 },
-                true,
-                false,
-            ),
             (EslError::Timeout { timeout_ms: 5000 }, false, true),
             (EslError::protocol_error("bad framing"), true, false),
             (EslError::auth_failed("bad password"), false, false),

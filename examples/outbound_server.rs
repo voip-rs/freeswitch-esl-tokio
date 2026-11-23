@@ -65,11 +65,12 @@ async fn handle_call(client: &EslClient, events: &mut EslEventStream) -> Result<
         .await?
         .into_result()?;
     let Some(channel) = channel_data.channel_name() else {
-        return Err(EslError::MissingHeader {
-            header: EventHeader::ChannelName
-                .as_str()
-                .to_string(),
-        });
+        // The switch always sends the channel here; a reply without it is not
+        // the conversation this socket expected, so hang up on it.
+        return Err(EslError::protocol_error(format!(
+            "connect reply has no {}",
+            EventHeader::ChannelName
+        )));
     };
     info!("session established: {channel}");
 
