@@ -627,6 +627,24 @@ impl EslClient {
 mod tests {
     use super::*;
 
+    /// Refused before any socket opens, without quoting the user back.
+    #[tokio::test]
+    async fn a_user_without_a_domain_is_refused_unquoted() {
+        let method = AuthMethod::user("nodomain-sentinel", "pass").expect("no colon");
+        let err = EslClient::connect_with_auth("localhost", 1, method, EslConnectOptions::new())
+            .await
+            .expect_err("a user without @ is refused");
+        assert!(
+            matches!(err, EslError::AuthenticationFailed { .. }),
+            "{err:?}"
+        );
+        assert!(
+            !err.to_string()
+                .contains("nodomain-sentinel"),
+            "{err}"
+        );
+    }
+
     #[tokio::test]
     async fn write_failure_clears_pending_waiting() {
         use tokio::io::AsyncWriteExt;
