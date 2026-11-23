@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use super::endpoint::{DialString, Endpoint};
+use super::endpoint::{Endpoint, SetVariables};
 use super::originate::OriginateError;
 use super::variables::{
     installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,

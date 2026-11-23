@@ -138,7 +138,7 @@ Reference: [dial strings](docs/dial-string-format.md), [codec strings](docs/code
 ## Features
 
 - **Split reader/writer**: `EslClient` is `Clone + Send`, events arrive on a separate channel.
-- **Typed endpoints**: every FreeSWITCH endpoint behind a `DialString` trait downstream crates can extend.
+- **Typed endpoints**: every FreeSWITCH endpoint module as its own struct, wrapped by `Endpoint`.
 - **Typed events**: `HeaderLookup` gives typed accessors to any key-value store, not just `EslEvent`.
 - **Loopback bowout detection**: `loopback_resignation()` tells a leg mod_loopback removed from a live call apart from a real teardown.
 - **Failed replies read as data**: `EslError::command_failure()` hands back the text behind `-ERR` / `-USAGE`.

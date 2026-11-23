@@ -13,7 +13,7 @@ use freeswitch_types::commands::{
     FlattenedDialString, FlattenedLeg, LegTarget,
 };
 use freeswitch_types::{
-    Application, BlockParse, BridgeDialString, ChannelVariable, DialString, DialStringCarrier,
+    Application, BlockParse, BridgeDialString, ChannelVariable, DialStringCarrier,
     DialStringTarget, DialplanType, Endpoint, GroupCallOrder, HangupCause, Originate,
     OriginateError, Variables, VariablesType,
 };
@@ -330,11 +330,10 @@ fn endpoint_corpus(records: &mut Vec<String>) {
         }
     }
 
-    let attach_vars = |mut ep: Endpoint| -> Result<Endpoint, OriginateError> {
+    let attach_vars = |ep: Endpoint| -> Result<Endpoint, OriginateError> {
         let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
             .expect("plain pairs build");
-        ep.set_variables(Some(vars))?;
-        Ok(ep)
+        ep.with_variables(vars)
     };
     let base_cases: Vec<(&str, Endpoint)> = vec![
         (

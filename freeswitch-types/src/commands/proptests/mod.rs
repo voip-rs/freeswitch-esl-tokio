@@ -9,6 +9,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::bridge::BridgeDialString;
+use super::endpoint::SetVariables;
 use super::originate::OriginateError;
 use super::{
     originate_quote, originate_unquote, AudioEndpoint, BlockParse, DialString, DialStringCarrier,

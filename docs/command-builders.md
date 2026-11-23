@@ -293,13 +293,12 @@ The per-channel variables an endpoint carries in its leading block:
 ```rust
 pub trait DialString {
     fn variables(&self) -> Option<&Variables>;
-    fn variables_mut(&mut self) -> Option<&mut Variables>;
-    fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError>;
 }
 ```
 
-Implemented on each concrete endpoint struct and on the `Endpoint` enum.
-Downstream crates can implement `DialString` on custom endpoint types.
+Implemented on each concrete endpoint struct and on the `Endpoint` enum. A
+block is set through `with_variables`: infallible on a struct that keeps
+one, fallible on `Endpoint`, since `error/` keeps none.
 
 ## Serde Support
 

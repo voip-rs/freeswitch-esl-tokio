@@ -16,10 +16,9 @@ macro_rules! impl_dial_string_with_variables {
                 self.variables
                     .as_ref()
             }
-            fn variables_mut(&mut self) -> Option<&mut $crate::commands::variables::Variables> {
-                self.variables
-                    .as_mut()
-            }
+        }
+
+        impl $crate::commands::endpoint::SetVariables for $ty {
             fn set_variables(
                 &mut self,
                 vars: Option<$crate::commands::variables::Variables>,
@@ -293,13 +292,13 @@ pub(super) fn check_field(
 /// The per-channel variables an endpoint carries in its leading block.
 ///
 /// Implemented on each concrete endpoint struct and on the [`Endpoint`] enum.
-/// Downstream crates can implement this on custom endpoint types.
 pub trait DialString {
     /// Per-endpoint variables, if any.
     fn variables(&self) -> Option<&Variables>;
-    /// Mutable access to per-endpoint variables.
-    fn variables_mut(&mut self) -> Option<&mut Variables>;
-    /// Replace per-endpoint variables.
+}
+
+/// Replace an endpoint's block, refusing one its module has nowhere to keep.
+pub(crate) trait SetVariables {
     fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError>;
 }
 
@@ -472,6 +471,13 @@ impl Endpoint {
             .to_string()
     }
 
+    /// Set the per-channel variable block, refusing one on an `error/` endpoint, which has
+    /// nowhere to keep it.
+    pub fn with_variables(mut self, variables: Variables) -> Result<Self, OriginateError> {
+        self.set_variables(Some(variables))?;
+        Ok(self)
+    }
+
     /// [`render`](Self::render), for writing into a formatter.
     pub(crate) fn display_for(&self, target: DialStringTarget) -> impl fmt::Display + '_ {
         target.argument(|f, target| self.write_for(f, target))
@@ -584,9 +590,9 @@ impl DialString for ErrorEndpoint {
     fn variables(&self) -> Option<&Variables> {
         None
     }
-    fn variables_mut(&mut self) -> Option<&mut Variables> {
-        None
-    }
+}
+
+impl SetVariables for ErrorEndpoint {
     fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError> {
         match vars {
             Some(_) => Err(OriginateError::VariablesNotSupported("error")),
@@ -599,9 +605,9 @@ impl DialString for Endpoint {
     fn variables(&self) -> Option<&Variables> {
         forward_to_variant!(self, variables)
     }
-    fn variables_mut(&mut self) -> Option<&mut Variables> {
-        forward_to_variant!(self, variables_mut)
-    }
+}
+
+impl SetVariables for Endpoint {
     fn set_variables(&mut self, vars: Option<Variables>) -> Result<(), OriginateError> {
         forward_to_variant!(self, set_variables, vars)
     }

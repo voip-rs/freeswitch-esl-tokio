@@ -305,9 +305,8 @@ fn error_endpoint_refuses_a_variable_block() {
         ep.set_variables(Some(vars.clone())),
         Err(OriginateError::VariablesNotSupported("error"))
     );
-    let mut wrapped = Endpoint::from(ep);
     assert_eq!(
-        wrapped.set_variables(Some(vars)),
+        Endpoint::from(ep).with_variables(vars),
         Err(OriginateError::VariablesNotSupported("error"))
     );
     assert_eq!(ep.set_variables(None), Ok(()));

@@ -6,7 +6,7 @@ See [command-builders.md](../command-builders.md) for the full builder architect
 
 ## Endpoint types
 
-Each endpoint type is a concrete struct implementing the `DialString` trait. The `Endpoint` enum wraps them for polymorphic storage and serde.
+Each endpoint type is a concrete struct whose leading variable block the `DialString` trait reads. The `Endpoint` enum wraps them for polymorphic storage and serde.
 
 - **SofiaEndpoint** -- `sofia/{profile}/{destination}`, direct SIP profile routing
 - **SofiaGateway** -- `sofia/gateway/{gateway}/{destination}`, SIP gateway routing
@@ -36,8 +36,6 @@ assert_eq!(ep.render(target), "sofia/gateway/my_provider/18005551234");
 
 // Parse from wire format, as the target named reads it
 let ep = Endpoint::parse_for("sofia/gateway/my_provider/18005551234", target).unwrap();
-
-// Downstream crates can implement DialString on custom endpoint types
 ```
 
 ## Originate

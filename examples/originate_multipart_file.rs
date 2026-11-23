@@ -28,8 +28,8 @@ mod common;
 use freeswitch_esl_tokio::commands::{ExecuteOn, UuidGetVar, UuidKill};
 use freeswitch_esl_tokio::variables::SofiaVariable;
 use freeswitch_esl_tokio::{
-    Application, ChannelVariable, DialString, DialStringCarrier, DialStringTarget, Endpoint,
-    EslClient, EslResult, MultipartBody, Originate, Variables, VariablesType,
+    Application, ChannelVariable, DialStringCarrier, DialStringTarget, Endpoint, EslClient,
+    EslResult, MultipartBody, Originate, Variables, VariablesType,
 };
 
 /// A `-ERR` from `api` is data, not a transport failure, and this example
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let block_parse = block_parse::block_parse_from_env()?;
     // Read as it would be written on an `api originate` line.
     let target = DialStringTarget::new(DialStringCarrier::EslApi, block_parse);
-    let mut endpoint = Endpoint::parse_for(endpoint, target)?;
+    let endpoint = Endpoint::parse_for(endpoint, target)?;
 
     let (client, _events) = common::connect_from_env().await?;
 
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ChannelVariable::ExecuteOnOriginate.as_str(),
         hook.to_string(),
     )?;
-    endpoint.set_variables(Some(vars))?;
+    let endpoint = endpoint.with_variables(vars)?;
     let originate = Originate::application(endpoint, Application::simple("park"))?;
     let line = originate.render(block_parse);
     println!("{line}");
