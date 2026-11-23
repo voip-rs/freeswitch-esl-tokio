@@ -155,7 +155,8 @@ pub(crate) mod protocol;
 #[cfg(feature = "sdp")]
 pub use freeswitch_types::sdp;
 pub use freeswitch_types::{
-    channel, commands, event, headers, lookup, lossy_values, prelude, sofia, variables,
+    channel, commands, event, headers, log_level, lookup, lossy_values, prelude, sofia, variables,
+    version,
 };
 pub use freeswitch_types::{
     define_header_enum, ParseSipHeaderError, RowError, RowErrorKind, SipHeader, SipHeaderField,
@@ -164,23 +165,25 @@ pub use freeswitch_types::{
 
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
-    case_alias_key, channel_driver, normalize_header_key, AnswerState, Application, BlockParse,
-    BridgeDialString, CallDirection, CallState, CarriedHeader, ChannelState, ChannelTimetable,
-    ChannelVariable, CoreMediaVariable, DialString, DialStringCarrier, DialStringTarget,
-    DialplanType, Endpoint, EndpointFieldFault, EslArray, EslArrayError, EslEvent,
-    EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader, EventHeaderName,
-    EventSubscription, EventSubscriptionError, ExecuteOn, ExecuteOnFault, FilterHeaderFault,
-    FreeswitchVersion, GatewayPingStatus, GatewayRegState, GroupCallOrder, HangupCause,
-    HeaderLookup, InvalidArgvSeparator, InvalidHeaderNameError, LogLevel, LossyValue, LossyValues,
-    MultipartBody, MultipartBodyError, MultipartItem, Originate, OriginateError, OriginateTarget,
-    ParseAnswerStateError, ParseBlockParseError, ParseCallDirectionError, ParseCallStateError,
-    ParseChannelStateError, ParseChannelVariableError, ParseCoreMediaVariableError,
-    ParseDialplanTypeError, ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError,
-    ParseFreeswitchVersionError, ParseGatewayPingStatusError, ParseGatewayRegStateError,
-    ParseGroupCallOrderError, ParseHangupCauseError, ParseHeaderError, ParseHoldActionError,
-    ParseLogLevelError, ParseMuteActionError, ParsePriorityError, ParseSipPassthroughError,
-    ParseSipStatusCodeError, ParseSipUserPingStatusError, ParseSofiaEventSubclassError,
-    ParseTimetableError, RtpStatUnit, SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus,
+    case_alias_key, channel_driver, normalize_header_key, variable_key, AnswerState, Application,
+    BlockParse, BridgeDialString, CallDirection, CallState, CarriedHeader, ChannelState,
+    ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString, DialStringCarrier,
+    DialStringTarget, DialplanType, Endpoint, EndpointFieldFault, EslArray, EslArrayError,
+    EslEvent, EslEventPriority, EslEventType, EslHeaders, EventFormat, EventHeader,
+    EventHeaderName, EventSubscription, EventSubscriptionError, ExecuteOn, ExecuteOnFault,
+    FilterHeaderFault, FreeswitchVersion, GatewayPingStatus, GatewayRegState, GroupCallOrder,
+    HangupCause, HeaderLookup, InvalidArgvSeparator, InvalidHeaderNameError, LogLevel, LossyValue,
+    LossyValues, MultipartBody, MultipartBodyError, MultipartItem, Originate, OriginateError,
+    OriginateTarget, ParseAnswerStateError, ParseBlockParseError, ParseCallDirectionError,
+    ParseCallStateError, ParseChannelStateError, ParseChannelVariableError,
+    ParseCoreMediaVariableError, ParseDialplanTypeError, ParseEventFormatError,
+    ParseEventHeaderError, ParseEventTypeError, ParseFreeswitchVersionError,
+    ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
+    ParseHangupCauseError, ParseHeaderError, ParseHoldActionError, ParseLogLevelError,
+    ParseMuteActionError, ParsePriorityError, ParseReadResultError, ParseSipHangupDispositionError,
+    ParseSipPassthroughError, ParseSipStatusCodeError, ParseSipUserPingStatusError,
+    ParseSofiaEventSubclassError, ParseTimetableError, ReadResult, RtpStatUnit,
+    SipHangupDisposition, SipHeaderPrefix, SipPassthroughHeader, SipUserPingStatus,
     SofiaChannelName, SofiaEventSubclass, TimetableField, TimetablePrefix, UndeliverableVariable,
     UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidHoldAction,
     UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableFault, VariableName, VariablePart,
@@ -226,3 +229,14 @@ pub use connection::{
 };
 pub use constants::UNDEF_VALUE;
 pub use error::{CommandFailure, EslError, EslResult};
+
+/// Names a caller reaches freeswitch-types through at this root; a test build
+/// fails when one goes missing.
+#[cfg(test)]
+#[allow(unused_imports)]
+mod root_reexports {
+    use crate::{
+        log_level::LogLevel, variable_key, version::FreeswitchVersion, ParseReadResultError,
+        ParseSipHangupDispositionError, ReadResult, SipHangupDisposition,
+    };
+}
