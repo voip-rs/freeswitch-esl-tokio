@@ -6,7 +6,8 @@
 mod mock_server;
 
 use freeswitch_esl_tokio::{
-    ConnectionStatus, DisconnectReason, EslError, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD,
+    ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions, EslError, EslEventType,
+    EventFormat, DEFAULT_ESL_PASSWORD,
 };
 use mock_server::{inflight_command_woken_on, recv_event, setup_connected_pair};
 use std::collections::HashMap;
@@ -712,5 +713,40 @@ async fn parser_error_reports_protocol_error() {
     match client.status() {
         ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_)) => {}
         other => panic!("expected Disconnected(ProtocolError), got: {:?}", other),
+    }
+}
+
+/// A peer that accepts and then says `greeting` and nothing more, holding the
+/// socket open past the client's connect timeout.
+async fn connect_to_silent_peer(greeting: &'static [u8]) -> EslError {
+    use tokio::io::AsyncWriteExt;
+    let (listener, port) = mock_server::setup_raw_pair().await;
+    let peer = tokio::spawn(async move {
+        let (mut sock, _) = listener
+            .accept()
+            .await
+            .unwrap();
+        sock.write_all(greeting)
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    });
+    let options = EslConnectOptions::default().with_connect_timeout(Duration::from_millis(200));
+    let err = EslClient::connect_with_options("localhost", port, DEFAULT_ESL_PASSWORD, options)
+        .await
+        .expect_err("a silent peer must not complete the handshake");
+    peer.abort();
+    err
+}
+
+/// No session ever came up, so this is a connection error, not a command
+/// timeout on a live connection the caller could retry on.
+#[tokio::test]
+async fn a_silent_handshake_is_a_connection_error() {
+    for greeting in [&b""[..], b"Content-Type: auth/request\n\n"] {
+        let err = connect_to_silent_peer(greeting).await;
+        assert!(!matches!(err, EslError::Timeout { .. }), "{err:?}");
+        assert!(err.is_connection_error(), "{err:?}");
+        assert!(!err.is_recoverable(), "{err:?}");
     }
 }

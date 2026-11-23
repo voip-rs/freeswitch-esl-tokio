@@ -750,6 +750,13 @@ mod tests {
             (EslError::NotConnected, true, false),
             (EslError::Timeout { timeout_ms: 5000 }, false, true),
             (EslError::protocol_error("bad framing"), true, false),
+            (
+                EslError::InvalidHeader {
+                    header: "NoColonHere".into(),
+                },
+                true,
+                false,
+            ),
             (EslError::auth_failed("bad password"), false, false),
             (
                 EslError::from(ParseChannelStateError("CS_NONSENSE".into())),
