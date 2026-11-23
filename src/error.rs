@@ -849,6 +849,46 @@ mod tests {
         }
     }
 
+    /// A caller or wire value stays on its field; `{e}` names the field and its length.
+    #[test]
+    fn display_never_quotes_the_value_it_refused() {
+        let secret = "s3cr3t-Value";
+        let cases = [
+            EslError::InvalidHeader {
+                header: secret.into(),
+            },
+            EslError::FilterDeleteAllHeader {
+                header: "aLL".into(),
+            },
+            EslError::UnsplittableFilterHeader {
+                header: format!("{secret} x"),
+                fault: FilterHeaderFault::Space,
+            },
+            EslError::UnexpectedReply {
+                reply_text: secret.into(),
+            },
+        ];
+        for err in cases {
+            let shown = err
+                .display_chain()
+                .to_string();
+            assert!(!shown.contains(secret), "{shown:?}");
+            assert!(!shown.contains("aLL"), "{shown:?}");
+            assert!(shown.contains("bytes"), "{shown:?} omits the length");
+        }
+        let transfer = [
+            crate::AppCommand::transfer(&format!("{secret} x")).expect_err("a space is refused"),
+            crate::AppCommand::transfer("-bOTh").expect_err("a leg selector is refused"),
+        ];
+        for err in transfer {
+            let shown = err.to_string();
+            assert!(
+                !shown.contains(secret) && !shown.contains("-bOTh"),
+                "{shown:?}"
+            );
+        }
+    }
+
     /// The reader keeps only text for a disconnect, so it writes the chain.
     #[test]
     fn display_chain_carries_every_cause() {

@@ -1722,3 +1722,17 @@ fn set_scope_refuses_a_scope_a_held_pair_cannot_be_written_in() {
         .expect("a quote is carried outside channel scope");
     assert_eq!(plain.scope(), VariablesType::Enterprise);
 }
+
+/// An error names what it refused without quoting it back.
+#[test]
+fn a_refusal_does_not_quote_the_caller_text() {
+    let err = Variables::parse_for("Qk=vZ", DialStringCarrier::EslApi.measured())
+        .expect_err("no delimiters");
+    let shown = err.to_string();
+    assert!(!shown.contains('Q') && !shown.contains('Z'), "{shown:?}");
+    let err = DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
+        .with_argv_separator('Q')
+        .expect_err("a letter is refused");
+    let shown = err.to_string();
+    assert!(!shown.contains('Q'), "{shown:?}");
+}
