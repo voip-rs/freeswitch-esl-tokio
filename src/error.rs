@@ -1,12 +1,20 @@
 //! Error types for FreeSWITCH ESL operations.
 //!
-//! All fallible operations in this crate return [`EslResult<T>`].  Errors are
-//! classified into two axes for caller convenience:
+//! All fallible operations in this crate return [`EslResult<T>`]. Every error
+//! falls in exactly one of three classes, read off two predicates:
 //!
-//! - **Connection errors** ([`EslError::is_connection_error`]) -- the TCP session
-//!   is dead and the caller should reconnect.
-//! - **Recoverable errors** ([`EslError::is_recoverable`]) -- the command failed
-//!   but the connection is still usable (e.g., timeout, command rejected).
+//! - **Connection errors** ([`EslError::is_connection_error`]): there is no
+//!   usable session, because it died, its framing broke, or it never came up.
+//!   Reconnect.
+//! - **Recoverable errors** ([`EslError::is_recoverable`]): the session is up and
+//!   only this command failed (a command timeout, `-ERR`, a full queue). Retry
+//!   the command, or move on.
+//! - **Neither**: sending the same thing again fails the same way. A caller
+//!   value the library refused before sending (`WireTerminatorInField`,
+//!   `TransferArgument`, `Originate`, …), a credential the switch refused at
+//!   connect (`AuthenticationFailed`), or a value the switch sent that did not
+//!   parse (`HeaderParse`, a JSON or XML event body). Fix the input or the
+//!   configuration; a reconnect loop on these only spins.
 
 use crate::app::dptools::TransferArgumentError;
 use crate::commands::OriginateError;
@@ -71,7 +79,8 @@ pub enum EslError {
         reply_text: String,
     },
 
-    /// Timeout waiting for a command reply.
+    /// A command's reply did not arrive within the command timeout, on a
+    /// connection that is still up.
     ///
     /// The connection remains usable. The library increments an internal
     /// stale-reply counter so that the server's late reply — when it
@@ -215,6 +224,22 @@ pub enum EslError {
         /// Which field.
         field: &'static str,
     },
+
+    /// The TCP connect did not complete within the connect timeout, so no
+    /// session exists.
+    #[error("TCP connect timed out after {timeout_ms}ms")]
+    ConnectTimeout {
+        /// The connect timeout in milliseconds.
+        timeout_ms: u64,
+    },
+
+    /// The socket connected but the switch sent nothing for the connect
+    /// timeout while the auth handshake waited on it, so no session exists.
+    #[error("ESL handshake idle for {timeout_ms}ms")]
+    HandshakeTimeout {
+        /// The connect timeout in milliseconds, which bounds each handshake read.
+        timeout_ms: u64,
+    },
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -340,11 +365,14 @@ impl EslError {
         }
     }
 
-    /// `true` if the connection is still usable and the caller can retry.
+    /// `true` if the session is still up and only this command failed, so the
+    /// caller can retry it: `Timeout`, `CommandFailed`, `UnexpectedReply`,
+    /// `QueueFull`.
     ///
-    /// Recoverable: `Timeout`, `CommandFailed`, `UnexpectedReply`, `QueueFull`.
-    /// Non-recoverable errors (I/O, auth, disconnect) mean the connection is dead
-    /// and the caller should reconnect.
+    /// `false` covers two classes [the module docs](crate::error) tell apart: a
+    /// connection error, where [`Self::is_connection_error`] is `true` and the
+    /// next step is a reconnect, and a refusal that a retry or a reconnect
+    /// meets again (caller input, credentials), where both are `false`.
     // qual:allow(dry, duplicate) reason: "exhaustive per-variant classification, no catch-all by design"
     pub fn is_recoverable(&self) -> bool {
         match self {
@@ -378,20 +406,19 @@ impl EslError {
             EslError::UnsplittableFilterHeader { .. } => false,
             EslError::TransferArgument(_) => false,
             EslError::MissingField { .. } => false,
+            EslError::ConnectTimeout { .. } => false,
+            EslError::HandshakeTimeout { .. } => false,
         }
     }
 
-    /// `true` if the TCP session is dead and the caller should reconnect.
+    /// `true` if there is no usable session and the next step is a reconnect:
+    /// the socket failed or closed, the stream's framing broke (a header line,
+    /// an oversized or non-UTF-8 envelope, a missing `Content-Type`), the ACL
+    /// rejected the connection, or the connect or its handshake timed out.
     ///
-    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `AccessDenied`,
-    /// `ProtocolError`, `BufferOverflow`, `Utf8Error`.
-    ///
-    /// Returns `true` for errors that indicate the TCP session is no longer
-    /// usable, *during* an established connection. Authentication failures
-    /// are returned synchronously by [`EslClient::connect`] and never reach
-    /// this classifier — callers retrying a connect() loop should instead
-    /// check [`Self::is_recoverable`] which returns `false` for
-    /// `AuthenticationFailed` to break the loop.
+    /// `AuthenticationFailed` is `false` here and in [`Self::is_recoverable`]:
+    /// a reconnect sends the same credential and is refused again, so a
+    /// [`EslClient::connect`] retry loop breaks on it.
     ///
     /// [`EslClient::connect`]: crate::EslClient::connect
     // qual:allow(dry, duplicate) reason: "exhaustive per-variant classification, no catch-all by design"
@@ -412,14 +439,16 @@ impl EslError {
             EslError::UnexpectedReply { .. } => false,
             EslError::Timeout { .. } => false,
             EslError::QueueFull => false,
-            // Parse failures don't necessarily imply the TCP is dead.
+            // An event body that did not decode leaves the framing intact.
             EslError::InvalidEventFormat { .. } => false,
             EslError::JsonError(_) => false,
             EslError::XmlError(_) => false,
             // Only built from bytes the framing reads as text.
             EslError::Utf8Error { .. } => true,
             EslError::InvalidUtf8InHeader { .. } => false,
-            EslError::InvalidHeader { .. } => false,
+            // A colonless line or a non-numeric Content-Length in text the switch
+            // serialized, a body included: its framing is suspect.
+            EslError::InvalidHeader { .. } => true,
             EslError::HeaderParse(_) => false,
             EslError::Originate(_) => false,
             // Re-exec teardown attempt failed; the original socket is
@@ -431,6 +460,8 @@ impl EslError {
             EslError::UnsplittableFilterHeader { .. } => false,
             EslError::TransferArgument(_) => false,
             EslError::MissingField { .. } => false,
+            EslError::ConnectTimeout { .. } => true,
+            EslError::HandshakeTimeout { .. } => true,
         }
     }
 
@@ -749,6 +780,8 @@ mod tests {
             (EslError::ConnectionClosed, true, false),
             (EslError::NotConnected, true, false),
             (EslError::Timeout { timeout_ms: 5000 }, false, true),
+            (EslError::ConnectTimeout { timeout_ms: 5000 }, true, false),
+            (EslError::HandshakeTimeout { timeout_ms: 5000 }, true, false),
             (EslError::protocol_error("bad framing"), true, false),
             (
                 EslError::InvalidHeader {

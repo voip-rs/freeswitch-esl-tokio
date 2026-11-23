@@ -74,7 +74,7 @@ impl Handshake<'_> {
             {
                 ReadStep::Fed => {}
                 ReadStep::Eof => return Err(EslError::ConnectionClosed),
-                ReadStep::Idle => return Err(EslError::Timeout { timeout_ms }),
+                ReadStep::Idle => return Err(EslError::HandshakeTimeout { timeout_ms }),
             }
         }
     }
@@ -127,7 +127,7 @@ pub(super) async fn authenticate(
         .await
     {
         Ok(msg) => msg,
-        Err(EslError::Timeout { timeout_ms }) => {
+        Err(EslError::HandshakeTimeout { timeout_ms }) => {
             match salvage_truncated_auth_response(io.parser) {
                 Ok(Some(msg)) => {
                     warn!(
@@ -139,7 +139,7 @@ pub(super) async fn authenticate(
                 }
                 // Nothing to salvage: the read timeout is the whole story. A
                 // salvage that refused for a named reason is that reason.
-                Ok(None) => return Err(EslError::Timeout { timeout_ms }),
+                Ok(None) => return Err(EslError::HandshakeTimeout { timeout_ms }),
                 Err(e) => return Err(e),
             }
         }

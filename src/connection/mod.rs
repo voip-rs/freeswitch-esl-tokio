@@ -119,7 +119,7 @@ async fn tcp_connect_with_timeout(
         }
         Err(_) => {
             warn!("[CONNECT] TCP connect timed out after {}ms", timeout_ms);
-            Err(EslError::Timeout { timeout_ms })
+            Err(EslError::ConnectTimeout { timeout_ms })
         }
     }
 }
