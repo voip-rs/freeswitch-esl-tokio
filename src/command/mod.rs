@@ -983,6 +983,28 @@ mod tests {
             .is_err());
     }
 
+    /// mod_event_socket ends the domain, and starts the password, at the first
+    /// `:` after the `@`, and again at a `:` before it, so either mis-splits.
+    #[test]
+    fn a_colon_in_the_userauth_user_is_refused() {
+        for user in ["adm:in@default", "admin@def:ault"] {
+            let cmd = EslCommand::UserAuth {
+                user: user.to_string(),
+                password: Secret("pass".to_string()),
+            };
+            assert!(cmd
+                .to_wire_format()
+                .is_err());
+        }
+        let cmd = EslCommand::UserAuth {
+            user: "admin@default".to_string(),
+            password: Secret("pa:ss@word".to_string()),
+        };
+        assert!(cmd
+            .to_wire_format()
+            .is_ok());
+    }
+
     #[test]
     fn test_user_auth_newline_in_password_rejected() {
         let cmd = EslCommand::UserAuth {
