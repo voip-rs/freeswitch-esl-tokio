@@ -75,9 +75,9 @@ pub use commands::{
     DialplanType, Endpoint, EndpointFieldFault, ExecuteOn, ExecuteOnFault, GroupCallOrder,
     InvalidArgvSeparator, Originate, OriginateError, OriginateTarget, ParseBlockParseError,
     ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError, ParseMuteActionError,
-    UndeliverableVariable, UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
-    UuidHold, UuidHoldAction, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableFault,
-    VariablePart, Variables, VariablesType,
+    TransferArgumentError, TransferField, UndeliverableVariable, UnvouchedVersion, UuidAnswer,
+    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidHoldAction, UuidKill, UuidSendDtmf,
+    UuidSetVar, UuidTransfer, VariableFault, VariablePart, Variables, VariablesType,
 };
 #[cfg(feature = "esl")]
 pub use event::{

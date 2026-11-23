@@ -16,6 +16,7 @@ pub mod endpoint;
 pub mod execute_on;
 pub mod flattened;
 pub mod originate;
+pub mod transfer;
 pub mod variables;
 
 #[cfg(all(test, feature = "serde"))]
@@ -44,6 +45,7 @@ pub use originate::{
     Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
     ParseDialplanTypeError, Variables, VariablesType,
 };
+pub use transfer::{check_transfer_arguments, TransferArgumentError, TransferField};
 pub use variables::{
     BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
     UndeliverableVariable, UnvouchedVersion, VariableFault, VariablePart,

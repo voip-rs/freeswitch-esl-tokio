@@ -4,6 +4,7 @@ use std::fmt;
 
 use crate::channel::HangupCause;
 use crate::commands::originate::DialplanType;
+use crate::commands::transfer::{check_fields, TransferArgumentError, TransferField, TransferLine};
 use crate::commands::variables::UndeliverableVariable;
 use crate::switch_passes::api_argument::quote_for_uuid_setvar;
 use crate::wire_safety::check_header_value;
@@ -281,19 +282,35 @@ pub struct UuidTransfer {
 }
 
 impl UuidTransfer {
-    /// Transfer a channel to a new destination.
-    pub fn new(uuid: impl Into<String>, destination: impl Into<String>) -> Self {
-        Self {
+    /// Transfer a channel to a new destination, refusing one the switch would read as
+    /// something else; see [`TransferArgumentError`].
+    pub fn new(
+        uuid: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Result<Self, TransferArgumentError> {
+        let destination = destination.into();
+        check_fields(
+            &[(TransferField::Extension, &destination)],
+            TransferLine::UuidTransfer,
+        )?;
+        Ok(Self {
             uuid: uuid.into(),
-            destination: destination.into(),
+            destination,
             dialplan: None,
-        }
+        })
     }
 
-    /// Set the dialplan to use for the transfer.
-    pub fn with_dialplan(mut self, dialplan: DialplanType) -> Self {
+    /// Set the dialplan to use for the transfer, refusing a name the blank split would cut.
+    pub fn with_dialplan(mut self, dialplan: DialplanType) -> Result<Self, TransferArgumentError> {
+        check_fields(
+            &[
+                (TransferField::Extension, &self.destination),
+                (TransferField::Dialplan, dialplan.name()),
+            ],
+            TransferLine::UuidTransfer,
+        )?;
         self.dialplan = Some(dialplan);
-        self
+        Ok(self)
     }
 
     /// Channel UUID.
@@ -448,13 +465,16 @@ mod tests {
 
     #[test]
     fn uuid_transfer_no_dialplan() {
-        let cmd = UuidTransfer::new(UUID, "1000");
+        let cmd = UuidTransfer::new(UUID, "1000").unwrap();
         assert_eq!(cmd.to_string(), format!("uuid_transfer {} 1000", UUID));
     }
 
     #[test]
     fn uuid_transfer_with_dialplan() {
-        let cmd = UuidTransfer::new(UUID, "1000").with_dialplan(DialplanType::XML);
+        let cmd = UuidTransfer::new(UUID, "1000")
+            .unwrap()
+            .with_dialplan(DialplanType::XML)
+            .unwrap();
         assert_eq!(cmd.to_string(), format!("uuid_transfer {} 1000 XML", UUID));
     }
 
@@ -462,15 +482,19 @@ mod tests {
     /// dialplan back as built, and no leg selector, which it takes from any leading `-`.
     #[test]
     fn uuid_transfer_reads_back_as_built() {
-        let mut misread = Vec::new();
+        let (mut misread, mut refused) = (Vec::new(), Vec::new());
         for destination in [
             "1000", "a b", "it's", "a\\\\b", "", "-bleg", "-1000", "-BOTH",
         ] {
             for dialplan in [None, Some("XML"), Some("my plan")] {
-                let mut cmd = UuidTransfer::new(UUID, destination);
-                if let Some(name) = dialplan {
-                    cmd = cmd.with_dialplan(DialplanType::named(name).unwrap());
-                }
+                let built = UuidTransfer::new(UUID, destination).and_then(|cmd| match dialplan {
+                    Some(name) => cmd.with_dialplan(DialplanType::named(name).unwrap()),
+                    None => Ok(cmd),
+                });
+                let Ok(cmd) = built else {
+                    refused.push((destination, dialplan));
+                    continue;
+                };
                 let line = cmd.to_string();
                 let read: Option<Vec<String>> = originate_split(&line, ' ')
                     .ok()
@@ -489,6 +513,10 @@ mod tests {
             }
         }
         assert!(misread.is_empty(), "{misread:#?}");
+        assert!(
+            !refused.contains(&("1000", None)) && !refused.contains(&("1000", Some("XML"))),
+            "{refused:?}"
+        );
     }
 
     #[test]

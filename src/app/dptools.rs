@@ -1,14 +1,14 @@
 //! FreeSWITCH dptools application commands (`answer`, `hangup`, `playback`, etc.).
 
-use std::fmt;
-
 use crate::channel::HangupCause;
 use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
 use crate::commands::{
-    originate_split, originate_unquote, BlockParse, BridgeDialString, UndeliverableVariable,
+    check_transfer_arguments, BlockParse, BridgeDialString, UndeliverableVariable,
 };
 use freeswitch_types::wire_safety::check_header_value;
+
+pub use freeswitch_types::commands::{TransferArgumentError, TransferField};
 
 /// Constructors for common dptools application commands.
 ///
@@ -106,95 +106,8 @@ impl AppCommand {
     }
 }
 
-/// A `transfer` argument field.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum TransferField {
-    /// The destination extension, first.
-    Extension,
-    /// The dialplan name, second.
-    Dialplan,
-    /// The context, third.
-    Context,
-}
-
-impl fmt::Display for TransferField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            TransferField::Extension => "extension",
-            TransferField::Dialplan => "dialplan",
-            TransferField::Context => "context",
-        })
-    }
-}
-
-/// A `transfer` argument the switch would read as something else.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum TransferArgumentError {
-    /// `transfer_function` splits its argument on blanks, honouring `'` quotes and
-    /// `\` escapes, and this field would not come back as itself.
-    #[error("transfer {field} {value:?} does not survive the switch's argument split")]
-    Unsplittable {
-        /// Which field.
-        field: TransferField,
-        /// The field as given.
-        value: String,
-    },
-    /// `-bleg` or `-both` in any case, which `transfer_function` reads as the
-    /// leg to transfer rather than as an extension.
-    #[error("transfer extension {extension:?} is read as a leg selector")]
-    LegSelector {
-        /// The extension as given.
-        extension: String,
-    },
-}
-
-/// Whether `value` comes back from the switch's blank split as one token equal
-/// to itself. Only the line's first token can open with a `^^X` delimiter head,
-/// so a later one is checked behind a stand-in token.
-fn survives_blank_split(value: &str, first: bool) -> bool {
-    let line = if first {
-        value.to_string()
-    } else {
-        format!("x {value}")
-    };
-    let Ok(tokens) = originate_split(&line, ' ') else {
-        return false;
-    };
-    let read: Vec<String> = tokens
-        .iter()
-        .skip(usize::from(!first))
-        .map(|t| originate_unquote(t))
-        .collect();
-    read == [value]
-}
-
-/// First arguments `transfer_function` reads as the leg to transfer, in any case.
-const LEG_SELECTORS: [&str; 2] = ["-bleg", "-both"];
-
 fn transfer_command(fields: &[(TransferField, &str)]) -> Result<EslCommand, TransferArgumentError> {
-    if let Some((_, extension)) = fields.first() {
-        if LEG_SELECTORS
-            .iter()
-            .any(|s| extension.eq_ignore_ascii_case(s))
-        {
-            return Err(TransferArgumentError::LegSelector {
-                extension: extension.to_string(),
-            });
-        }
-    }
-    for (index, (field, value)) in fields
-        .iter()
-        .enumerate()
-    {
-        if !survives_blank_split(value, index == 0) {
-            return Err(TransferArgumentError::Unsplittable {
-                field: *field,
-                value: value.to_string(),
-            });
-        }
-    }
+    check_transfer_arguments(fields)?;
     let args: Vec<&str> = fields
         .iter()
         .map(|(_, value)| *value)

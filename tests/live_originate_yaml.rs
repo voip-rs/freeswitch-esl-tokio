@@ -604,7 +604,8 @@ async fn live_originate_loopback_bowout_on_execute() {
         client
             .api(
                 &UuidTransfer::new(&a_leg, "bridge:null/nearend")
-                    .with_dialplan(DialplanType::INLINE)
+                    .and_then(|cmd| cmd.with_dialplan(DialplanType::INLINE))
+                    .expect("a destination the switch reads back")
                     .to_string(),
             )
             .await
