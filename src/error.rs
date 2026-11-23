@@ -21,6 +21,7 @@ use crate::commands::OriginateError;
 use crate::constants::{REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
 use freeswitch_types::event::FilterHeaderFault;
 use freeswitch_types::variables::ParseLoopbackLegError;
+use freeswitch_types::UndeliverableVariable;
 use freeswitch_types::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseGatewayRegStateError, ParseHangupCauseError, ParseHeaderError, ParsePriorityError,
@@ -251,6 +252,12 @@ pub enum EslError {
         /// The user as given.
         user: String,
     },
+
+    /// A channel variable the switch would not deliver as written, from
+    /// [`AppCommand::set_var`](crate::AppCommand::set_var) or
+    /// [`UuidSetVar::new`](crate::UuidSetVar::new). Nothing was sent.
+    #[error("channel variable refused")]
+    UndeliverableVariable(#[from] UndeliverableVariable),
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -420,6 +427,7 @@ impl EslError {
             EslError::ConnectTimeout { .. } => false,
             EslError::HandshakeTimeout { .. } => false,
             EslError::ColonInAuthUser { .. } => false,
+            EslError::UndeliverableVariable(_) => false,
         }
     }
 
@@ -475,6 +483,7 @@ impl EslError {
             EslError::ConnectTimeout { .. } => true,
             EslError::HandshakeTimeout { .. } => true,
             EslError::ColonInAuthUser { .. } => false,
+            EslError::UndeliverableVariable(_) => false,
         }
     }
 
@@ -895,6 +904,10 @@ mod tests {
             EslError::from(ParseChannelStateError("CS_INNER_CAUSE".into())),
             EslError::from(
                 crate::AppCommand::transfer("inner cause").expect_err("a space is refused"),
+            ),
+            EslError::from(
+                crate::AppCommand::set_var("sip_h_X-Inner", "a\u{1}b")
+                    .expect_err("a control character is refused"),
             ),
             #[cfg(unix)]
             EslError::ReexecFailed {
