@@ -1034,6 +1034,50 @@ mod tests {
         assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
     }
 
+    /// A `[]` block at the head renders as the first leg's block, and an empty block of any
+    /// scope renders as nothing and reads back as `None`.
+    #[test]
+    fn global_variables_round_trip_in_every_scope() {
+        let mut broken = Vec::new();
+        for scope in [
+            VariablesType::Default,
+            VariablesType::Channel,
+            VariablesType::Enterprise,
+        ] {
+            for pairs in [&[][..], &[("k", "v")][..]] {
+                let mut vars = Variables::new(scope);
+                for (k, v) in pairs {
+                    vars.insert(*k, *v)
+                        .unwrap();
+                }
+                let bridge = BridgeDialString::new(vec![loopbacks(2)])
+                    .unwrap()
+                    .with_variables(vars);
+                let rendered = bridge.render(BlockParse::MEASURED);
+                let back = BridgeDialString::parse_for(&rendered, BlockParse::MEASURED);
+                if back != Ok(bridge) {
+                    broken.push(format!("{scope:?} {pairs:?}: {rendered} -> {back:?}"));
+                }
+            }
+        }
+        assert!(broken.is_empty(), "{broken:#?}");
+    }
+
+    /// Config load reads the global block through the same check as the builder.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn config_load_refuses_a_channel_scope_global_block() {
+        let groups = serde_json::json!([loopbacks(1)]);
+        let json = serde_json::json!({
+            "variables": { "scope": "channel", "vars": { "k": "v" } },
+            "groups": groups,
+        });
+        assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
+        let json = serde_json::json!({ "variables": {}, "groups": groups });
+        let bridge = serde_json::from_value::<BridgeDialString>(json).unwrap();
+        assert_eq!(bridge.variables(), None);
+    }
+
     fn loopbacks(count: usize) -> Vec<Endpoint> {
         (0..count)
             .map(|n| {
