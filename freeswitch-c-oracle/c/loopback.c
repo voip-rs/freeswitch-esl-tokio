@@ -23,12 +23,6 @@ static switch_caller_profile_t *switch_caller_profile_clone(switch_core_session_
 	return profile;
 }
 
-static void switch_channel_set_name(switch_channel_t *channel, const char *name)
-{
-	(void) channel;
-	oracle_field("name", name);
-}
-
 static switch_call_cause_t oracle_loopback(switch_caller_profile_t *outbound_profile)
 {
 	switch_core_session_t *new_session_data = &oracle_session;

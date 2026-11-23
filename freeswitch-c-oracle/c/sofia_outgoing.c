@@ -1,5 +1,5 @@
-/* sofia_outgoing_channel from mod_sofia.c, from its destination check through the To URI, up to
-   attaching the private object to the profile; the session and channel are stubs. */
+/* sofia_outgoing_channel from mod_sofia.c, from its destination check through attaching
+   the private object to the profile, which names the channel; the session and channel are stubs. */
 //@ function src/mod/endpoints/mod_sofia/sofia_glue.c sofia_glue_str2transport
 //@ function src/mod/endpoints/mod_sofia/sofia_glue.c sofia_glue_strip_proto
 //@ function src/switch_utils.c switch_url_decode
@@ -18,7 +18,28 @@ typedef struct private_object {
 	struct {
 		char *remote_ip;
 	} mparams;
+	sofia_profile_t *profile;
+	switch_channel_t *channel;
 } private_object_t;
+
+/* switch_snprintf is fspr_vsnprintf, which truncates and terminates as snprintf does. */
+#define switch_snprintf snprintf
+
+//@ function src/mod/endpoints/mod_sofia/sofia_glue.c sofia_glue_set_name
+
+/* Of sofia_glue_attach_private, only what names the channel. */
+static void sofia_glue_attach_private(switch_core_session_t *session, sofia_profile_t *profile, private_object_t *tech_pvt,
+									  const char *channame)
+{
+	tech_pvt->profile = profile;
+	tech_pvt->channel = switch_core_session_get_channel(session);
+	if (channame) {
+		sofia_glue_set_name(tech_pvt, channame);
+	}
+}
+
+/* Set by the harness: a registration answers a contact on 192.0.2.2, else nothing. */
+static _Thread_local int oracle_registered;
 
 /* Resolution answers nothing, so the rewrite it guards never runs. */
 static struct hostent *oracle_gethostbyname(const char *name)
@@ -35,15 +56,17 @@ static struct hostent *oracle_gethostbyname(const char *name)
 static const char *sofia_reg_find_reg_url(sofia_profile_t *profile, const char *user, const char *host, char *val, switch_size_t len)
 {
 	(void) profile;
-	(void) val;
-	(void) len;
 	oracle_record(ORACLE_REGISTRATION, user, host);
-	return NULL;
+	if (!oracle_registered) {
+		return NULL;
+	}
+	snprintf(val, len, "sip:%s@192.0.2.2", user);
+	return val;
 }
 
-//@ export oracle_sofia_outgoing_channel (destination: *const c_char, headers: *const *const c_char, profiles: *const *const c_char, gateways: *const *const c_char, emit: Emit, ctx: *mut c_void)
+//@ export oracle_sofia_outgoing_channel (destination: *const c_char, headers: *const *const c_char, profiles: *const *const c_char, gateways: *const *const c_char, registered: c_int, emit: Emit, ctx: *mut c_void)
 void oracle_sofia_outgoing_channel(const char *destination, const char *const *headers, const char *const *profiles,
-								   const char *const *gateways, oracle_emit_fn emit, void *ctx)
+								   const char *const *gateways, int registered, oracle_emit_fn emit, void *ctx)
 {
 	switch_call_cause_t cause = SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER;
 	switch_core_session_t *session = NULL;
@@ -71,6 +94,7 @@ void oracle_sofia_outgoing_channel(const char *destination, const char *const *h
 	oracle_headers = headers;
 	oracle_profiles = profiles;
 	oracle_gateways = gateways;
+	oracle_registered = registered;
 	outbound.pool = &pool;
 	outbound.destination_number = copy;
 
@@ -98,6 +122,8 @@ void oracle_sofia_outgoing_channel(const char *destination, const char *const *h
 	//@ block src/mod/endpoints/mod_sofia/mod_sofia.c sofia_outgoing_channel if (!tech_pvt->dest_to) {
 
 	//@ block src/mod/endpoints/mod_sofia/mod_sofia.c sofia_outgoing_channel if (!zstr(tech_pvt->dest) && switch_stristr("transport=ws", tech_pvt->dest)) {
+
+	//@ block src/mod/endpoints/mod_sofia/mod_sofia.c sofia_outgoing_channel sofia_glue_attach_private(nsession, profile, tech_pvt, dest);
 
 	goto done;
 

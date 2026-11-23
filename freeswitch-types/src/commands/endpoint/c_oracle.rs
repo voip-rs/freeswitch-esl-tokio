@@ -2,15 +2,16 @@
 //! the switch's own C on every built tree.
 
 use freeswitch_c_oracle::{
-    against_the_c, oracles, ContactSelect, GroupCall as GroupCallRead, Oracle, Sofia,
-    SofiaOutgoing, UserOutgoing, DEFAULT_DOMAIN,
+    against_the_c, on_every_tree, oracles, ContactSelect, GroupCall as GroupCallRead, Oracle,
+    Sofia, SofiaOutgoing, UserOutgoing, DEFAULT_DOMAIN,
 };
 use std::borrow::Cow;
 
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{DestinationEncoding, Endpoint, GroupCallOrder};
+use super::sofia::tests::NAMED;
+use super::{DestinationEncoding, Endpoint, GroupCallOrder, SofiaEndpoint};
 use crate::commands::proptests::{bare_endpoint, c_reads_the_leg, fields_name_a_variable, targets};
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::switch_passes::against_the_c_at_its_revision;
@@ -55,6 +56,8 @@ fn named(mut out: SofiaOutgoing, name: &str, prefix: &str) -> SofiaOutgoing {
             rename(value);
         }
     }
+    // The channel name is held to the C by its own property, a profile's `;` cutting it short.
+    out.channel_name = None;
     let head = [bytes(prefix), name.clone(), bytes("/")].concat();
     if let Some(rest) = out
         .destination_number
@@ -245,6 +248,7 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                             .as_bytes()],
                         gateways: &[],
                         headers,
+                        registered: false,
                     },
                 );
                 let mut reference = c.sofia_outgoing_channel(
@@ -253,6 +257,7 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         profiles: &[b"internal"],
                         gateways: &[],
                         headers,
+                        registered: false,
                     },
                 );
                 let destination = format!("{}/{}", ep.profile(), ep.destination());
@@ -290,6 +295,7 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         profiles: &[],
                         gateways: &[key.as_bytes()],
                         headers,
+                        registered: false,
                     },
                 );
                 let destination = format!("gateway/{key}/{}", ep.destination());
@@ -302,6 +308,7 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         profiles: &[],
                         gateways: &[b"gw1"],
                         headers,
+                        registered: false,
                     },
                 );
                 prop_assert_eq!(
@@ -386,6 +393,150 @@ fn url_unsafe_is_the_switch_set_on_every_tree() {
             "SWITCH_URL_UNSAFE on {tree}"
         );
     }
+}
+
+/// `ep` through `sofia_outgoing_channel` with `encoding`, its profile found and every user
+/// registered, so each path reaches the attach that names the channel.
+fn sofia_leg(c: Oracle, ep: &SofiaEndpoint, encoding: DestinationEncoding) -> SofiaOutgoing {
+    let headers = match encoding {
+        DestinationEncoding::Encoded => &[][..],
+        DestinationEncoding::Suppressed => SUPPRESSED,
+    };
+    c.sofia_outgoing_channel(
+        format!("{}/{}", ep.profile(), ep.destination()).as_bytes(),
+        &Sofia {
+            profiles: &[ep
+                .profile()
+                .as_bytes()],
+            gateways: &[],
+            headers,
+            registered: true,
+        },
+    )
+}
+
+#[test]
+fn the_named_destinations_are_named_as_the_switch_names_them() {
+    for (tree, c) in oracles() {
+        for &(destination, encoded, suppressed) in NAMED {
+            let ep = SofiaEndpoint::new("internal", destination).unwrap();
+            for (encoding, want) in [
+                (DestinationEncoding::Encoded, encoded),
+                (DestinationEncoding::Suppressed, suppressed),
+            ] {
+                let Some(want) = want else {
+                    continue;
+                };
+                assert_eq!(
+                    sofia_leg(c, &ep, encoding)
+                        .channel_name
+                        .as_deref()
+                        .map(String::from_utf8_lossy),
+                    Some(want.into()),
+                    "{destination:?} {encoding:?} on tree {tree}"
+                );
+            }
+        }
+    }
+}
+
+const NAME_PROFILES: &[&str] = &["internal", "Internal", "lab-lo", "a;b", "é"];
+
+const NAME_PIECES: &[&str] = &[
+    "1000",
+    "x",
+    "sip:",
+    "sips:",
+    "SIP:",
+    "@",
+    "pbx.example.com",
+    "host",
+    "/",
+    "^",
+    "%",
+    "%20",
+    "%2f",
+    "%4A",
+    " ",
+    ";",
+    "transport=tcp",
+    "+",
+    "#",
+    ":",
+    "é",
+];
+
+/// The name `channel_name` gives a profile leg is the one the attach gives it on each tree. `None`
+/// only where the trees name it apart, the name fills the switch's buffer, or the leg would look
+/// up an empty user, which no registration answers.
+#[test]
+fn a_sofia_leg_is_named_as_the_switch_names_it() {
+    let piece = prop_oneof![
+        20 => select(NAME_PIECES).prop_map(str::to_owned),
+        1 => Just("7".repeat(120)),
+    ];
+    let leg = (
+        select(NAME_PROFILES),
+        proptest::collection::vec(piece, 0..10).prop_map(|pieces| pieces.concat()),
+        any::<bool>(),
+    );
+    on_every_tree(
+        file!(),
+        "a_sofia_leg_is_named_as_the_switch_names_it",
+        leg,
+        |tree, c, (profile, destination, suppressed)| {
+            let Ok(ep) = SofiaEndpoint::new(profile, &destination) else {
+                return Ok(());
+            };
+            let encoding = if suppressed {
+                DestinationEncoding::Suppressed
+            } else {
+                DestinationEncoding::Encoded
+            };
+            let read = sofia_leg(c, &ep, encoding);
+            let Some(name) = ep.channel_name(encoding) else {
+                let names: Vec<Option<Vec<u8>>> = oracles()
+                    .map(|(_, c)| sofia_leg(c, &ep, encoding).channel_name)
+                    .collect();
+                let apart = names
+                    .windows(2)
+                    .any(|pair| pair[0] != pair[1]);
+                let full = read
+                    .channel_name
+                    .as_ref()
+                    .is_some_and(|name| name.len() == 255 && !name.contains(&b';'));
+                let unregistrable =
+                    matches!(&read.registration_lookups[..], [(user, _)] if user.is_empty());
+                prop_assert!(
+                    apart || full || unregistrable,
+                    "{:?}/{:?} {:?} on tree {}: None, the C names it {:?}",
+                    profile,
+                    destination,
+                    encoding,
+                    tree,
+                    read.channel_name
+                        .as_deref()
+                        .map(String::from_utf8_lossy)
+                );
+                return Ok(());
+            };
+            prop_assert_eq!(
+                read.channel_name
+                    .as_deref()
+                    .map(String::from_utf8_lossy),
+                Some(
+                    name.as_str()
+                        .into()
+                ),
+                "{:?}/{:?} {:?} on tree {}",
+                profile,
+                destination,
+                encoding,
+                tree
+            );
+            Ok(())
+        },
+    );
 }
 
 fn config_refuses(endpoint: &Endpoint) -> bool {

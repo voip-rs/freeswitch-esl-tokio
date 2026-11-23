@@ -455,3 +455,11 @@ static void oracle_field(const char *name, const char *value)
 {
 	oracle_record(ORACLE_FIELD, name, value);
 }
+
+/* The channel's name, reported as the field `name`. */
+static switch_status_t switch_channel_set_name(switch_channel_t *channel, const char *name)
+{
+	(void) channel;
+	oracle_field("name", name);
+	return SWITCH_STATUS_SUCCESS;
+}

@@ -44,6 +44,7 @@ const SOFIA: Sofia<'static> = Sofia {
     profiles: &[b"internal"],
     gateways: &[b"gw1"],
     headers: &[],
+    registered: false,
 };
 
 fn text() -> impl Strategy<Value = Vec<u8>> {
@@ -238,6 +239,7 @@ fn a_profile_destination_composes_the_request_uri() {
                 e_dest: some("1000@example.com"),
                 dest_to: some("sip:1000@example.com"),
                 remote_ip: some("example.com"),
+                channel_name: some("sofia/internal/1000@example.com"),
                 ..SofiaOutgoing::default()
             },
             "tree {tree}"
@@ -295,6 +297,7 @@ fn a_gateway_destination_composes_on_its_proxy() {
                 dest_to: some("sip:1000@gateway.example.com"),
                 invite_contact: some("<sip:gw@192.0.2.1:5060>"),
                 remote_ip: some("gateway.example.com"),
+                channel_name: some("sofia/gateway-profile/1000"),
                 ..SofiaOutgoing::default()
             },
             "tree {tree}"
@@ -386,6 +389,80 @@ fn a_scheme_or_a_dotless_host_takes_its_own_path() {
         assert_eq!(
             (dotless.cause, dotless.host_lookups, dotless.dest),
             (None, vec![bytes("host")], some("sip:1000@host")),
+            "tree {tree}"
+        );
+    }
+}
+
+/// The attach names the channel `sofia/<profile name>/<dest>`, cut at its first `;` and its
+/// 256-byte buffer; a call that fails before the attach names none.
+#[test]
+fn the_attach_names_the_channel_after_the_profile_and_destination() {
+    let registered = Sofia {
+        registered: true,
+        ..SOFIA
+    };
+    let suppressed = Sofia {
+        headers: &[(b"sofia_suppress_url_encoding", b"true")],
+        ..registered
+    };
+    let cases: &[(&[u8], &Sofia<'_>, Option<&str>)] = &[
+        (
+            b"internal/sip:+1555@host;transport=tcp",
+            &suppressed,
+            Some("sofia/internal/sip:+1555@host"),
+        ),
+        (
+            b"internal/sip:+1555@host;transport=tcp",
+            &registered,
+            Some("sofia/internal/%2B1555@host"),
+        ),
+        (
+            b"internal/sip:a b@host",
+            &registered,
+            Some("sofia/internal/a%20b@host"),
+        ),
+        (
+            b"internal/1000^2000@host",
+            &registered,
+            Some("sofia/internal/1000%5E2000@host"),
+        ),
+        (
+            b"internal/1000^2000@host",
+            &suppressed,
+            Some("sofia/internal/1000"),
+        ),
+        (
+            b"internal/user%host",
+            &registered,
+            Some("sofia/internal/user"),
+        ),
+        (b"internal/x@y/z w", &registered, Some("sofia/internal/x@y")),
+        (b"internal/1000", &registered, Some("sofia/internal/1000")),
+        (b"internal/1000", &SOFIA, None),
+        (b"unknown/1000@host", &registered, None),
+    ];
+    let long = format!("internal/{}@example.com", "1".repeat(300));
+    for (tree, c) in oracles() {
+        for &(destination, sofia, name) in cases {
+            assert_eq!(
+                c.sofia_outgoing_channel(destination, sofia)
+                    .channel_name,
+                name.map(bytes),
+                "{:?} on tree {tree}",
+                lossy(destination)
+            );
+        }
+        let cut = c
+            .sofia_outgoing_channel(long.as_bytes(), &registered)
+            .channel_name;
+        assert_eq!(
+            cut,
+            Some(
+                long.replace("internal/", "sofia/internal/")
+                    .as_bytes()[..255]
+                    .to_vec()
+            ),
             "tree {tree}"
         );
     }

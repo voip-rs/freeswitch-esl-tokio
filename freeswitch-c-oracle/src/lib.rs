@@ -237,10 +237,11 @@ pub struct Sofia<'a> {
     pub gateways: &'a [&'a [u8]],
     /// Headers of the originate's variable event, name then value, matched in any case.
     pub headers: &'a [(&'a [u8], &'a [u8])],
+    /// Every registration lookup answers the contact `sip:<user>@192.0.2.2`; unset, none does.
+    pub registered: bool,
 }
 
-/// What `sofia_outgoing_channel` made of a destination. A registration and a host resolution
-/// answer nothing.
+/// What `sofia_outgoing_channel` made of a destination. A host resolution answers nothing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SofiaOutgoing {
     /// The cause it failed with, `None` where it reached the attach.
@@ -279,6 +280,8 @@ pub struct SofiaOutgoing {
     pub local_url: Option<Vec<u8>>,
     /// `mparams.remote_ip`.
     pub remote_ip: Option<Vec<u8>>,
+    /// The name `sofia_glue_set_name` gave the channel, `None` where it never reached the attach.
+    pub channel_name: Option<Vec<u8>>,
 }
 
 /// What `sofia_contact_function` did with its argument. The profile hash is empty and a
@@ -378,6 +381,17 @@ impl Fields {
             .iter()
             .rposition(|(field, _)| field == name.as_bytes())
             .unwrap_or_else(|| panic!("the harness reported no field {name}"));
+        self.0
+            .remove(at)
+            .1
+    }
+
+    /// A field only some paths report, `None` where it was not.
+    fn take_reported(&mut self, name: &str) -> Option<Vec<u8>> {
+        let at = self
+            .0
+            .iter()
+            .rposition(|(field, _)| field == name.as_bytes())?;
         self.0
             .remove(at)
             .1
@@ -1023,7 +1037,7 @@ impl Oracle {
     }
 
     /// `sofia_outgoing_channel` in mod_sofia on a destination, the `sofia/` endpoint text after its
-    /// prefix, up to attaching its private object to the profile.
+    /// prefix, through attaching its private object to the profile, which names the channel.
     pub fn sofia_outgoing_channel(self, destination: &[u8], sofia: &Sofia<'_>) -> SofiaOutgoing {
         let input = buffer(destination);
         let headers = CArray::new(
@@ -1057,6 +1071,7 @@ impl Oracle {
                     headers.as_ptr(),
                     profiles.as_ptr(),
                     gateways.as_ptr(),
+                    c_int::from(sofia.registered),
                     emit,
                     ctx,
                 );
@@ -1102,6 +1117,7 @@ impl Oracle {
         outgoing.invite_contact = fields.take("invite_contact");
         outgoing.local_url = fields.take("local_url");
         outgoing.remote_ip = fields.take("remote_ip");
+        outgoing.channel_name = fields.take_reported("name");
         outgoing
     }
 

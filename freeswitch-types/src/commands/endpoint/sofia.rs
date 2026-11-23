@@ -137,6 +137,12 @@ impl SofiaEndpoint {
     pub fn user(&self, encoding: DestinationEncoding) -> Option<Cow<'_, str>> {
         dialed_user(&self.destination, encoding, DialPath::Profile)
     }
+
+    /// The name the switch gives this leg.
+    pub fn channel_name(&self, encoding: DestinationEncoding) -> Option<String> {
+        let _ = encoding;
+        None
+    }
 }
 
 impl SofiaGateway {
@@ -551,10 +557,11 @@ impl_endpoint_parse!(config:
 );
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::commands::variables::DialStringCarrier;
     use crate::commands::variables::VariablesType;
+    use crate::sofia::SofiaChannelName;
 
     // --- SofiaEndpoint ---
 
@@ -958,6 +965,106 @@ mod tests {
                     .map(Cow::into_owned)
             },
         );
+    }
+
+    /// Destinations on profile `internal`, with the name each encoding gives the leg.
+    pub(in crate::commands::endpoint) const NAMED: &[UserCase] = &[
+        (
+            "sip:+1555@pbx.example.com;transport=tcp",
+            Some("sofia/internal/%2B1555@pbx.example.com"),
+            Some("sofia/internal/sip:+1555@pbx.example.com"),
+        ),
+        (
+            "sip:a b@pbx.example.com",
+            Some("sofia/internal/a%20b@pbx.example.com"),
+            Some("sofia/internal/sip:a b@pbx.example.com"),
+        ),
+        (
+            "1000^2000@pbx.example.com",
+            Some("sofia/internal/1000%5E2000@pbx.example.com"),
+            Some("sofia/internal/1000"),
+        ),
+        (
+            "+1555;npdi=yes@pbx.example.com",
+            Some("sofia/internal/%2B1555%3Bnpdi%3Dyes@pbx.example.com"),
+            Some("sofia/internal/+1555"),
+        ),
+        (
+            "user%pbx.example.com",
+            Some("sofia/internal/user"),
+            Some("sofia/internal/user"),
+        ),
+        (
+            "a%20b@pbx.example.com",
+            Some("sofia/internal/a%20b@pbx.example.com"),
+            Some("sofia/internal/a%20b@pbx.example.com"),
+        ),
+        (
+            "a b%20c@pbx.example.com",
+            None,
+            Some("sofia/internal/a b%20c@pbx.example.com"),
+        ),
+        (
+            "x@pbx.example.com/z w",
+            Some("sofia/internal/x@pbx.example.com"),
+            Some("sofia/internal/x@pbx.example.com/z w"),
+        ),
+        (
+            "1000",
+            Some("sofia/internal/1000"),
+            Some("sofia/internal/1000"),
+        ),
+        ("^2000", None, None),
+    ];
+
+    #[test]
+    fn sofia_endpoint_channel_name() {
+        let long = format!("{}@pbx.example.com", "1".repeat(300));
+        let cut = format!("{}@pbx.example.com;{}", "1".repeat(200), "x".repeat(100));
+        let fits = format!("sofia/internal/{}@pbx.example.com", "1".repeat(200));
+        let cases: &[UserCase] = &[
+            (long.leak(), None, None),
+            (
+                cut.leak(),
+                Some(
+                    fits.clone()
+                        .leak(),
+                ),
+                Some(fits.leak()),
+            ),
+        ];
+        let name = |destination: &str, encoding| {
+            SofiaEndpoint::new("internal", destination)
+                .unwrap()
+                .channel_name(encoding)
+        };
+        assert_users(NAMED, name);
+        assert_users(cases, name);
+    }
+
+    #[test]
+    fn a_channel_name_parses_back_to_its_profile_and_destination() {
+        for &(destination, encoded, suppressed) in NAMED {
+            for (name, encoding) in [
+                (encoded, DestinationEncoding::Encoded),
+                (suppressed, DestinationEncoding::Suppressed),
+            ] {
+                let Some(name) = name else {
+                    continue;
+                };
+                let built = SofiaEndpoint::new("internal", destination)
+                    .unwrap()
+                    .channel_name(encoding)
+                    .unwrap();
+                let parsed = SofiaChannelName::parse(&built).unwrap();
+                assert_eq!(parsed.profile(), "internal", "{destination:?}");
+                assert_eq!(
+                    parsed.destination(),
+                    &name["sofia/internal/".len()..],
+                    "{destination:?} {encoding:?}"
+                );
+            }
+        }
     }
 
     #[test]
