@@ -108,7 +108,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `Originate::display_with(block_parse)`, `BridgeDialString::display_with(block_parse)` and their `OriginateDisplay`, `BridgeDialStringDisplay` adapters | `render(block_parse)`, which returns the `String` |
 | `Originate::parse_with(s, block_parse)`, `BridgeDialString::parse_with(s, block_parse)` | `parse_for(s, block_parse)` |
 | `AppCommand::bridge(destination: impl Display)` with a `BridgeDialString`, an `Endpoint` or a string | `AppCommand::bridge(&bridge, block_parse)` for a `BridgeDialString`; `AppCommand::bridge_raw(&s)` sends a string verbatim, such as `endpoint.render(DialStringTarget::new(DialStringCarrier::Dialplan, block_parse))` |
-| `FlattenedDialString::display_for(target)` and its `FlattenedDialStringDisplay` adapter | `render(target)`, which returns the `String`; `display_raw()` stays and returns an `impl Display` |
+| `FlattenedDialString::display_for(target)` and its `FlattenedDialStringDisplay` adapter | `render(target)`, which returns the `String`; `display_raw()` stays and returns an `impl Display`, which is neither `Copy` nor `Clone`: call it again where the adapter was copied |
 | `BlockParse::default()`, `BlockParse: Default` | `BlockParse::for_version(&version)` for the release you target, or a named revision such as `BlockParse::PairSplitCleans` |
 | `DialStringTarget::new(carrier)` | `DialStringTarget::new(carrier, block_parse)` |
 | a bare `DialStringCarrier` passed where a `DialStringTarget` is taken (`render`, `parse_for`) | `DialStringTarget::new(carrier, block_parse)`; the `From<DialStringCarrier>` impl that filled in a revision is gone, and `render` and `parse_for` take a `DialStringTarget` rather than `impl Into<DialStringTarget>` |

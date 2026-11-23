@@ -519,8 +519,10 @@ fn without_legs(input: &str, carrier: DialStringCarrier, dropped: &[usize]) -> S
         index += 1;
         !dropped.contains(&(index - 1))
     });
-    list.display_raw()
-        .to_string()
+    let raw = list
+        .display_raw()
+        .to_string();
+    raw
 }
 
 #[test]

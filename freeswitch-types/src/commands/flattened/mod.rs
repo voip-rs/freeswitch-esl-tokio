@@ -427,7 +427,7 @@ impl FlattenedDialString {
 
     /// The input text of the kept legs, joined by the separators that stood
     /// before each of them in the input; byte-identical when nothing was removed.
-    pub fn display_raw(&self) -> impl fmt::Display + Copy + '_ {
+    pub fn display_raw(&self) -> impl fmt::Display + '_ {
         Raw(self)
     }
 
