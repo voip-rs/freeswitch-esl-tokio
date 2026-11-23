@@ -86,6 +86,10 @@ name = "mock_tests"
 required-features = ["test-util"]
 
 [[test]]
+name = "queue_full_log"
+required-features = ["test-util"]
+
+[[test]]
 name = "reexec_tests"
 required-features = ["test-util"]
 
