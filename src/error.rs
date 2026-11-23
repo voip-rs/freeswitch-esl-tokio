@@ -88,7 +88,7 @@ pub enum EslError {
     /// eventually arrives — is silently discarded rather than routed to
     /// the next command's waiter, preserving reply correlation.
     #[error("Operation timed out after {timeout_ms}ms")]
-    Timeout {
+    CommandTimeout {
         /// Elapsed time in milliseconds before the operation was abandoned.
         timeout_ms: u64,
     },
@@ -395,7 +395,7 @@ impl EslError {
     }
 
     /// `true` if the session is still up and only this command failed, so the
-    /// caller can retry it: `Timeout`, `CommandFailed`, `UnexpectedReply`,
+    /// caller can retry it: `CommandTimeout`, `CommandFailed`, `UnexpectedReply`,
     /// `QueueFull`.
     ///
     /// `false` covers two classes [the module docs](crate::error) tell apart: a
@@ -410,7 +410,7 @@ impl EslError {
             EslError::ConnectionClosed => false,
             EslError::AuthenticationFailed { .. } => false,
             EslError::AccessDenied { .. } => false,
-            EslError::Timeout { .. } => true,
+            EslError::CommandTimeout { .. } => true,
             EslError::CommandFailed { .. } => true,
             EslError::UnexpectedReply { .. } => true,
             EslError::QueueFull => true,
@@ -469,7 +469,7 @@ impl EslError {
             EslError::AuthenticationFailed { .. } => false,
             EslError::CommandFailed { .. } => false,
             EslError::UnexpectedReply { .. } => false,
-            EslError::Timeout { .. } => false,
+            EslError::CommandTimeout { .. } => false,
             EslError::QueueFull => false,
             // An event body that did not decode leaves the framing intact.
             EslError::InvalidEventFormat { .. } => false,
@@ -780,7 +780,10 @@ mod tests {
     #[test]
     fn non_command_failed_variants_do_not_classify() {
         assert_eq!(EslError::QueueFull.command_failure(), None);
-        assert_eq!(EslError::Timeout { timeout_ms: 10 }.command_failure(), None);
+        assert_eq!(
+            EslError::CommandTimeout { timeout_ms: 10 }.command_failure(),
+            None
+        );
         assert_eq!(
             EslError::UnexpectedReply {
                 reply_text: "-ERR nope".into()
@@ -814,7 +817,7 @@ mod tests {
             (io(ErrorKind::UnexpectedEof), true, false),
             (EslError::ConnectionClosed, true, false),
             (EslError::NotConnected, true, false),
-            (EslError::Timeout { timeout_ms: 5000 }, false, true),
+            (EslError::CommandTimeout { timeout_ms: 5000 }, false, true),
             (EslError::ConnectTimeout { timeout_ms: 5000 }, true, false),
             (EslError::HandshakeTimeout { timeout_ms: 5000 }, true, false),
             (

@@ -115,9 +115,8 @@ async fn inflight_command_woken_on_disconnect() {
 
     client.set_command_timeout(Duration::from_secs(5));
 
-    // Server reads the command, then closes the socket without replying.
-    // The in-flight command must fail well under command_timeout_ms, with a
-    // connection-class error -- not EslError::Timeout at the timeout boundary.
+    // The server closes without replying: a connection-class error well before
+    // EslError::CommandTimeout would fire.
     let err = inflight_command_woken_on(&client, mock, Duration::from_secs(1), |mock| async move {
         mock.drop_connection()
             .await;
@@ -309,7 +308,7 @@ async fn race_command_install_after_reader_exit() {
     assert!(err_a.is_connection_error(), "A got: {err_a}");
 
     // B must fail well under command_timeout_ms with a connection-class
-    // error -- not block until EslError::Timeout.
+    // error -- not block until EslError::CommandTimeout.
     let err_b = tokio::time::timeout(Duration::from_secs(1), task_b)
         .await
         .expect("command B still blocked: waiter installed after reader exit was never woken")
@@ -482,7 +481,7 @@ async fn test_command_timeout() {
         .await;
 
     match result {
-        Err(EslError::Timeout { .. }) => {}
+        Err(EslError::CommandTimeout { .. }) => {}
         Err(e) => panic!("Expected Timeout, got: {}", e),
         Ok(_) => panic!("Expected timeout error, got success"),
     }
@@ -498,7 +497,7 @@ async fn test_command_timeout_default() {
         .api("status")
         .await
     {
-        Err(EslError::Timeout { timeout_ms }) => assert_eq!(timeout_ms, 5000),
+        Err(EslError::CommandTimeout { timeout_ms }) => assert_eq!(timeout_ms, 5000),
         other => panic!("expected a Timeout, got: {:?}", other),
     }
 }
@@ -514,7 +513,7 @@ async fn test_command_timeout_cleanup() {
     let result = client
         .api("status")
         .await;
-    assert!(matches!(result, Err(EslError::Timeout { .. })));
+    assert!(matches!(result, Err(EslError::CommandTimeout { .. })));
 
     // Second command should still work -- pending_reply slot was cleaned up
     let api_task = tokio::spawn({
@@ -578,7 +577,7 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
         .expect("cmd_a join timeout")
         .expect("cmd_a panicked");
     assert!(
-        matches!(a_result, Err(EslError::Timeout { .. })),
+        matches!(a_result, Err(EslError::CommandTimeout { .. })),
         "command A should timeout, got: {:?}",
         a_result
     );
@@ -745,7 +744,7 @@ async fn connect_to_silent_peer(greeting: &'static [u8]) -> EslError {
 async fn a_silent_handshake_is_a_connection_error() {
     for greeting in [&b""[..], b"Content-Type: auth/request\n\n"] {
         let err = connect_to_silent_peer(greeting).await;
-        assert!(!matches!(err, EslError::Timeout { .. }), "{err:?}");
+        assert!(!matches!(err, EslError::CommandTimeout { .. }), "{err:?}");
         assert!(err.is_connection_error(), "{err:?}");
         assert!(!err.is_recoverable(), "{err:?}");
     }

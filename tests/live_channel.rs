@@ -440,7 +440,7 @@ async fn live_originate_argv_separator_timeout_is_read() {
 
     for (reply, line) in [(&short, &short_line), (&long, &long_line)] {
         assert!(
-            matches!(reply, Err(e) if !matches!(e, freeswitch_esl_tokio::EslError::Timeout { .. })),
+            matches!(reply, Err(e) if !matches!(e, freeswitch_esl_tokio::EslError::CommandTimeout { .. })),
             "{line} answered {reply:?}"
         );
     }

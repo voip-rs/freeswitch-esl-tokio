@@ -102,7 +102,7 @@ impl EslClient {
                     pending.stale_replies += 1;
                 }
                 drop(writer);
-                return Err(EslError::Timeout { timeout_ms });
+                return Err(EslError::CommandTimeout { timeout_ms });
             }
         };
 

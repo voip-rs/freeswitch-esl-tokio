@@ -149,7 +149,7 @@ async fn live_command_timeout_msleep() {
         .await;
 
     assert!(
-        matches!(result, Err(EslError::Timeout { .. })),
+        matches!(result, Err(EslError::CommandTimeout { .. })),
         "expected Timeout error, got: {:?}",
         result
     );

@@ -55,7 +55,7 @@ async fn stale_reply_warning_does_not_quote_the_reply_text() {
     assert!(matches!(
         late.await
             .unwrap(),
-        Err(EslError::Timeout { .. })
+        Err(EslError::CommandTimeout { .. })
     ));
 
     client.set_command_timeout(Duration::from_secs(5));
