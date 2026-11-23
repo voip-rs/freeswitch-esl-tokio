@@ -57,14 +57,10 @@ impl fmt::Display for TransferArgumentError {
         match self {
             Self::Unsplittable { field, value } => write!(
                 f,
-                "transfer {field} {value:?} does not survive the switch's argument split"
+                "transfer {field} ({} bytes) does not survive the switch's argument split",
+                value.len()
             ),
-            Self::LegSelector { extension } => {
-                write!(
-                    f,
-                    "transfer extension {extension:?} is read as a leg selector"
-                )
-            }
+            Self::LegSelector { .. } => f.write_str("transfer extension is read as a leg selector"),
         }
     }
 }

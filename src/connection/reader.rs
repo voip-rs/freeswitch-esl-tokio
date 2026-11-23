@@ -359,14 +359,14 @@ async fn dispatch_message(
                 // A previous command timed out and its server reply
                 // arrived late. Discard to preserve correlation.
                 pending.stale_replies -= 1;
-                let reply_text = message
+                let reply_len = message
                     .headers
                     .header_str("Reply-Text")
-                    .unwrap_or("<none>");
+                    .map(str::len);
                 warn!(
-                    "Discarded stale {:?} reply (Reply-Text: {}) to preserve \
+                    "Discarded stale {:?} reply (Reply-Text bytes: {:?}) to preserve \
                      command-reply correlation; {} stale replies remaining",
-                    message.message_type, reply_text, pending.stale_replies,
+                    message.message_type, reply_len, pending.stale_replies,
                 );
             } else if let Some(tx) = pending
                 .waiting

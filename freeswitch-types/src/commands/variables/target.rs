@@ -240,7 +240,7 @@ impl fmt::Display for InvalidArgvSeparator {
             Self::WrongCarrier(carrier) => {
                 write!(f, "the {carrier:?} carrier takes no argument separator")
             }
-            Self::Unusable(sep) => write!(f, "{sep:?} cannot separate originate's arguments"),
+            Self::Unusable(_) => f.write_str("the separator cannot split originate's arguments"),
         }
     }
 }

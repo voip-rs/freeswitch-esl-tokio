@@ -65,7 +65,7 @@ pub enum EslError {
     /// Most ESL commands return `+OK ...` on success and `-ERR ...` on failure.
     /// A reply that matches neither indicates a protocol-level anomaly or a
     /// command with non-standard reply format (e.g. `getvar`).
-    #[error("Unexpected reply: {reply_text}")]
+    #[error("reply text of {} bytes is neither +OK nor -ERR", reply_text.len())]
     UnexpectedReply {
         /// The full `Reply-Text` value that didn't match `+OK` or `-ERR`.
         reply_text: String,
@@ -135,7 +135,7 @@ pub enum EslError {
     },
 
     /// Invalid header format
-    #[error("Invalid header format: {header}")]
+    #[error("malformed header line ({} bytes)", header.len())]
     InvalidHeader {
         /// The malformed header line.
         header: String,
@@ -177,7 +177,10 @@ pub enum EslError {
 
     /// `FilterDelete` named the header `all`, which mod_event_socket reads in
     /// any case as delete-all and drops the value; send `FilterDeleteAll`.
-    #[error("filter delete header {header:?} deletes every filter; use FilterDeleteAll")]
+    #[error(
+        "filter delete header ({} bytes) reads as all and deletes every filter; use FilterDeleteAll",
+        header.len()
+    )]
     FilterDeleteAllHeader {
         /// The header as given.
         header: String,
@@ -193,7 +196,7 @@ pub enum EslError {
 
     /// A `filter` or `filter delete` header mod_event_socket would read as
     /// some other header, or as a keyword.
-    #[error("filter header {header:?} {fault}")]
+    #[error("filter header {fault} ({} bytes)", header.len())]
     UnsplittableFilterHeader {
         /// The header as given.
         header: String,

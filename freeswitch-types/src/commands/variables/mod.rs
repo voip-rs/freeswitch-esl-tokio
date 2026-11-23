@@ -478,11 +478,10 @@ impl Variables {
         }
         match (s.as_bytes()[0], s.as_bytes()[s.len() - 1]) {
             (b'{', b'}') | (b'<', b'>') | (b'[', b']') => {}
-            (open, close) => {
-                return Err(OriginateError::ParseError(format!(
-                    "unknown variable delimiters: {:?}..{:?}",
-                    open as char, close as char
-                )));
+            _ => {
+                return Err(OriginateError::ParseError(
+                    "a variable block opens and closes with {}, <> or []".into(),
+                ));
             }
         }
         match read_leg(&format!("{s}{LONE_BLOCK_ENDPOINT}"), target)? {
