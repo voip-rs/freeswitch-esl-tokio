@@ -728,7 +728,7 @@ async fn dial_without_waiting(
             "bridge",
             Some(&dial),
             Some(&anchor),
-            ExecuteOptions::new().with_async(),
+            ExecuteOptions::new().with_async(true),
         )
         .await
         .unwrap_or_else(|e| panic!("bridge {dial}: transport error: {e}"))
@@ -996,7 +996,7 @@ async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
                 "bridge",
                 Some(&dial),
                 Some(&anchor),
-                ExecuteOptions::new().with_async(),
+                ExecuteOptions::new().with_async(true),
             )
             .await
             .unwrap_or_else(|e| panic!("bridge {dial}: transport error: {e}"))
@@ -1090,7 +1090,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
                 "bridge",
                 Some(&dial_string),
                 Some(&a_uuid),
-                ExecuteOptions::new().with_async(),
+                ExecuteOptions::new().with_async(true),
             )
             .await
             .unwrap_or_else(|e| panic!("{label}: execute bridge transport error: {e}"))

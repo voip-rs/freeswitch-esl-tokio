@@ -587,7 +587,7 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
                 "bridge",
                 Some(&dial_string),
                 Some(&anchor),
-                ExecuteOptions::new().with_async(),
+                ExecuteOptions::new().with_async(true),
             )
             .await
             .and_then(|resp| resp.into_result());
@@ -741,7 +741,7 @@ async fn received_over_the_dialplan(
             "bridge",
             Some(tagged),
             Some(&anchor),
-            ExecuteOptions::new().with_async(),
+            ExecuteOptions::new().with_async(true),
         )
         .await
         .and_then(|resp| resp.into_result());

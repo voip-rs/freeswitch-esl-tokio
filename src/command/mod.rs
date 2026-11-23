@@ -145,15 +145,15 @@ impl ExecuteOptions {
         Self::default()
     }
 
-    /// Enable the `Event-Lock` header.
-    pub fn with_event_lock(mut self) -> Self {
-        self.event_lock = true;
+    /// Send the `Event-Lock` header, or leave it off.
+    pub fn with_event_lock(mut self, lock: bool) -> Self {
+        self.event_lock = lock;
         self
     }
 
-    /// Enable the `async` header.
-    pub fn with_async(mut self) -> Self {
-        self.async_mode = true;
+    /// Send the `Async` header, or leave it off.
+    pub fn with_async(mut self, async_mode: bool) -> Self {
+        self.async_mode = async_mode;
         self
     }
 
@@ -733,8 +733,8 @@ mod tests {
             args: Some("tone_stream://%(200,100,440)".to_string()),
             uuid: Some("abc-123".to_string()),
             options: ExecuteOptions::new()
-                .with_event_lock()
-                .with_async()
+                .with_event_lock(true)
+                .with_async(true)
                 .with_loops(3),
         };
         let wire = cmd
@@ -760,6 +760,26 @@ mod tests {
         assert!(!wire.contains("Event-Lock"));
         assert!(!wire.contains("Async"));
         assert!(!wire.contains("Loops"));
+    }
+
+    /// A flag a config turned on can be turned back off through the builder.
+    #[test]
+    fn execute_flags_set_false_send_no_header() {
+        let cmd = EslCommand::Execute {
+            app: "answer".to_string(),
+            args: None,
+            uuid: None,
+            options: ExecuteOptions::new()
+                .with_event_lock(true)
+                .with_async(true)
+                .with_event_lock(false)
+                .with_async(false),
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        assert!(!wire.contains("Event-Lock"), "{wire}");
+        assert!(!wire.contains("Async"), "{wire}");
     }
 
     #[test]

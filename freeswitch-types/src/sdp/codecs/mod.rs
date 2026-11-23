@@ -143,6 +143,11 @@ pub struct SdpParseOptions {
 }
 
 impl SdpParseOptions {
+    /// The switch's view, as [`Default`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Read the `a=` lines of a port-0 section as a live section's are read.
     ///
     /// The switch reads none of them, so by default a held or declined section names only its
