@@ -186,12 +186,15 @@ fn drop_event(shared: &SharedState) {
     use std::sync::atomic::Ordering;
 
     shared
-        .queue_full_notice_armed
-        .store(true, Ordering::Relaxed);
-    shared
         .dropped_event_count
         .fetch_add(1, Ordering::Relaxed);
-    warn!("Event queue full, dropping event");
+    // Once per run: the notice, once delivered, re-arms the next one.
+    if !shared
+        .queue_full_notice_armed
+        .swap(true, Ordering::Relaxed)
+    {
+        warn!("Event queue full, dropping events until the consumer catches up; dropped_event_count() keeps the total");
+    }
 }
 
 fn record_stall(shared: &SharedState, elapsed: Duration) {
