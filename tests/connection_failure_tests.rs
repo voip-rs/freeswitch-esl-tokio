@@ -658,6 +658,74 @@ async fn timeout_normal_reply_still_routes_correctly() {
     );
 }
 
+/// The next stream item, which must be an `UnsolicitedReply`.
+async fn next_unsolicited_reply(
+    events: &mut freeswitch_esl_tokio::EslEventStream,
+) -> (EslError, freeswitch_esl_tokio::EslResponse) {
+    let item = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("timeout")
+        .expect("the stream stays open");
+    let err = item.expect_err("a stray reply is not an event");
+    let EslError::UnsolicitedReply { response } = &err else {
+        panic!("expected UnsolicitedReply, got {err:?}");
+    };
+    let response = (**response).clone();
+    (err, response)
+}
+
+/// A reply with no command waiting reaches the caller instead of the log, the
+/// session stays up, and the next command still gets its own reply.
+#[tokio::test]
+async fn unsolicited_reply_surfaces_on_the_event_stream() {
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    mock.reply_raw_text("+OK stray-reply-sentinel")
+        .await
+        .unwrap();
+    let (err, response) = next_unsolicited_reply(&mut events).await;
+    assert_eq!(response.reply_text(), Some("+OK stray-reply-sentinel"));
+    assert!(!err.is_connection_error(), "{err:?}");
+    assert!(!err.is_recoverable(), "{err:?}");
+    let shown = err.to_string();
+    assert!(
+        shown.contains("command/reply") && shown.contains("bytes"),
+        "{shown}"
+    );
+    assert!(!shown.contains("stray-reply-sentinel"), "{shown}");
+
+    mock.reply_api("stray-body-sentinel")
+        .await
+        .unwrap();
+    let (err, response) = next_unsolicited_reply(&mut events).await;
+    assert_eq!(response.body(), Some("stray-body-sentinel"));
+    let shown = err.to_string();
+    assert!(shown.contains("api/response"), "{shown}");
+    assert!(!shown.contains("stray-body-sentinel"), "{shown}");
+
+    assert!(client.is_connected());
+    let next = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("version")
+                .await
+        }
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    mock.reply_api("1.0")
+        .await
+        .unwrap();
+    let reply = tokio::time::timeout(Duration::from_secs(5), next)
+        .await
+        .expect("join timeout")
+        .expect("join")
+        .expect("the next command gets its own reply");
+    assert_eq!(reply.body(), Some("1.0"));
+}
+
 // --- Rude rejection ---
 
 #[tokio::test]
