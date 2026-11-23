@@ -197,6 +197,9 @@ header_enum! {
         SipInviteStamp => "sip_invite_stamp",
         SipReplyPort => "sip_reply_port",
         SipLocalNetworkAddr => "sip_local_network_addr",
+
+        // --- Outbound dial ---
+        SofiaSuppressUrlEncoding => "sofia_suppress_url_encoding",
     }
 }
 
@@ -388,6 +391,9 @@ impl SofiaVariable {
             Self::SipGeolocation => Some(Verbatim(H::Geolocation)),
 
             Self::SipMultipart => None,
+
+            // A knob for the outbound dial, read off the originate's variables.
+            Self::SofiaSuppressUrlEncoding => None,
         }
     }
 }

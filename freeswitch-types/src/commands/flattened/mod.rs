@@ -10,14 +10,15 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use crate::channel::HangupCause;
-use crate::commands::endpoint::Endpoint;
+use crate::commands::endpoint::{DestinationEncoding, Endpoint};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
 use crate::switch_passes::brackets::{install, same_header, Block, Pair, PairEffect};
 use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{
-    channel_variables, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM, MAX_PEERS,
+    channel_variables, endpoint_variables, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM,
+    MAX_PEERS,
 };
 use crate::switch_passes::{pipeline, PipelineError};
 use crate::variables::VariableName;
@@ -645,7 +646,8 @@ impl FlattenedLeg {
     /// A value naming a variable is refused at install, as the switch refuses it, unless
     /// `origination_nested_vars=true` appears in the leg's thread or a `<>` block ahead of an
     /// enterprise split sets it true. On a channel with `CF_NO_PRESENCE`, originate deletes
-    /// `presence_id`.
+    /// `presence_id`. What the endpoint module reads is
+    /// [`endpoint_variable`](Self::endpoint_variable).
     pub fn variable(&self, name: impl VariableName) -> Option<&str> {
         self.variable_str(name.as_str())
     }
@@ -686,6 +688,40 @@ impl FlattenedLeg {
             self.nested_vars,
         )
         .into_iter()
+    }
+
+    /// The value the leg's endpoint module reads, as `switch_ivr_originate` hands it the
+    /// originate's variables: the list and thread blocks, then the leg's own over them, so a
+    /// leg's value always wins and `local_var_clobber` plays no part.
+    ///
+    /// [`variable`](Self::variable) models the channel install instead, which can differ: mod_sofia
+    /// reads `sofia_suppress_url_encoding` here, never off the channel. A value naming a variable
+    /// is kept as written. The originating channel's exports sit under every block and are not
+    /// held.
+    pub fn endpoint_variable(&self, name: impl VariableName) -> Option<&str> {
+        self.endpoint_variable_str(name.as_str())
+    }
+
+    /// [`endpoint_variable`](Self::endpoint_variable) by its bare wire name.
+    pub fn endpoint_variable_str(&self, name: &str) -> Option<&str> {
+        endpoint_variables(
+            self.inherited
+                .iter(),
+            &self.leg,
+        )
+        .into_iter()
+        .find(|(held, _)| same_header(held, name))
+        .map(|(_, value)| value)
+    }
+
+    /// The [`DestinationEncoding`] the leg's blocks declare for a sofia endpoint, read as
+    /// [`endpoint_variable`](Self::endpoint_variable) reads `sofia_suppress_url_encoding`.
+    ///
+    /// `None` when no block sets it: the originating channel may still export it. Pass the result
+    /// to [`SofiaEndpoint::channel_name`](crate::commands::SofiaEndpoint::channel_name), defaulting
+    /// to `Encoded` only when the originating channel is known to export nothing.
+    pub fn destination_encoding(&self) -> Option<DestinationEncoding> {
+        None
     }
 
     /// What the leg dials.

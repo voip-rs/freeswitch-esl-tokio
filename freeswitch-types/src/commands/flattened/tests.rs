@@ -1218,6 +1218,96 @@ fn leg_variables_follow_the_install_order_local_var_clobber_picks() {
     );
 }
 
+fn first_leg(input: &str) -> FlattenedLeg {
+    parse(input, API)
+        .legs()
+        .next()
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn the_endpoint_reads_the_legs_own_value_whatever_local_var_clobber_says() {
+    for input in [
+        "{k=g}[k=l]null/a",
+        "{local_var_clobber=true,k=g}[k=l]null/a",
+        "<k=e>{k=g}[K=l]null/a",
+    ] {
+        let leg = first_leg(input);
+        assert_eq!(leg.endpoint_variable_str("k"), Some("l"), "{input}");
+    }
+    assert_eq!(first_leg("{k=g}[k=l]null/a").variable_str("k"), Some("g"));
+    assert_eq!(
+        first_leg("<k=e>{k=g}null/a").endpoint_variable_str("k"),
+        Some("g")
+    );
+    assert_eq!(
+        first_leg("{k=g}[k=]null/a").endpoint_variable_str("k"),
+        Some("g")
+    );
+    assert_eq!(first_leg("{k=g}null/a").endpoint_variable_str("x"), None);
+}
+
+#[test]
+fn the_endpoint_reads_a_value_naming_a_variable_as_written() {
+    let leg = first_leg("{k=g}[k=${x}]null/a");
+    assert_eq!(leg.endpoint_variable_str("k"), Some("${x}"));
+    assert_eq!(leg.variable_str("k"), Some("g"));
+}
+
+#[test]
+fn destination_encoding_follows_the_endpoints_read() {
+    use crate::variables::SofiaVariable;
+    let cases: &[(&str, Option<DestinationEncoding>)] = &[
+        ("sofia/internal/1000", None),
+        (
+            "<sofia_suppress_url_encoding=true>sofia/internal/1000",
+            Some(DestinationEncoding::Suppressed),
+        ),
+        (
+            "{sofia_suppress_url_encoding=yes}sofia/internal/1000",
+            Some(DestinationEncoding::Suppressed),
+        ),
+        (
+            "[sofia_suppress_url_encoding=1]sofia/internal/1000",
+            Some(DestinationEncoding::Suppressed),
+        ),
+        (
+            "[SOFIA_SUPPRESS_URL_ENCODING=On]sofia/internal/1000",
+            Some(DestinationEncoding::Suppressed),
+        ),
+        (
+            "{sofia_suppress_url_encoding=false}sofia/internal/1000",
+            Some(DestinationEncoding::Encoded),
+        ),
+        (
+            "[sofia_suppress_url_encoding=nope]sofia/internal/1000",
+            Some(DestinationEncoding::Encoded),
+        ),
+        (
+            "{sofia_suppress_url_encoding=true}[sofia_suppress_url_encoding=false]sofia/internal/1000",
+            Some(DestinationEncoding::Encoded),
+        ),
+        (
+            "{local_var_clobber=true,sofia_suppress_url_encoding=false}\
+             [sofia_suppress_url_encoding=true]sofia/internal/1000",
+            Some(DestinationEncoding::Suppressed),
+        ),
+    ];
+    for &(input, encoding) in cases {
+        let leg = first_leg(input);
+        assert_eq!(leg.destination_encoding(), encoding, "{input}");
+    }
+    let leg = first_leg(
+        "{sofia_suppress_url_encoding=true}[sofia_suppress_url_encoding=false]sofia/internal/1000",
+    );
+    assert_eq!(
+        leg.variable(SofiaVariable::SofiaSuppressUrlEncoding),
+        Some("true"),
+        "the channel keeps the {{}} value"
+    );
+}
+
 #[test]
 fn a_value_refused_at_install_leaves_the_earlier_one() {
     let list = parse("{k=${x}}[k=l]null/a", API);

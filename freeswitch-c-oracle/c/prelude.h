@@ -251,6 +251,41 @@ static switch_status_t switch_event_add_header_string(switch_event_t *event, int
 	return SWITCH_STATUS_SUCCESS;
 }
 
+/* switch_event_dup and switch_event_merge add each header at the bottom, as the switch's do for
+   an event holding no array. */
+static switch_status_t switch_event_dup(switch_event_t **event, switch_event_t *todup)
+{
+	int x;
+
+	if (switch_event_create_plain(event, SWITCH_EVENT_CHANNEL_DATA) != SWITCH_STATUS_SUCCESS) {
+		return SWITCH_STATUS_FALSE;
+	}
+	(*event)->flags = todup->flags;
+	for (x = 0; x < todup->count; x++) {
+		switch_event_add_header_string(*event, SWITCH_STACK_BOTTOM, todup->names[x], todup->values[x]);
+	}
+	return SWITCH_STATUS_SUCCESS;
+}
+
+static void switch_event_merge(switch_event_t *event, switch_event_t *tomerge)
+{
+	int x;
+
+	for (x = 0; x < tomerge->count; x++) {
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, tomerge->names[x], tomerge->values[x]);
+	}
+}
+
+/* The event an endpoint module reads, reported apart from the pairs a harness reports. */
+static void oracle_report_endpoint_headers(const switch_event_t *event)
+{
+	int x;
+
+	for (x = 0; x < event->count; x++) {
+		oracle_record(ORACLE_ENDPOINT_PAIR, event->names[x], event->values[x]);
+	}
+}
+
 static char *switch_event_get_header(switch_event_t *event, const char *name)
 {
 	const char *const *header;

@@ -99,6 +99,7 @@ const TAGS: &[&str] = &[
     "REGISTRATION",
     "HOST",
     "SELECT",
+    "ENDPOINT_PAIR",
 ];
 
 #[derive(Deserialize)]

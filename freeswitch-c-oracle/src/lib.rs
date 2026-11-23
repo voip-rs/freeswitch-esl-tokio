@@ -126,6 +126,9 @@ pub struct Leg {
     pub pairs: Vec<Pair>,
     /// The text after the leg's blocks, `None` where the originate stopped first.
     pub endpoint: Option<Vec<u8>>,
+    /// `originate_var_event`, the headers the endpoint module reads: the thread's with the leg's
+    /// merged over them. An enterprise `<>` block is not in it, the thread's event starting empty.
+    pub endpoint_pairs: Vec<Pair>,
 }
 
 /// What `switch_channel_expand_variables_check` made of its input.
@@ -806,6 +809,13 @@ impl Oracle {
                         .expect("an endpoint follows its leg")
                         .endpoint = a;
                 }
+                (ENDPOINT_PAIR, Some(thread)) => thread
+                    .groups
+                    .last_mut()
+                    .and_then(|group| group.last_mut())
+                    .expect("an endpoint's event follows its leg")
+                    .endpoint_pairs
+                    .push((text(a), text(b))),
                 (FAILURE, Some(thread)) => thread.failure = a,
                 (tag, _) => panic!("the dial harness reported tag {tag}"),
             }

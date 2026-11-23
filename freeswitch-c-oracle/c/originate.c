@@ -1,5 +1,6 @@
 /* switch_event_create_brackets and the passes switch_ivr_originate and
-   switch_ivr_enterprise_originate run over a dial string up to each leg's endpoint. Every statement
+   switch_ivr_enterprise_originate run over a dial string up to each leg's endpoint and the event
+   that endpoint reads. Every statement
    of the switch is taken by directive; only the harness's loops, labels and records are its own. */
 //@ define src/include/switch_types.h SWITCH_ENT_ORIGINATE_DELIM
 //@ define src/switch_ivr_originate.c QUOTED_ESC_COMMA
@@ -34,7 +35,7 @@ static void oracle_originate(const char *bridgeto)
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 	switch_core_session_t *session = NULL;
 	switch_channel_t *caller_channel = NULL;
-	switch_event_t *ovars = NULL, *var_event = NULL, *local_var_event = NULL;
+	switch_event_t *ovars = NULL, *var_event = NULL, *local_var_event = NULL, *originate_var_event = NULL;
 	void *dh = NULL;
 	struct {
 		switch_bool_t check_vars;
@@ -101,6 +102,13 @@ static void oracle_originate(const char *bridgeto)
 			//@ block src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') { => while (chan_type && *chan_type && *chan_type == ' ') {
 
 			oracle_record(ORACLE_ENDPOINT, chan_type, NULL);
+
+			//@ block src/switch_ivr_originate.c switch_ivr_originate switch_event_dup(&originate_var_event, var_event);
+			//@ block src/switch_ivr_originate.c switch_ivr_originate switch_event_dup(&originate_var_event, var_event); => if (local_var_event) {
+			oracle_report_endpoint_headers(originate_var_event);
+			oracle_clear_headers(originate_var_event);
+			free(originate_var_event);
+			originate_var_event = NULL;
 
 			if (local_var_event) {
 				switch_event_destroy(&local_var_event);

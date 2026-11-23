@@ -409,6 +409,14 @@ pub(crate) fn channel_variables<'a>(
     channel
 }
 
+/// The variables the leg's endpoint module reads.
+pub(crate) fn endpoint_variables<'a>(
+    inherited: impl IntoIterator<Item = &'a Block>,
+    leg: &'a Leg,
+) -> Vec<(&'a str, &'a str)> {
+    channel_variables(inherited, leg, true)
+}
+
 /// `switch_true`.
 pub(crate) fn switch_true(value: &str) -> bool {
     let word = ["yes", "on", "true", "t", "enabled", "active", "allow"]

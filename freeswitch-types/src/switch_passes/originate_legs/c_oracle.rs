@@ -7,7 +7,7 @@ use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{dial_list, switch_true, DialList, MAX_PEERS};
+use super::{dial_list, endpoint_variables, switch_true, DialList, MAX_PEERS};
 use crate::commands::variables::BlockParse;
 use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled};
 use crate::switch_passes::brackets::{self, Block, PairEffect};
@@ -254,6 +254,103 @@ fn dial_lists_match_the_switch() {
                     .collect();
                 prop_assert_eq!(port, switch, "nested vars per thread in {:?}", input);
             }
+            Ok(())
+        },
+    );
+}
+
+const ENDPOINT_KEYS: &[&str] = &[
+    "k",
+    "K",
+    "local_var_clobber",
+    "sofia_suppress_url_encoding",
+    "x",
+];
+const ENDPOINT_VALUES: &[&str] = &["", "v", "l", "true", "false", "${x}"];
+
+/// A block of `open` and `close` setting names the scopes share, `local_var_clobber` among them.
+fn shared_names_block(open: char, close: char) -> impl Strategy<Value = String> {
+    let pair = (select(ENDPOINT_KEYS), select(ENDPOINT_VALUES))
+        .prop_map(|(key, value)| format!("{key}={value}"));
+    vec(pair, 0..4).prop_map(move |pairs| format!("{open}{}{close}", pairs.join(",")))
+}
+
+/// A dial string whose `<>`, `{}` and `[]` blocks set the same names, over threads, groups and legs.
+fn shared_names_dial() -> impl Strategy<Value = String> {
+    let leg = vec(shared_names_block('[', ']'), 0..3).prop_map(|blocks| blocks.concat() + "null/a");
+    let group = vec(leg, 1..3).prop_map(|legs| legs.join(","));
+    let thread = (
+        option::of(shared_names_block('<', '>')),
+        vec(shared_names_block('{', '}'), 0..3),
+        vec(group, 1..3),
+    )
+        .prop_map(|(ultra, global, groups)| {
+            format!(
+                "{}{}{}",
+                ultra.unwrap_or_default(),
+                global.concat(),
+                groups.join("|")
+            )
+        });
+    (option::of(shared_names_block('<', '>')), vec(thread, 1..3)).prop_map(|(ultra, threads)| {
+        match &threads[..] {
+            [thread] => thread.clone(),
+            _ => format!("{}{}", ultra.unwrap_or_default(), threads.join(":_:")),
+        }
+    })
+}
+
+/// Each leg's endpoint reads the event `switch_ivr_originate` builds for it. The harness starts a
+/// thread's event empty, so the port runs without the enterprise block, which `install` adds alike.
+#[test]
+fn endpoint_events_match_the_switch() {
+    let input = prop_oneof![3 => shared_names_dial(), 1 => dial_text()];
+    against_the_c_at_its_revision(
+        file!(),
+        "endpoint_events_match_the_switch",
+        input,
+        |c, block_parse, input| {
+            let text = trace(&input);
+            let Ok(list) = dial_list(&text, 0..input.len(), false, block_parse) else {
+                return Ok(());
+            };
+            if flags_a_block(&list) {
+                return Ok(());
+            }
+            let dial = c.dial(input.as_bytes());
+            let switch: Vec<Vec<Vec<Pair>>> = dial
+                .threads
+                .iter()
+                .map(|thread| {
+                    thread
+                        .groups
+                        .iter()
+                        .flatten()
+                        .map(|leg| {
+                            leg.endpoint_pairs
+                                .clone()
+                        })
+                        .collect()
+                })
+                .collect();
+            let port: Vec<Vec<Vec<Pair>>> = list
+                .threads
+                .iter()
+                .map(|thread| {
+                    thread
+                        .groups
+                        .iter()
+                        .flatten()
+                        .map(|leg| {
+                            endpoint_variables(&thread.blocks, leg)
+                                .into_iter()
+                                .map(|(key, value)| (key.into(), value.into()))
+                                .collect()
+                        })
+                        .collect()
+                })
+                .collect();
+            prop_assert_eq!(port, switch, "{:?}", input);
             Ok(())
         },
     );
