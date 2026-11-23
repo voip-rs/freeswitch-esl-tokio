@@ -19,7 +19,7 @@ pub mod originate;
 pub mod transfer;
 pub mod variables;
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "serde", freeswitch_oracle))]
 mod proptests;
 
 pub use bridge::BridgeDialString;

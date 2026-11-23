@@ -620,5 +620,5 @@ impl SetVariables for Endpoint {
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "serde", freeswitch_oracle))]
 mod c_oracle;

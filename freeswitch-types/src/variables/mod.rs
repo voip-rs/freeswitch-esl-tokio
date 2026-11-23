@@ -80,7 +80,7 @@ impl_variable_name!(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HeaderLookup, VARIABLE_PREFIX};
+    use crate::VARIABLE_PREFIX;
     use sip_header_catalog::SipHeader;
 
     #[test]
@@ -120,8 +120,10 @@ mod tests {
         assert_eq!(TenantVariable.header_name(), "variable_tenant_id");
     }
 
+    #[cfg(feature = "esl")]
     #[test]
     fn header_name_is_the_key_a_header_store_holds() {
+        use crate::HeaderLookup;
         let mut map = crate::EslHeaders::new();
         map.insert(ChannelVariable::ReadCodec.header_name(), "PCMU");
         assert_eq!(map.variable(ChannelVariable::ReadCodec), Some("PCMU"));

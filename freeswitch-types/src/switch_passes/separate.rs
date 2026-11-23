@@ -655,7 +655,7 @@ pub(crate) fn separate_string_char_delim(s: &str, delim: char) -> Vec<String> {
         .collect()
 }
 
-#[cfg(all(test, feature = "esl"))]
+#[cfg(all(test, feature = "esl", freeswitch_oracle))]
 mod c_oracle;
 
 #[cfg(all(test, feature = "esl"))]

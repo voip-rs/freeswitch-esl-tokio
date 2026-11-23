@@ -1267,6 +1267,14 @@ mod variables_agree_with_lookup {
     use super::*;
     use crate::switch_passes::brackets::same_header;
 
+    /// The oracle's case count in the workspace; proptest's default in a packaged build.
+    fn config() -> ProptestConfig {
+        #[cfg(freeswitch_oracle)]
+        return freeswitch_c_oracle::config();
+        #[cfg(not(freeswitch_oracle))]
+        ProptestConfig::default()
+    }
+
     const NAMES: &[&str] = &[
         "k",
         "K",
@@ -1314,7 +1322,7 @@ mod variables_agree_with_lookup {
     }
 
     proptest! {
-        #![proptest_config(freeswitch_c_oracle::config())]
+        #![proptest_config(config())]
 
         #[test]
         fn every_leg_variable_is_its_lookup_once(input in list()) {

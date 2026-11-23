@@ -10,7 +10,7 @@ use super::separate::{find, find_end_paren, separate_string_string, skip_spaces,
 use super::{byte_range, untrace, PipelineError, Traced};
 use crate::commands::variables::BlockParse;
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 mod c_oracle;
 
 /// `MAX_PEERS` in `switch_ivr_originate.c`: the most threads, groups or legs a

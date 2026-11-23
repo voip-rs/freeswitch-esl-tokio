@@ -108,7 +108,7 @@ macro_rules! header_enum {
 
         wire_serde! { $Name, concat!(stringify!($Name), " name"), [$($variant => $wire),+] }
 
-        #[cfg(test)]
+        #[cfg(all(test, feature = "serde"))]
         mod $serde_tests {
             use super::*;
 

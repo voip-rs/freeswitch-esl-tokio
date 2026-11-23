@@ -33,7 +33,7 @@ pub(crate) fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
         && !names_a_variable(value)
 }
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 mod c_oracle;
 
 /// The escape handling of `switch_channel_expand_variables_check`, and the spans of its output

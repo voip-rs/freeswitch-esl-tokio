@@ -4,7 +4,7 @@
 use super::expansion::expand_escapes;
 use super::{trace, untrace};
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 mod c_oracle;
 
 /// What a hook's value hands the application.

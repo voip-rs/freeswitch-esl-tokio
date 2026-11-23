@@ -25,7 +25,7 @@ use crate::variables::VariableName;
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "serde", freeswitch_oracle))]
 mod c_oracle;
 
 /// A dial string read by the passes the switch applies for one target.

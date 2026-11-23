@@ -605,7 +605,7 @@ parse_header_error_impls! {
     SipStatusCode(ParseSipStatusCodeError) => "SIP status code",
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "esl"))]
 mod tests {
     use super::*;
     use crate::variables::{LoopbackChannelName, LoopbackHangupCause, LoopbackLeg};

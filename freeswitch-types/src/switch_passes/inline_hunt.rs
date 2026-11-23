@@ -6,7 +6,7 @@ use super::separate::separate;
 use super::{trace, untrace};
 use crate::commands::originate::{Application, DialplanType, OriginateError};
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 mod c_oracle;
 
 /// The separator an inline action list uses unless one is named.

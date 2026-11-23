@@ -11,15 +11,17 @@ keywords = ["freeswitch", "esl", "voip", "telephony", "sip"]
 categories = ["network-programming", "api-bindings"]
 readme = "README.md"
 rust-version = "1.86"
+# The C-oracle modules compile only under the workspace's freeswitch_oracle cfg
+# (.cargo/config.toml), so the package leaves them out and its tests still build.
 exclude = [
     "CLAUDE.md",
     "proptest-regressions/",
-    "tests/",
     "src/**/c_oracle.rs",
-    "src/**/tests.rs",
     "src/commands/proptests/",
-    "src/test_text.rs",
 ]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(freeswitch_oracle)"] }
 
 [features]
 default = ["serde", "esl"]

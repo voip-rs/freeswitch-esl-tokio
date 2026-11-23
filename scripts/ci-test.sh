@@ -16,6 +16,12 @@ mkdir -p target
 
 CARGO_TERM_COLOR=never cargo test --workspace --all-features 2>&1 | tee "$OUTPUT"
 
+# The oracle modules build only under .cargo/config.toml's cfg, which RUSTFLAGS replaces.
+if ! grep -q '^test .*c_oracle::.* \.\.\. ok$' "$OUTPUT"; then
+    echo "No C-oracle test ran: RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS replaced the --cfg freeswitch_oracle in .cargo/config.toml." >&2
+    exit 1
+fi
+
 # One "test result:" line per binary; sum the passed counts across all of them.
 passed=$(awk '/^test result:/ {
     for (i = 2; i <= NF; i++)

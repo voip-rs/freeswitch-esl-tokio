@@ -6,7 +6,7 @@ use super::inline_hunt::{
 };
 use crate::commands::originate::{Application, DialplanType, OriginateError, OriginateTarget};
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 pub(crate) mod c_oracle;
 #[cfg(test)]
 mod tests;

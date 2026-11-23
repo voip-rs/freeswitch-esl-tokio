@@ -27,7 +27,7 @@ pub(crate) mod pipeline;
 pub(crate) mod separate;
 
 /// The block-parse revision the oracle index names for `tree`.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(all(test, feature = "esl", freeswitch_oracle))]
 pub(crate) fn tree_block_parse(tree: &str) -> crate::commands::BlockParse {
     let revision = freeswitch_c_oracle::tree(tree)
         .unwrap_or_else(|| panic!("the oracle index names no tree {tree}"))
@@ -38,7 +38,7 @@ pub(crate) fn tree_block_parse(tree: &str) -> crate::commands::BlockParse {
 }
 
 /// `against_the_c` handing the property each tree's block-parse revision.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(all(test, feature = "esl", freeswitch_oracle))]
 pub(crate) fn against_the_c_at_its_revision<S: proptest::strategy::Strategy>(
     source: &'static str,
     name: &str,
@@ -54,7 +54,7 @@ pub(crate) fn against_the_c_at_its_revision<S: proptest::strategy::Strategy>(
     });
 }
 
-#[cfg(all(test, feature = "esl"))]
+#[cfg(all(test, feature = "esl", freeswitch_oracle))]
 #[test]
 fn every_oracle_tree_names_a_known_block_parse() {
     for tree in freeswitch_c_oracle::trees() {

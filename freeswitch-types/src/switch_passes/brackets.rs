@@ -7,7 +7,7 @@ use super::{untrace, PipelineError, Traced};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::{BlockParse, VariableFault, VariablesType};
 
-#[cfg(test)]
+#[cfg(all(test, freeswitch_oracle))]
 pub(super) mod c_oracle;
 
 /// Why `open` and `close` in `text` move the end the switch counts its way to.

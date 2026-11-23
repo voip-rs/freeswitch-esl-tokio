@@ -1,0 +1,9 @@
+# Compiles freeswitch-types's C-oracle tests, which need the workspace-only
+# freeswitch-c-oracle crate and the FreeSWITCH and sofia-sip trees. Cargo reads
+# this file only for builds started inside this workspace, so a published crate
+# never sees the cfg and its own tests skip those modules.
+#
+# RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS in the environment replace this list
+# outright: hooks/pre-commit and scripts/ci-test.sh fail when no oracle test ran.
+[build]
+rustflags = ["--cfg", "freeswitch_oracle"]

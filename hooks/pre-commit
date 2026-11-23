@@ -59,6 +59,12 @@ if ! test_output=$(PROPTEST_CASES="${PROPTEST_CASES:-4096}" cargo test --workspa
     exit 1
 fi
 
+# The oracle modules build only under .cargo/config.toml's cfg, which RUSTFLAGS replaces.
+if ! grep -q '^test .*c_oracle::.* \.\.\. ok$' <<<"$test_output"; then
+    echo "❌ No C-oracle test ran: RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS replaced the --cfg freeswitch_oracle in .cargo/config.toml."
+    exit 1
+fi
+
 if ! python3 hooks/check-enums.py --quiet; then
     echo "❌ Enum coverage out of sync with FreeSWITCH. Run: python3 hooks/check-enums.py"
     exit 1
