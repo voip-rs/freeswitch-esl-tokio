@@ -4,13 +4,21 @@ freeswitch-esl-tokio 3.0 and freeswitch-types 3.0 replace freeswitch-esl-tokio 2
 
 ## Log an `EslError` with its cause
 
-`EslError`'s `Display` now states only the error's own message: `{e}` prints `I/O error`, not `I/O error: connection refused`. The cause is reachable only through `source()`. Every place that logs an `EslError` with `{e}` loses the detail that makes the log actionable, so change each one when upgrading:
+`EslError`'s `Display` now states only the error's own message: on a refused connect `{e}` prints `I/O error`, where 2.x printed `IO error: Connection refused (os error 111)`. The cause is reachable only through `source()`. Every place that logs an `EslError` with `{e}` loses the detail that makes the log actionable, so change each one when upgrading:
 
 ```rust,ignore
-error!("ESL connection failed: {}", e.display_chain()); // I/O error: connection refused
+error!("ESL connection failed: {}", e.display_chain()); // I/O error: Connection refused (os error 111)
 ```
 
-anyhow's `{:#}` prints the same chain for an `EslError` wrapped in an `anyhow::Error`.
+anyhow's `{:#}` prints the same chain for an `EslError` wrapped in an `anyhow::Error`. Match on the variant, never on the text: the text of most errors changed, `AuthenticationFailed`'s reason for a user without `@`, `ReexecFailed.reason` and the freeswitch-types errors included.
+
+## Build the upgrade with `-D unused_must_use`
+
+Several mutators that returned `()` in 2.x now return a `Result`: `Variables::insert`, `Variables::set_scope`, `EslArray::push` and `EslArray::unshift`, and `EslClient::subscribe_events_raw` / `nixevent_raw` return a `#[must_use]` value. The 2.x statement `vars.insert(k, v);` still compiles, with only a warning, and a refused write then leaves the value as it was: the variable is missing from the originate with no error at run time. Build the upgrade with `RUSTFLAGS="-D unused_must_use"`, or `#![deny(unused_must_use)]` at the crate root, so each such statement fails until it handles the `Result`.
+
+## Load deployed config before rolling out
+
+Config load refuses values 2.x loaded and then rendered into something the switch misread or dropped: a filter header with a space or named `add`/`delete`, a `[]` block heading a bridge, an empty array or an item carrying `|:`, a bridge with no groups, a `sofia_contact` or `group_call` endpoint in an originate. The refusal arrives at startup on the production box, so load every deployed config with the 3.0 types first.
 
 ## SIP headers through your own sip-header
 
@@ -57,15 +65,17 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 |---|---|
 | `HeaderLookup` on a bare `HashMap<String, String>`, matching names exactly | `EslHeaders::from_iter(map)` at the boundary, then read through it; every lookup resolves a dash key in any casing |
 | a store of your own reading a `HashMap` by exact key | wrap an `EslHeaders` and delegate `header_str` / `variable_str` to it |
-| `EslEvent::headers()`, `EslResponse::headers()` return `&IndexMap<String, String>` | they return `&EslHeaders`; `.iter()` yields `(&str, &str)` in insertion order where iterating the map yielded `(&String, &String)`, `.as_map()` gives the map, `prefixed("X-")` one family of headers in any casing |
+| `EslEvent::headers()`, `EslResponse::headers()` return `&IndexMap<String, String>` | they return `&EslHeaders`; `.iter()` yields `(&str, &str)` in insertion order where iterating the map yielded `(&String, &String)`, `.as_map()` gives the map, `prefixed("X-")` one family of headers in any casing. Never read `as_map()` by key: its keys are the spellings the wire carried, so `as_map().get("C911p-Action")` misses a header 2.x stored under that key; read through `header_str` |
 | `header(EventHeader)` on `HeaderLookup` and `EslEvent`; `EslResponse::header(impl AsRef<str>)` | `header(impl EventHeaderName)` on all three; a string name goes through `header_str` |
 | `HeaderLookup::first_header(names: [EventHeader; N])` | takes `[H; N]` for any `H: EventHeaderName`, as `header()` does; a turbofish `first_header::<N>` becomes `first_header::<_, N>`. `EventHeaderName` is in the prelude |
 | an unknown dash key stored Title-Cased (`C911P-Action` as `C911p-Action`) | stored as first spelled; a later write in another casing replaces the value under that key. A store or spool written by 2.x still answers every casing |
 | `normalize_header_key("c911p-action")` returns `C911p-Action`, an unknown dash key Title-Cased | returns an unknown key verbatim (`c911p-action`); a known `EventHeader` still takes its canonical spelling. A key compared against its output needs a case-insensitive comparison or an `EslHeaders` lookup |
+| a serialized `EslEvent` or `EslHeaders`, and every key forwarded from `iter()`, carried Title-Cased keys (`C911p-Action`, `Allowed-Api`, `Controlled-Session-Uuid`) | they carry the spellings the switch sent (`C911P-Action`, `Allowed-API`, `Controlled-Session-UUID`). A reader that is not this crate, keyed on the 2.x spelling (a JSON consumer, a database column, a dashboard, a metrics label), silently stops matching and has to change in step with the upgrade |
+| `EslHeaders` compared by stored key and had no `Hash`; `EslEvent`'s `Hash` walked its headers in insertion order | equality folds the case of dash keys and ignores order, `EslHeaders` implements `Hash`, and both hashes are order-independent. In-process sets and maps behave the same; a hash persisted from 2.x (a dedup key) changes value |
 | `DisconnectReason::ServerNotice` with `controlled_session_uuid: None` on a session-bound notice | carries the UUID the switch sent |
 
 - A `define_header_enum!` enum of your own headers reads through `header()` once it implements `EventHeaderName` (one `as_str`), as a variable enum does with `VariableName`.
-- A hand-built `sendmsg` or `sendevent` goes out with the header spellings you set rather than Title-Cased ones; the switch reads them case-insensitively.
+- A hand-built `sendmsg` or `sendevent` goes out with the header spellings you set rather than Title-Cased ones. The switch reads them case-insensitively, so call control is unaffected, but another ESL client receiving an event this application fired with `sendevent` now sees `x-foo` where 2.x sent `X-Foo`.
 
 ## Command builders
 
@@ -74,8 +84,8 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `commands::parse_originate_target(s, dialplan)` | parse the whole line with `Originate::parse_for(s, block_parse)`, whose target is read the way `originate_function` reads it |
 | `DialplanType::Xml`, `DialplanType::Inline`, matched as enum variants | `DialplanType::XML`, `DialplanType::INLINE`, compared with `==`; the type is no longer `Copy` |
 | `Originate::dialplan_raw(name)` | `.with_dialplan(DialplanType::named(name)?)?`; `inline` and `xml` in any case resolve to the known two |
-| `Originate::dialplan_name()` | `dialplan().map(DialplanType::name)`; `dialplan()` now returns a named dialplan too, where it returned `None` |
-| `"name".parse::<DialplanType>()` refuses any name but `inline` and `xml` | accepts any dialplan name but `undef`, which `ParseDialplanTypeError` now reports alone |
+| `Originate::dialplan_name()` | `dialplan().map(DialplanType::name)`; `dialplan()`, the reader 2.x called `dialplan_type()`, returns a named dialplan too, where `dialplan_type()` returned `None` |
+| `"name".parse::<DialplanType>()` and a standalone `DialplanType` deserialize refuse any name but `inline` and `xml` | both accept any dialplan name in any case but `undef`, which `ParseDialplanTypeError` now reports alone; a typo (`xlm`) loads and the switch hangs the channel up at transfer. `Originate` config load already took any name in 2.x |
 | `Application::to_string_with_dialplan` | no public replacement; render the `Originate` |
 | `Variables::insert(k, v)` returns `()` | returns `Result<(), OriginateError>`, refusing what parsing a block refuses |
 | `Variables::with_vars(scope, pairs)` returns `Variables` | `Variables::from_pairs(scope, pairs)`, returning `Result<Variables, OriginateError>` |
@@ -88,7 +98,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AppCommand::set_var(name, value)` returns `EslCommand` | returns `Result<EslCommand, UndeliverableVariable>`; it converts into `EslError::UndeliverableVariable` with `?` |
 | `UuidSetVar::new` and `AppCommand::set_var` accept any value | refuse a control character other than tab in a value set under a name mod_sofia sends as an outgoing SIP header (`sip_h_`, `sip_rh_`, `sip_ph_`, `sip_bye_h_`), as `Variables` already did |
 | `UuidSetVar`'s `Display` wrote the value as given, so a caller quoted it (`quote_for_uuid_setvar`) | it quotes and escapes the value itself; pass the plain value the channel should hold, since a pre-quoted one would arrive with its quotes. `commands::quote_for_uuid_setvar` is no longer public, so a call that pre-quotes fails to compile at the expression to change |
-| `UuidTransfer::new(uuid, destination)` and `with_dialplan(dp)` return `UuidTransfer` | return `Result<UuidTransfer, TransferArgumentError>`, refusing a destination or dialplan the switch's blank split would not read back as itself (`Unsplittable`) and a destination opening `-`, which `uuid_transfer` reads as the leg to transfer (`LegSelector`); `TransferArgumentError` and `TransferField` now live in `freeswitch_types::commands`, still re-exported where they were |
+| `UuidTransfer::new(uuid, destination)` and `with_dialplan(dp)` return `UuidTransfer` | return `Result<UuidTransfer, TransferArgumentError>`, refusing a destination or dialplan the switch's blank split would not read back as itself (`Unsplittable`) and a destination opening `-`, which `uuid_transfer` reads as the leg to transfer (`LegSelector`). `TransferArgumentError` and `TransferField` are new, in `freeswitch_types::commands` and at both crate roots |
 | `DialString: fmt::Display` | `DialString` carries only `variables()`; render an endpoint through `Endpoint` |
 | `AudioEndpoint`'s `Display` (it rendered `audio`), `fmt_with_prefix` | wrap it in `Endpoint::PortAudio`, `PulseAudio` or `Alsa` and render that |
 | `AudioEndpoint::parse_with_prefix(s, prefix)` | `Endpoint::parse_for(s, target)`, which names the module from the text |
@@ -187,17 +197,18 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `AppCommand::transfer*` return `EslCommand` | return `Result<EslCommand, TransferArgumentError>`; it converts into `EslError::TransferArgument` with `?` |
 | `AppCommand::transfer*` accept any extension and context | refuse one the switch's blank split would not read back as itself (a space, a `'`, an escaping `\`, a leading `^^X` on the extension, an empty field) with `TransferArgumentError::Unsplittable`, and an extension of `-bleg` or `-both` in any case, which transfers a leg instead, with `LegSelector` |
 | `EslError::Utf8Error(Utf8Error)`, never built by the crate, which reported a non-UTF-8 message envelope or truncated auth reply as `ProtocolError` with the decoder error dropped | `Utf8Error { context, source }`, built for those two; `e.source()` is the `std::str::Utf8Error`, and `is_connection_error()` is `true`, as it was for the `ProtocolError` |
-| `EslError`'s `Display` for `Io`, `JsonError`, `XmlError`, `Originate`, `HeaderParse` (and the new `TransferArgument`) appended the underlying error (`IO error: connection refused`) | states only its own message (`I/O error`); the cause is `e.source()`, so print the chain (anyhow's `{:#}`, or walk `source()`) where the detail is wanted. A reader disconnect's `DisconnectReason::ProtocolError` text still carries the whole chain |
+| `EslError`'s `Display` for `Io`, `JsonError`, `XmlError`, `Originate`, `HeaderParse` appended the underlying error (`IO error: Connection refused (os error 111)`) | states only its own message (`I/O error`), as the new `TransferArgument` and `UndeliverableVariable` do; the cause is `e.source()`, so print the chain (anyhow's `{:#}`, or walk `source()`) where the detail is wanted. A reader disconnect's `DisconnectReason::ProtocolError` text still carries the whole chain |
 | a `SendEvent` whose event has no event type and no `Event-Name` refused as `EslError::ProtocolError`, a connection error | `EslError::MissingField { field }`, neither a connection error nor recoverable; nothing is sent |
 | logging an `EslError` with `{e}` showed its cause | `{e}` shows only the error's own message; `e.display_chain()` writes it and every source, joined by `: ` |
 | `EventSubscriptionError(pub String)`, a tuple struct | a `#[non_exhaustive]` enum: `Token(String)` for what the tuple held, `FilterHeader { header, fault }` for the case below |
 | `EventSubscription::filter_raw` and config load accept any filter header without a line break or NUL | also refuse an empty header, one holding a space, and `add` or `delete` in any case, as `EventSubscriptionError::FilterHeader` with the same `FilterHeaderFault` the client's `Filter` reports; a bad entry fails at load instead of at send. `FilterHeaderFault` now lives in `freeswitch_types::event`, with `of_filter` and `of_filter_delete` |
 | `EslError::MissingHeader`, `InvalidUuid`, `HeartbeatExpired`, `Generic` and `EslError::generic(message)`, which the crate never built | removed; a liveness timeout reaches you as `DisconnectReason::HeartbeatExpired`, as it did. An application that built one for its own failures keeps its own error type, or `EslError::protocol_error` for a reply the switch would never send |
-| `{e}` on `EslError::InvalidHeader`, `UnexpectedReply`, `FilterDeleteAllHeader`, `UnsplittableFilterHeader` and on `TransferArgumentError` quoted the header line, reply text or argument, and `DisconnectReason::ProtocolError` carried that text | names the field and its byte length; the value stays on the variant's field (`header`, `reply_text`, `value`, `extension`) for a caller that decides to print it |
+| `{e}` on `EslError::InvalidHeader` and `UnexpectedReply` quoted the header line or reply text, and `DisconnectReason::ProtocolError` carried that text | names the field and its byte length, as the new `FilterDeleteAllHeader`, `UnsplittableFilterHeader` and `TransferArgumentError` do; the value stays on the variant's field (`header`, `reply_text`) for a caller that decides to print it |
 | a TCP connect or auth handshake that timed out returned `EslError::Timeout`, which `is_recoverable()` reported as a command to retry on a live connection | `EslError::ConnectTimeout` and `EslError::HandshakeTimeout`: `is_connection_error()` is `true` and `is_recoverable()` `false`, so a reconnect loop retries them |
 | `EslError::Timeout { timeout_ms }`, also matched around `connect` | `EslError::CommandTimeout { timeout_ms }`, only a command whose reply did not arrive on a live connection; renamed so a 2.x `Timeout` arm fails to compile and is sorted into the command, connect or handshake case it meant |
 | `EslError::InvalidHeader` (a header line without a colon, a non-numeric `Content-Length`) had `is_connection_error()` `false` | `true`, like a missing `Content-Type`: the stream's framing is suspect |
 | `CommandBuilder` at the crate root | removed from the public API: no method sends the string it built. Send a typed `EslCommand` through `send_command`, or an `EslEvent` through `sendmsg` / `sendevent` |
 | `ExecuteOptions::with_event_lock()`, `with_async()` | `with_event_lock(true)`, `with_async(true)`; `false` leaves the header off, like the other options builders |
 | `AuthMethod::user(user, password)` returns `AuthMethod` and sends any user | returns `EslResult<AuthMethod>`, refusing a user holding a `:` with `EslError::ColonInAuthUser`: mod_event_socket starts the password at a `:` on either side of the `@`, so the switch would authenticate some other user. `connect` refuses the same user when the `AuthMethod::User` variant is built by hand |
+| `EslCommand::UserAuth { user, .. }` sent `userauth <user>:<password>` whatever the user held | `to_wire_format()` refuses a user holding a `:` with `EslError::ColonInAuthUser`, as `AuthMethod::user` does |
 | a line without a colon inside a plain event body or a channel dump came back as `EslError::InvalidHeader` | `EslError::InvalidBodyLine { context, line }`, naming `"event body"` or `"response body"`; neither a connection error nor recoverable, since the message's framing held. `InvalidHeader` is now only the envelope's, and a connection error |
