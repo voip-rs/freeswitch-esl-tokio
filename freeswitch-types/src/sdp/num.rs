@@ -1,9 +1,7 @@
 //! The leading-digit read both the codec-string and the SDP attribute parsers do.
 
-/// Value of the leading ASCII-digit run and the remainder after it.
-///
-/// `None` for no leading digit and for a run that overflows `u32`; C's `atoi`
-/// wraps on overflow and this crate refuses rather than inventing a value.
+/// Value of the leading ASCII-digit run and the remainder after it; `None` for no
+/// leading digit and for a run past `u32`, where C's `atoi` is undefined.
 pub(crate) fn atoi_prefix(s: &str) -> (Option<u32>, &str) {
     let end = s
         .find(|c: char| !c.is_ascii_digit())

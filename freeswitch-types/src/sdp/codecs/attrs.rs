@@ -17,17 +17,28 @@ use crate::sdp::SdpDirection;
 /// switch keeps no name for it: `parse_rtpmap` refused the offer or stored no encoding.
 ///
 /// The name is `parse_rtpmap`'s token run, so a byte outside sofia's `TOKEN` set ends it. The
-/// channels are the switch's `atoi` of `rm_params`.
-fn rtpmap_entry(rest: &str) -> Option<(String, u32, Option<u32>)> {
+/// channels are the switch's `atoi` of `rm_params`, 0 with a
+/// [`SdpWarning::RtpmapChannelsOverflow`] where that overflows.
+fn rtpmap_entry(
+    rest: &str,
+    offset: usize,
+    warnings: &mut Vec<SdpWarning>,
+) -> Option<(String, u32, Option<u32>)> {
     let rtpmap = rtpmap(rest)?;
     // No implementation runs above u32::MAX Hz, so a saturated rate matches nothing either.
     let rate = u32::try_from(rtpmap.rate).unwrap_or(u32::MAX);
     let channels = rtpmap
         .params
         .map(|params| {
-            atoi_prefix(params.trim_start_matches([' ', '\t']))
-                .0
-                .unwrap_or(0)
+            let digits = params.trim_start_matches([' ', '\t']);
+            match atoi_prefix(digits) {
+                (Some(channels), _) => channels,
+                (None, after) if after.len() < digits.len() => {
+                    warnings.push(SdpWarning::RtpmapChannelsOverflow { offset });
+                    0
+                }
+                (None, _) => 0,
+            }
         });
     Some((rtpmap.encoding?, rate, channels))
 }
@@ -78,7 +89,7 @@ pub(super) fn attribute_tables(
             tables
                 .fmtp
                 .insert(pt, rest.to_string());
-        } else if let Some(entry) = rtpmap_entry(rest) {
+        } else if let Some(entry) = rtpmap_entry(rest, attr.offset, warnings) {
             tables
                 .rtpmap
                 .insert(pt, entry);

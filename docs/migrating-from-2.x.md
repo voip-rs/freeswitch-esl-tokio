@@ -170,7 +170,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | attribute names matched byte-exactly and the first direction attribute won | `rtpmap`, `fmtp`, `ptime` and the direction names match in any case, and the last direction attribute in a section wins |
 | static payload types 1, 2 and 19 were unmapped | named `1016`, `G721` and `CN` (comfort noise, beside the non-codec payloads) from sofia's well-known table |
 | an `m=` line repeating a payload type gave every repeat the type's `a=rtpmap` and `a=fmtp` | only the first entry takes them; a repeat keeps its static name or stays unmapped |
-| an `a=rtpmap` channel count had to be a number with nothing after it | everything after the rate's `/` is read with `atoi`, as the switch reads it: `opus/48000/2 x` has 2 channels, `L16/8000/` has 0 |
+| an `a=rtpmap` channel count had to be a number with nothing after it | everything after the rate's `/` is read with `atoi`, as the switch reads it: `opus/48000/2 x` has 2 channels, `L16/8000/` has 0. A count past `u32::MAX`, where `atoi` is undefined, is 0 with `SdpWarning::RtpmapChannelsOverflow { offset }` |
 
 ## Client
 

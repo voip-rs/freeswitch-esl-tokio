@@ -344,6 +344,14 @@ pub enum SdpWarning {
         /// The byte offset of the attribute's line.
         offset: usize,
     },
+    /// An `a=rtpmap` channel count past `u32::MAX`, recorded as 0.
+    ///
+    /// The switch reads the field with C's `atoi`, which the C standard leaves undefined on
+    /// overflow: what the switch then matches against depends on its C library.
+    RtpmapChannelsOverflow {
+        /// The byte offset of the attribute's line.
+        offset: usize,
+    },
 }
 
 /// Why FreeSWITCH's SDP parser refuses an offer, as sofia-sip's `sdp_parse` decides it.
@@ -497,6 +505,11 @@ impl fmt::Display for SdpWarning {
                 f,
                 "the payload attribute at byte {offset} has an unreadable payload type; \
                  FreeSWITCH drops it"
+            ),
+            Self::RtpmapChannelsOverflow { offset } => write!(
+                f,
+                "the a=rtpmap at byte {offset} has a channel count past u32, recorded as 0; \
+                 FreeSWITCH reads it as its C library's atoi decides"
             ),
         }
     }

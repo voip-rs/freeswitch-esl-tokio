@@ -58,7 +58,8 @@ fn rtpmap() -> impl Strategy<Value = String> {
         ][..],
     );
     let rate = select(&["8000", "16000", "48000", "90000"][..]);
-    let channels = select(&["", "/1", "/2"][..]);
+    let past_u32 = format!("/{}", u64::from(u32::MAX) + 1);
+    let channels = select(vec![String::new(), "/1".into(), "/2".into(), past_u32]);
     (attribute_payload_type(), name, rate, channels)
         .prop_map(|(pt, name, rate, ch)| format!("a=rtpmap:{pt} {name}/{rate}{ch}"))
 }
