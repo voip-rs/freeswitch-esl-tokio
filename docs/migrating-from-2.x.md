@@ -152,6 +152,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `sip_status_code()` reads anything `u16::from_str` takes (`+200`, `0200`, `42`) | exactly three digits with a nonzero first one; anything else is `ParseSipStatusCodeError` with the raw value. 9xx stays legal: sofia-sip's nua reports its own failures as 9xx in `sofia::gateway_state` and `sofia::sip_user_state` |
 | `ParseHeaderError`'s `Display` was the inner parser's message (`unknown hangup cause (5 bytes)`) | names the value that did not parse (`hangup cause did not parse`); the parser's message is `source()`, so print the chain |
 | `EslEvent::push_header` / `unshift_header` onto a header holding `""` give `ARRAY::\|:v` / `ARRAY::v\|:` | set it to `v`: the switch deletes a header set to an empty value, so there is nothing to stack onto |
+| `TimetablePrefix` serialized as its variant name (`"OtherLeg"`, `"PostOriginator"`) and had no `FromStr` | serializes as its wire prefix (`"Other-Leg"`, `"POST-ORIGINATOR"`); deserialize accepts that in any ASCII case and the 2.x variant name. `"Other-Leg".parse::<TimetablePrefix>()` reads the prefix in its wire case only, refusing any other with `ParseTimetablePrefixError`; `TimetablePrefix::ALL` lists every prefix |
 
 ## SDP (`sdp` feature)
 
