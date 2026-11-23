@@ -134,7 +134,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "user/1000@example.com"
         );
     }
@@ -146,13 +146,16 @@ mod tests {
             domain: None,
             variables: None,
         };
-        assert_eq!(ep.render(DialStringCarrier::EslApi), "user/1000");
+        assert_eq!(ep.render(DialStringCarrier::EslApi.measured()), "user/1000");
     }
 
     #[test]
     fn user_endpoint_from_str() {
-        let ep =
-            UserEndpoint::parse_for("user/1000@example.com", DialStringCarrier::EslApi).unwrap();
+        let ep = UserEndpoint::parse_for(
+            "user/1000@example.com",
+            DialStringCarrier::EslApi.measured(),
+        )
+        .unwrap();
         assert_eq!(ep.name, "1000");
         assert_eq!(
             ep.domain
@@ -163,7 +166,8 @@ mod tests {
 
     #[test]
     fn user_endpoint_from_str_no_domain() {
-        let ep = UserEndpoint::parse_for("user/1000", DialStringCarrier::EslApi).unwrap();
+        let ep =
+            UserEndpoint::parse_for("user/1000", DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(ep.name, "1000");
         assert!(ep
             .domain
@@ -177,8 +181,8 @@ mod tests {
             domain: Some("example.com".into()),
             variables: None,
         };
-        let s = ep.render(DialStringCarrier::EslApi);
-        let parsed = UserEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+        let s = ep.render(DialStringCarrier::EslApi.measured());
+        let parsed = UserEndpoint::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep);
     }
 

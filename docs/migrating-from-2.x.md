@@ -107,7 +107,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `FlattenedDialString::display_for(target)` and its `FlattenedDialStringDisplay` adapter | `render(target)`, which returns the `String`; `display_raw()` stays and returns an `impl Display` |
 | `BlockParse::default()`, `BlockParse: Default` | `BlockParse::for_version(&version)` for the release you target, or a named revision such as `BlockParse::PairSplitCleans` |
 | `DialStringTarget::new(carrier)` | `DialStringTarget::new(carrier, block_parse)` |
-| a bare `DialStringCarrier` passed where a `DialStringTarget` is taken (`render`, `parse_for`) | `DialStringTarget::new(carrier, block_parse)`; the `From<DialStringCarrier>` impl that filled in a revision is gone |
+| a bare `DialStringCarrier` passed where a `DialStringTarget` is taken (`render`, `parse_for`) | `DialStringTarget::new(carrier, block_parse)`; the `From<DialStringCarrier>` impl that filled in a revision is gone, and `render` and `parse_for` take a `DialStringTarget` rather than `impl Into<DialStringTarget>` |
 | `Originate` builders `dialplan(dp)`, `context(s)`, `cid_name(s)`, `cid_num(s)`, `timeout(d)` | `with_dialplan(dp)`, `with_context(s)`, `with_cid_name(s)`, `with_cid_num(s)`, `with_timeout(d)` |
 | `Originate` readers `dialplan_type()`, `context_str()`, `caller_id_name()`, `caller_id_number()`, `timeout_duration()` | `dialplan()`, `context()`, `cid_name()`, `cid_num()`, `timeout()` |
 | `Originate::timeout_seconds()` | `timeout().map(\|t\| t.as_secs())` |

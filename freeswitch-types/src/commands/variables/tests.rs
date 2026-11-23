@@ -13,7 +13,7 @@ const CARRIERS: [DialStringCarrier; 3] = [
 /// has to name a remedy the caller could not guess.
 #[test]
 fn an_empty_value_is_refused_at_the_boundary() {
-    let err = Variables::parse_for("{k=,after=sentinel}", DialStringCarrier::EslApi)
+    let err = Variables::parse_for("{k=,after=sentinel}", DialStringCarrier::EslApi.measured())
         .unwrap_err()
         .to_string();
     assert!(err.contains('k'), "error does not name the variable: {err}");
@@ -41,7 +41,7 @@ fn a_control_character_in_a_header_bound_value_is_refused() {
         "{SIP_H_X-Tag=a\u{1}b}",
     ] {
         assert!(
-            Variables::parse_for(block, DialStringCarrier::EslApi).is_err(),
+            Variables::parse_for(block, DialStringCarrier::EslApi.measured()).is_err(),
             "{block:?} parsed"
         );
     }
@@ -56,7 +56,7 @@ fn a_tab_or_a_control_character_outside_a_header_passes() {
         "{sip_i_x_tag=a\u{1}b}",
     ] {
         assert!(
-            Variables::parse_for(block, DialStringCarrier::EslApi).is_ok(),
+            Variables::parse_for(block, DialStringCarrier::EslApi.measured()).is_ok(),
             "{block:?} refused"
         );
     }
@@ -67,9 +67,9 @@ fn a_tab_or_a_control_character_outside_a_header_passes() {
 /// the block early and the rest becomes dial-string text.
 #[test]
 fn an_unbalanced_bracket_is_refused_while_a_balanced_one_is_not() {
-    assert!(Variables::parse_for("{k=oops}extra}", DialStringCarrier::EslApi).is_err());
+    assert!(Variables::parse_for("{k=oops}extra}", DialStringCarrier::EslApi.measured()).is_err());
 
-    let balanced = Variables::parse_for("{k=${some_var}}", DialStringCarrier::EslApi)
+    let balanced = Variables::parse_for("{k=${some_var}}", DialStringCarrier::EslApi.measured())
         .expect("a balanced ${...} is ordinary and must parse");
     assert_eq!(balanced.get("k"), Some("${some_var}"));
 }
@@ -87,7 +87,7 @@ fn chosen_separator_leaves_commas_alone() {
         .unwrap();
 
     assert_eq!(
-        vars.render(DialStringCarrier::EslApi),
+        vars.render(DialStringCarrier::EslApi.measured()),
         "{^^:codecs=PCMA,PCMU,G729}"
     );
     assert_eq!(vars.separator(), Some(':'));
@@ -131,7 +131,7 @@ fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
         assert!(
             Variables::parse_for(
                 &format!("{{^^{sep}a=1{sep}b=2}}"),
-                DialStringCarrier::Dialplan
+                DialStringCarrier::Dialplan.measured()
             )
             .is_err(),
             "parser accepted {sep:?}"
@@ -156,8 +156,11 @@ fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
 fn the_parser_refuses_every_separator_the_builder_does() {
     for sep in ['[', ']', '=', '^', 'é', '§'] {
         assert!(
-            Variables::parse_for(&format!("[^^{sep}a=1{sep}b=2]"), DialStringCarrier::EslApi)
-                .is_err(),
+            Variables::parse_for(
+                &format!("[^^{sep}a=1{sep}b=2]"),
+                DialStringCarrier::EslApi.measured()
+            )
+            .is_err(),
             "parser accepted {sep:?}"
         );
     }
@@ -203,7 +206,7 @@ fn escaping_pins_the_measured_wire_forms() {
     ];
     for (carrier, value, want) in cases {
         assert_eq!(
-            escape_value(value, carrier, true, VariablesType::Default),
+            escape_value(value, carrier.measured(), true, VariablesType::Default),
             want,
             "{value:?} for {carrier:?}"
         );
@@ -231,7 +234,7 @@ fn channel_scope_escapes_for_the_leg_splits() {
     ];
     for (carrier, value, want) in cases {
         assert_eq!(
-            escape_value(value, carrier, true, VariablesType::Channel),
+            escape_value(value, carrier.measured(), true, VariablesType::Channel),
             want,
             "{value:?} for {carrier:?}"
         );
@@ -255,7 +258,7 @@ fn a_chosen_separator_changes_only_the_comma() {
     ];
     for (carrier, value, want) in cases {
         assert_eq!(
-            escape_value(value, carrier, false, VariablesType::Default),
+            escape_value(value, carrier.measured(), false, VariablesType::Default),
             want,
             "{value:?} for {carrier:?}"
         );
@@ -277,7 +280,7 @@ fn the_direct_carrier_escapes_for_the_originate_passes_alone() {
     ];
     for (scope, value, want) in cases {
         assert_eq!(
-            escape_value(value, DialStringCarrier::Direct, true, scope),
+            escape_value(value, DialStringCarrier::Direct.measured(), true, scope),
             want,
             "{value:?} in {scope:?}"
         );
@@ -290,8 +293,14 @@ fn a_quote_renders_differently_per_carrier() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("k", "it's")
         .unwrap();
-    assert_eq!(vars.render(DialStringCarrier::EslApi), r"{k=it\\\\\\\'s}");
-    assert_eq!(vars.render(DialStringCarrier::Dialplan), r"{k=it\\\\\\'s}");
+    assert_eq!(
+        vars.render(DialStringCarrier::EslApi.measured()),
+        r"{k=it\\\\\\\'s}"
+    );
+    assert_eq!(
+        vars.render(DialStringCarrier::Dialplan.measured()),
+        r"{k=it\\\\\\'s}"
+    );
 }
 
 #[test]
@@ -303,9 +312,9 @@ fn round_trips_at_every_carrier() {
                 .unwrap();
             vars.insert("after", "sentinel")
                 .unwrap();
-            let rendered = vars.render(carrier);
+            let rendered = vars.render(carrier.measured());
 
-            let back = Variables::parse_for(&rendered, carrier)
+            let back = Variables::parse_for(&rendered, carrier.measured())
                 .unwrap_or_else(|e| panic!("{value:?} for {carrier:?} rendered {rendered}: {e}"));
             assert_eq!(back.get("k"), Some(value), "rendered {rendered}");
             assert_eq!(back.get("after"), Some("sentinel"), "rendered {rendered}");
@@ -328,9 +337,9 @@ fn separated_block_round_trips_at_every_carrier() {
             let vars = vars
                 .with_separator('~')
                 .expect("'~' appears in none of these values");
-            let rendered = vars.render(carrier);
+            let rendered = vars.render(carrier.measured());
 
-            let back = Variables::parse_for(&rendered, carrier)
+            let back = Variables::parse_for(&rendered, carrier.measured())
                 .unwrap_or_else(|e| panic!("{value:?} for {carrier:?} rendered {rendered}: {e}"));
             assert_eq!(back.get("k"), Some(value), "rendered {rendered}");
             assert_eq!(back.get("after"), Some("sentinel"), "rendered {rendered}");
@@ -350,9 +359,9 @@ fn value_with_backslash_round_trips() {
             .unwrap();
         vars.insert("after", "sentinel")
             .unwrap();
-        let rendered = vars.render(DialStringCarrier::EslApi);
+        let rendered = vars.render(DialStringCarrier::EslApi.measured());
 
-        let back = Variables::parse_for(&rendered, DialStringCarrier::EslApi)
+        let back = Variables::parse_for(&rendered, DialStringCarrier::EslApi.measured())
             .unwrap_or_else(|e| panic!("{value:?} rendered {rendered} and failed to parse: {e}"));
         assert_eq!(back.get("k"), Some(value), "rendered {rendered}");
         assert_eq!(
@@ -369,7 +378,7 @@ fn value_with_backslash_round_trips() {
 fn missing_equals_error_omits_the_fragment() {
     let msg = Variables::parse_for(
         "{origination_caller_id_number=15551234567,15550009999}",
-        DialStringCarrier::EslApi,
+        DialStringCarrier::EslApi.measured(),
     )
     .unwrap_err()
     .to_string();
@@ -387,7 +396,7 @@ fn missing_equals_error_omits_the_fragment() {
 fn unknown_delimiters_error_omits_the_block() {
     let msg = Variables::parse_for(
         "(origination_caller_id_number=15551234567)",
-        DialStringCarrier::EslApi,
+        DialStringCarrier::EslApi.measured(),
     )
     .unwrap_err()
     .to_string();
@@ -405,7 +414,7 @@ fn variables_standard_chars() {
     vars.insert("second", "2")
         .unwrap();
     assert_eq!(
-        vars.render(DialStringCarrier::EslApi),
+        vars.render(DialStringCarrier::EslApi.measured()),
         "{test_key=this_value,second=2}"
     );
 }
@@ -415,7 +424,7 @@ fn variables_comma_escaped() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("test_key", "this,is,a,value")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert!(result.contains("\\,"));
 }
 
@@ -424,7 +433,7 @@ fn variables_spaces_quoted() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("test_key", "this is a value")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert_eq!(
         result
             .matches('\'')
@@ -438,7 +447,7 @@ fn variables_single_quote_escaped() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("test_key", "let's_this_be_a_value")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert!(result.contains("\\'"));
 }
 
@@ -447,7 +456,7 @@ fn variables_enterprise_delimiters() {
     let mut vars = Variables::new(VariablesType::Enterprise);
     vars.insert("k", "v")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert!(result.starts_with('<'));
     assert!(result.ends_with('>'));
 }
@@ -457,7 +466,7 @@ fn variables_channel_delimiters() {
     let mut vars = Variables::new(VariablesType::Channel);
     vars.insert("k", "v")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert!(result.starts_with('['));
     assert!(result.ends_with(']'));
 }
@@ -467,7 +476,7 @@ fn variables_default_delimiters() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("k", "v")
         .unwrap();
-    let result = vars.render(DialStringCarrier::EslApi);
+    let result = vars.render(DialStringCarrier::EslApi.measured());
     assert!(result.starts_with('{'));
     assert!(result.ends_with('}'));
 }
@@ -479,8 +488,8 @@ fn variables_parse_round_trip() {
         .unwrap();
     vars.insert("sip_h_Call-Info", "<url>;meta=123,<uri>")
         .unwrap();
-    let s = vars.render(DialStringCarrier::EslApi);
-    let parsed = Variables::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+    let s = vars.render(DialStringCarrier::EslApi.measured());
+    let parsed = Variables::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
     assert_eq!(
         parsed.get("origination_caller_id_number"),
         Some("9005551212")
@@ -492,7 +501,7 @@ fn variables_parse_round_trip() {
 fn variables_caret_caret_separator() {
     let vars = Variables::parse_for(
         "[^^:sip_invite_domain=pbx.example.com:presence_id=1211@pbx.example.com]",
-        DialStringCarrier::EslApi,
+        DialStringCarrier::EslApi.measured(),
     )
     .unwrap();
     assert_eq!(vars.scope(), VariablesType::Channel);
@@ -502,13 +511,16 @@ fn variables_caret_caret_separator() {
 
 #[test]
 fn variables_caret_caret_display_uses_canonical_comma() {
-    let vars = Variables::parse_for("[^^:a=1:b=2]", DialStringCarrier::EslApi).unwrap();
-    assert_eq!(vars.render(DialStringCarrier::EslApi), "[a=1,b=2]");
+    let vars = Variables::parse_for("[^^:a=1:b=2]", DialStringCarrier::EslApi.measured()).unwrap();
+    assert_eq!(
+        vars.render(DialStringCarrier::EslApi.measured()),
+        "[a=1,b=2]"
+    );
 }
 
 #[test]
 fn variables_caret_caret_default_scope() {
-    let vars = Variables::parse_for("{^^|x=1|y=2}", DialStringCarrier::EslApi).unwrap();
+    let vars = Variables::parse_for("{^^|x=1|y=2}", DialStringCarrier::EslApi.measured()).unwrap();
     assert_eq!(vars.scope(), VariablesType::Default);
     assert_eq!(vars.get("x"), Some("1"));
     assert_eq!(vars.get("y"), Some("2"));
@@ -516,7 +528,7 @@ fn variables_caret_caret_default_scope() {
 
 #[test]
 fn variables_caret_caret_enterprise_scope() {
-    let vars = Variables::parse_for("<^^;a=1;b=2>", DialStringCarrier::EslApi).unwrap();
+    let vars = Variables::parse_for("<^^;a=1;b=2>", DialStringCarrier::EslApi.measured()).unwrap();
     assert_eq!(vars.scope(), VariablesType::Enterprise);
     assert_eq!(vars.get("a"), Some("1"));
 }
@@ -530,7 +542,7 @@ fn variables_caret_caret_keeps_an_escaped_comma_outside_channel_scope() {
         (r"{^^:key=val\,ue:other=x}", r"val\,ue"),
         (r"[^^:key=val\,ue:other=x]", "val,ue"),
     ] {
-        let vars = Variables::parse_for(block, DialStringCarrier::EslApi)
+        let vars = Variables::parse_for(block, DialStringCarrier::EslApi.measured())
             .unwrap_or_else(|e| panic!("{block}: {e}"));
         assert_eq!(vars.get("key"), Some(want), "{block}");
     }
@@ -540,7 +552,7 @@ fn variables_caret_caret_keeps_an_escaped_comma_outside_channel_scope() {
 fn variables_caret_caret_values_with_commas() {
     let vars = Variables::parse_for(
         "{^^|sip_h_X-Call-Info=<urn:foo>;purpose=bar,<urn:baz>|other=val}",
-        DialStringCarrier::EslApi,
+        DialStringCarrier::EslApi.measured(),
     )
     .unwrap();
     assert_eq!(
@@ -552,29 +564,29 @@ fn variables_caret_caret_values_with_commas() {
 
 #[test]
 fn variables_caret_caret_empty_vars() {
-    let vars = Variables::parse_for("[^^:]", DialStringCarrier::EslApi).unwrap();
+    let vars = Variables::parse_for("[^^:]", DialStringCarrier::EslApi.measured()).unwrap();
     assert!(vars.is_empty());
     assert_eq!(vars.scope(), VariablesType::Channel);
 }
 
 #[test]
 fn variables_caret_caret_missing_separator() {
-    assert!(Variables::parse_for("[^^]", DialStringCarrier::EslApi).is_err());
+    assert!(Variables::parse_for("[^^]", DialStringCarrier::EslApi.measured()).is_err());
 }
 
 #[test]
 fn variables_caret_caret_closing_bracket_as_sep() {
-    assert!(Variables::parse_for("[^^]]", DialStringCarrier::EslApi).is_err());
+    assert!(Variables::parse_for("[^^]]", DialStringCarrier::EslApi.measured()).is_err());
 }
 
 #[test]
 fn variables_caret_caret_equals_as_sep() {
-    assert!(Variables::parse_for("[^^=a=1]", DialStringCarrier::EslApi).is_err());
+    assert!(Variables::parse_for("[^^=a=1]", DialStringCarrier::EslApi.measured()).is_err());
 }
 
 #[test]
 fn variables_from_str_empty_block() {
-    let result = Variables::parse_for("{}", DialStringCarrier::EslApi);
+    let result = Variables::parse_for("{}", DialStringCarrier::EslApi.measured());
     assert!(
         result.is_ok(),
         "empty variable block should parse successfully"
@@ -588,7 +600,7 @@ fn variables_from_str_empty_block() {
 
 #[test]
 fn variables_from_str_empty_channel_block() {
-    let result = Variables::parse_for("[]", DialStringCarrier::EslApi);
+    let result = Variables::parse_for("[]", DialStringCarrier::EslApi.measured());
     assert!(result.is_ok());
     let vars = result.unwrap();
     assert!(vars.is_empty());
@@ -597,7 +609,7 @@ fn variables_from_str_empty_channel_block() {
 
 #[test]
 fn variables_from_str_empty_enterprise_block() {
-    let result = Variables::parse_for("<>", DialStringCarrier::EslApi);
+    let result = Variables::parse_for("<>", DialStringCarrier::EslApi.measured());
     assert!(result.is_ok());
     let vars = result.unwrap();
     assert!(vars.is_empty());
@@ -671,7 +683,7 @@ fn serde_variables_separator_round_trips() {
     assert_eq!(parsed.separator(), Some('|'));
     assert_eq!(parsed, vars);
     assert_eq!(
-        parsed.render(DialStringCarrier::EslApi),
+        parsed.render(DialStringCarrier::EslApi.measured()),
         "{^^|codecs=PCMA,PCMU}"
     );
 }
@@ -702,7 +714,7 @@ fn serde_variables_separator_deserializes_from_config() {
     assert_eq!(vars.scope(), VariablesType::Channel);
     assert_eq!(vars.separator(), Some(':'));
     assert_eq!(
-        vars.render(DialStringCarrier::EslApi),
+        vars.render(DialStringCarrier::EslApi.measured()),
         "[^^:codecs=PCMA,PCMU]"
     );
 }
@@ -749,7 +761,7 @@ fn serde_variables_unusable_separator_is_refused() {
 /// default scope is ordinary.
 #[test]
 fn a_quote_in_channel_scope_is_refused_at_every_boundary() {
-    let err = Variables::parse_for(r"[cid=it\\\\\\\'s]", DialStringCarrier::EslApi)
+    let err = Variables::parse_for(r"[cid=it\\\\\\\'s]", DialStringCarrier::EslApi.measured())
         .unwrap_err()
         .to_string();
     assert!(
@@ -765,7 +777,9 @@ fn a_quote_in_channel_scope_is_refused_at_every_boundary() {
         "error does not name the variable and scope: {err}"
     );
 
-    assert!(Variables::parse_for(r"{cid=it\\\\\\\'s}", DialStringCarrier::EslApi).is_ok());
+    assert!(
+        Variables::parse_for(r"{cid=it\\\\\\\'s}", DialStringCarrier::EslApi.measured()).is_ok()
+    );
     assert!(
         serde_json::from_str::<Variables>(r#"{"scope":"default","vars":{"cid":"it's"}}"#).is_ok()
     );
@@ -773,20 +787,6 @@ fn a_quote_in_channel_scope_is_refused_at_every_boundary() {
 
 /// Every revision a block can be rendered for; a new variant joins this list.
 const REVISIONS: &[BlockParse] = &[BlockParse::PairSplitCleans];
-
-#[test]
-fn a_bare_carrier_is_a_target_at_the_default_revision() {
-    let target = DialStringTarget::from(DialStringCarrier::Dialplan);
-    assert_eq!(target.carrier(), DialStringCarrier::Dialplan);
-    assert_eq!(target.block_parse(), BlockParse::MEASURED);
-    assert_eq!(BlockParse::MEASURED, BlockParse::PairSplitCleans);
-    assert_eq!(
-        DialStringTarget::new(DialStringCarrier::EslApi, BlockParse::MEASURED)
-            .with_block_parse(BlockParse::PairSplitCleans)
-            .block_parse(),
-        BlockParse::PairSplitCleans
-    );
-}
 
 /// An enterprise block is parsed at the same depth as a default one; nothing
 /// else pins its forms.
@@ -886,7 +886,7 @@ fn a_channel_value_ending_in_a_backslash_guards_the_next_comma() {
     assert_eq!(
         escape_value(
             r"a\",
-            DialStringCarrier::EslApi,
+            DialStringCarrier::EslApi.measured(),
             true,
             VariablesType::Default
         ),
@@ -1173,7 +1173,8 @@ fn a_block_cut_by_its_argv_separator_is_refused() {
 #[test]
 fn a_block_cut_by_the_blank_split_is_refused() {
     for block in ["{k=a b}", r"{k=x\\'y}", "{k=a} {j=b}"] {
-        let err = Variables::parse_for(block, DialStringCarrier::EslApi).expect_err(block);
+        let err =
+            Variables::parse_for(block, DialStringCarrier::EslApi.measured()).expect_err(block);
         assert!(!err
             .to_string()
             .contains("k="));
@@ -1184,14 +1185,14 @@ fn a_block_cut_by_the_blank_split_is_refused() {
         (" {k=v} ", "v"),
     ] {
         assert_eq!(
-            Variables::parse_for(block, DialStringCarrier::EslApi)
+            Variables::parse_for(block, DialStringCarrier::EslApi.measured())
                 .unwrap_or_else(|e| panic!("{block}: {e}"))
                 .get("k"),
             Some(want),
             "{block}"
         );
     }
-    assert!(Variables::parse_for("{k=a b}", DialStringCarrier::Dialplan).is_ok());
+    assert!(Variables::parse_for("{k=a b}", DialStringCarrier::Dialplan.measured()).is_ok());
 }
 
 /// `switch_ivr_originate` takes the enterprise path on any `:_:` in the dial string, and
@@ -1199,7 +1200,8 @@ fn a_block_cut_by_the_blank_split_is_refused() {
 #[test]
 fn a_value_carrying_the_enterprise_separator_is_refused() {
     for block in ["{k=x:_:y}", "<k=x:_:y>", "[k=x:_:y]", "{k='a :_: b'}"] {
-        let err = Variables::parse_for(block, DialStringCarrier::EslApi).expect_err(block);
+        let err =
+            Variables::parse_for(block, DialStringCarrier::EslApi.measured()).expect_err(block);
         assert!(!err
             .to_string()
             .contains("x:_:y"));
@@ -1282,7 +1284,7 @@ fn a_key_no_escaping_delivers_is_refused_at_parse_and_config_load() {
         "{=v,after=sentinel}",
         r"[SECRET\\\\\\'s=v]",
     ] {
-        let msg = Variables::parse_for(block, DialStringCarrier::Dialplan)
+        let msg = Variables::parse_for(block, DialStringCarrier::Dialplan.measured())
             .expect_err(block)
             .to_string();
         assert!(!msg.contains("SECRET"), "{block}: {msg}");
@@ -1312,7 +1314,7 @@ fn a_key_carrying_an_array_index_is_refused_at_parse_and_config_load() {
         "[SECRET[1]=v]",
         r"{^^;SECRET[0]=v;after=a,b}",
     ] {
-        let msg = Variables::parse_for(block, DialStringCarrier::Dialplan)
+        let msg = Variables::parse_for(block, DialStringCarrier::Dialplan.measured())
             .expect_err(block)
             .to_string();
         assert!(!msg.contains("SECRET"), "{block}: {msg}");
@@ -1339,7 +1341,7 @@ fn two_keys_differing_only_in_case_are_refused_at_parse_and_config_load() {
         "[SeCrEt=1,secret=2]",
         "{^^;secret=1;SECRET=a,b}",
     ] {
-        let msg = Variables::parse_for(block, DialStringCarrier::EslApi)
+        let msg = Variables::parse_for(block, DialStringCarrier::EslApi.measured())
             .expect_err(block)
             .to_string();
         assert!(
@@ -1361,7 +1363,7 @@ fn two_keys_differing_only_in_case_are_refused_at_parse_and_config_load() {
             "{json}: {msg}"
         );
     }
-    let same = Variables::parse_for("{k=1,k=2}", DialStringCarrier::EslApi)
+    let same = Variables::parse_for("{k=1,k=2}", DialStringCarrier::EslApi.measured())
         .expect("a repeated name is the last one written, on the switch and here");
     assert_eq!(same.get("k"), Some("2"));
 }
@@ -1510,7 +1512,8 @@ fn parse_and_config_load_refuse_a_pair_with_the_same_typed_fault() {
         ),
     ];
     for (block, json, want) in cases {
-        let parsed = Variables::parse_for(block, DialStringCarrier::Dialplan).expect_err(block);
+        let parsed =
+            Variables::parse_for(block, DialStringCarrier::Dialplan.measured()).expect_err(block);
         let message = parsed.to_string();
         assert_eq!(undeliverable(parsed), want, "{block}");
         let loaded = serde_json::from_str::<Variables>(json)

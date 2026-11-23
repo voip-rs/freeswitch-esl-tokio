@@ -409,8 +409,8 @@ impl<'de> serde::Deserialize<'de> for Variables {
 
 impl Variables {
     /// The block as `target` reads it.
-    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
-        self.display_for(target.into())
+    pub fn render(&self, target: DialStringTarget) -> String {
+        self.display_for(target)
             .to_string()
     }
 
@@ -469,10 +469,8 @@ impl Variables {
     /// Parse a block written for a [`DialStringTarget`], as the switch installs
     /// it there: the pairs are read through a port of every pass that target applies, so a block
     /// [`render`](Self::render) wrote at the same target reads back as built.
-    pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
-        let (argument, target) = target
-            .into()
-            .read_argument(s)?;
+    pub fn parse_for(s: &str, target: DialStringTarget) -> Result<Self, OriginateError> {
+        let (argument, target) = target.read_argument(s)?;
         let s = argument.trim_matches(' ');
         if s.len() < 2 {
             return Err(OriginateError::ParseError(

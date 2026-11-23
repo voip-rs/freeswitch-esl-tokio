@@ -197,7 +197,10 @@ mod tests {
     #[test]
     fn loopback_display_no_context() {
         let ep = LoopbackEndpoint::new("9199").unwrap();
-        assert_eq!(ep.render(DialStringCarrier::EslApi), "loopback/9199");
+        assert_eq!(
+            ep.render(DialStringCarrier::EslApi.measured()),
+            "loopback/9199"
+        );
     }
 
     #[test]
@@ -207,7 +210,7 @@ mod tests {
             .with_context("default")
             .unwrap();
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "loopback/9199/default"
         );
     }
@@ -223,7 +226,7 @@ mod tests {
             .unwrap()
             .with_variables(vars);
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "{loopback_initial_codec=L16@48000h}loopback/100/test"
         );
     }
@@ -231,7 +234,8 @@ mod tests {
     #[test]
     fn loopback_from_str_with_context() {
         let ep =
-            LoopbackEndpoint::parse_for("loopback/9199/test", DialStringCarrier::EslApi).unwrap();
+            LoopbackEndpoint::parse_for("loopback/9199/test", DialStringCarrier::EslApi.measured())
+                .unwrap();
         assert_eq!(ep.extension, "9199");
         assert_eq!(
             ep.context
@@ -242,7 +246,8 @@ mod tests {
 
     #[test]
     fn loopback_from_str_no_context() {
-        let ep = LoopbackEndpoint::parse_for("loopback/9199", DialStringCarrier::EslApi).unwrap();
+        let ep = LoopbackEndpoint::parse_for("loopback/9199", DialStringCarrier::EslApi.measured())
+            .unwrap();
         assert_eq!(ep.extension, "9199");
         assert!(ep
             .context
@@ -255,8 +260,8 @@ mod tests {
             .unwrap()
             .with_context("myctx")
             .unwrap();
-        let s = ep.render(DialStringCarrier::EslApi);
-        let parsed = LoopbackEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+        let s = ep.render(DialStringCarrier::EslApi.measured());
+        let parsed = LoopbackEndpoint::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -265,9 +270,11 @@ mod tests {
     /// context, which then renders back as one segment the switch re-splits.
     #[test]
     fn loopback_carries_a_dialplan_segment() {
-        let ep =
-            LoopbackEndpoint::parse_for("loopback/9199/default/xml", DialStringCarrier::EslApi)
-                .unwrap();
+        let ep = LoopbackEndpoint::parse_for(
+            "loopback/9199/default/xml",
+            DialStringCarrier::EslApi.measured(),
+        )
+        .unwrap();
         assert_eq!(ep.extension, "9199");
         assert_eq!(
             ep.context
@@ -280,7 +287,7 @@ mod tests {
             Some("xml")
         );
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "loopback/9199/default/xml"
         );
     }
@@ -294,13 +301,13 @@ mod tests {
             .with_dialplan("inline")
             .unwrap();
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "loopback/9199/default/inline"
         );
         assert_eq!(
             LoopbackEndpoint::parse_for(
-                &ep.render(DialStringCarrier::EslApi),
-                DialStringCarrier::EslApi
+                &ep.render(DialStringCarrier::EslApi.measured()),
+                DialStringCarrier::EslApi.measured()
             )
             .unwrap()
             .dialplan
@@ -312,8 +319,8 @@ mod tests {
     #[test]
     fn loopback_round_trip_no_context() {
         let ep = LoopbackEndpoint::new("9199").unwrap();
-        let s = ep.render(DialStringCarrier::EslApi);
-        let parsed = LoopbackEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+        let s = ep.render(DialStringCarrier::EslApi.measured());
+        let parsed = LoopbackEndpoint::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -327,11 +334,13 @@ mod tests {
             "loopback/100/custom_ctx/inline",
         ];
         for input in inputs {
-            let parsed = LoopbackEndpoint::parse_for(input, DialStringCarrier::EslApi).unwrap();
-            let displayed = parsed.render(DialStringCarrier::EslApi);
+            let parsed =
+                LoopbackEndpoint::parse_for(input, DialStringCarrier::EslApi.measured()).unwrap();
+            let displayed = parsed.render(DialStringCarrier::EslApi.measured());
             assert_eq!(displayed, input, "round-trip failed for: {}", input);
             let reparsed =
-                LoopbackEndpoint::parse_for(&displayed, DialStringCarrier::EslApi).unwrap();
+                LoopbackEndpoint::parse_for(&displayed, DialStringCarrier::EslApi.measured())
+                    .unwrap();
             assert_eq!(reparsed, parsed);
         }
     }

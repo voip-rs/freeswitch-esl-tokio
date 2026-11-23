@@ -23,7 +23,7 @@ macro_rules! fixture {
 }
 
 fn read_at(input: &str, carrier: DialStringCarrier) -> DialList {
-    read(input, carrier.into()).unwrap_or_else(|e| panic!("{input:?} at {carrier:?}: {e:?}"))
+    read(input, carrier.measured()).unwrap_or_else(|e| panic!("{input:?} at {carrier:?}: {e:?}"))
 }
 
 fn legs(list: &DialList) -> Vec<(&Thread, &Leg)> {
@@ -247,7 +247,7 @@ fn values_the_switch_escaped_arrive_as_measured() {
 fn the_api_carrier_refuses_what_its_argument_split_cuts() {
     for name in [fixture!("g-fp-esc-space.A"), fixture!("g-fp-quote-first.A")] {
         assert_eq!(
-            read(name, API.into()),
+            read(name, API.measured()),
             Err(PipelineError::ArgvSplit),
             "{name}"
         );
@@ -257,7 +257,7 @@ fn the_api_carrier_refuses_what_its_argument_split_cuts() {
 #[test]
 fn a_block_cut_open_aborts_the_whole_list() {
     assert_eq!(
-        read(fixture!("g-fp-esc-pipe.A"), API.into()),
+        read(fixture!("g-fp-esc-pipe.A"), API.measured()),
         Err(PipelineError::UnclosedBlock { leg: 0 })
     );
     let bracket = read_at(fixture!("g-fp-esc-bracket.A"), API);
@@ -355,7 +355,7 @@ fn a_nested_variable_is_named_and_the_opt_in_is_seen_anywhere() {
 
 #[test]
 fn nothing_to_dial_is_empty() {
-    assert_eq!(read("", API.into()), Err(PipelineError::Empty));
+    assert_eq!(read("", API.measured()), Err(PipelineError::Empty));
 }
 
 /// Everything this crate renders has to read back to the values it was given,
@@ -383,8 +383,8 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
         r"back\,comma",
     ];
     let targets = [
-        API.into(),
-        DIALPLAN.into(),
+        API.measured(),
+        DIALPLAN.measured(),
         DialStringTarget::new(API, BlockParse::MEASURED)
             .with_argv_separator('~')
             .expect("'~' separates originate's arguments"),
@@ -453,7 +453,7 @@ fn legs_and_threads_meet_only_at_their_separators() {
         ])
     {
         for carrier in [API, DIALPLAN] {
-            let Ok(list) = read(input, carrier.into()) else {
+            let Ok(list) = read(input, carrier.measured()) else {
                 continue;
             };
             let context = format!("{input:?} at {carrier:?}: {list:?}");

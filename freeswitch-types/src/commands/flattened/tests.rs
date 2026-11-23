@@ -13,7 +13,7 @@ macro_rules! fixture {
 }
 
 fn parse(input: &str, carrier: DialStringCarrier) -> FlattenedDialString {
-    FlattenedDialString::parse_for(input, carrier)
+    FlattenedDialString::parse_for(input, carrier.measured())
         .unwrap_or_else(|e| panic!("{input:?} at {carrier:?}: {e:?}"))
 }
 
@@ -41,7 +41,7 @@ fn raw_render_is_the_input_for_every_fixture() {
         }
         let input = std::fs::read_to_string(&path).unwrap();
         for carrier in [API, DIALPLAN] {
-            if let Ok(list) = FlattenedDialString::parse_for(&input, carrier) {
+            if let Ok(list) = FlattenedDialString::parse_for(&input, carrier.measured()) {
                 parsed += 1;
                 assert_eq!(
                     list.display_raw()
@@ -62,7 +62,7 @@ fn plain_fixtures_render_back_to_the_input() {
         fixture!("g-fp-reg.A"),
         fixture!("pbx-calltakers.A"),
     ] {
-        assert_eq!(parse(input, API).render(API), input);
+        assert_eq!(parse(input, API).render(API.measured()), input);
     }
 }
 
@@ -73,7 +73,7 @@ fn head_blocks_render_ahead_and_only_set_pairs_are_carried() {
         API,
     );
     assert_eq!(
-        list.render(API),
+        list.render(API.measured()),
         "<e=1>{g=2}[a=1]loopback/9199/test:_:{h=3}loopback/9199/x|[b=2]null/a"
     );
 }
@@ -186,7 +186,7 @@ fn a_non_ascii_block_separator_warns_and_carries_nothing() {
         leg.warnings(),
         [LegWarning::BlockSeparatorUnreadable { block: 1 }]
     );
-    assert_eq!(list.render(API), "[a=1]loopback/9199/test");
+    assert_eq!(list.render(API.measured()), "[a=1]loopback/9199/test");
     let shown = leg.warnings()[0].to_string();
     assert!(shown.contains('1') && !shown.contains("secret") && !shown.contains('é'));
     assert_eq!(
@@ -244,7 +244,7 @@ fn a_block_rewriting_the_text_after_it_warns() {
 #[test]
 fn a_non_ascii_argument_separator_is_not_taken() {
     assert_eq!(
-        FlattenedDialString::parse_for("^^é{v=a b}loopback/9199/test", API),
+        FlattenedDialString::parse_for("^^é{v=a b}loopback/9199/test", API.measured()),
         Err(FlattenedDialStringError::ArgvSplit)
     );
 }
@@ -398,7 +398,7 @@ fn split_targets() -> [DialStringTarget; 3] {
 fn a_spaced_capture_is_one_argument_once_escaped() {
     for body in [fixture!("g-fp-argv-space.A"), fixture!("g-fp-argv-leg2.A")] {
         assert_eq!(
-            FlattenedDialString::parse_for(body, API),
+            FlattenedDialString::parse_for(body, API.measured()),
             Err(FlattenedDialStringError::ArgvSplit)
         );
         for target in split_targets() {
@@ -613,7 +613,7 @@ fn a_non_ascii_separator_ahead_of_the_legs_warns_and_carries_nothing() {
                 [ListWarning::BlockSeparatorUnreadable { block }],
                 "{input:?} at {carrier:?}"
             );
-            assert_eq!(list.render(carrier), carried);
+            assert_eq!(list.render(carrier.measured()), carried);
             let shown = list.warnings()[0].to_string();
             assert!(
                 shown.contains(&block.to_string())
@@ -764,7 +764,7 @@ fn removing_every_leg_leaves_nothing_to_render() {
             .to_string(),
         ""
     );
-    assert_eq!(list.render(API), "");
+    assert_eq!(list.render(API.measured()), "");
 }
 
 #[test]
@@ -1069,7 +1069,7 @@ fn errors_name_their_kind_and_never_quote_input() {
             FlattenedDialStringError::TrailingNewline,
         ),
     ] {
-        let err = FlattenedDialString::parse_for(input, carrier).unwrap_err();
+        let err = FlattenedDialString::parse_for(input, carrier.measured()).unwrap_err();
         assert_eq!(err, want, "{input:?}");
         let shown = err.to_string();
         assert!(!shown.is_empty());
@@ -1163,7 +1163,7 @@ fn the_direct_carrier_neither_splits_arguments_nor_expands() {
             .to_string(),
         input
     );
-    let rendered = list.render(DialStringCarrier::Direct);
+    let rendered = list.render(DialStringCarrier::Direct.measured());
     let back = parse(&rendered, DialStringCarrier::Direct);
     assert_eq!(
         back.legs()
@@ -1172,7 +1172,7 @@ fn the_direct_carrier_neither_splits_arguments_nor_expands() {
         leg_variables(leg)
     );
 
-    assert!(FlattenedDialString::parse_for(input, API).is_err());
+    assert!(FlattenedDialString::parse_for(input, API.measured()).is_err());
     assert_eq!(
         parse(input, DIALPLAN).warnings(),
         [ListWarning::CarrierExpands]
@@ -1316,7 +1316,7 @@ mod variables_agree_with_lookup {
 
         #[test]
         fn every_leg_variable_is_its_lookup_once(input in list()) {
-            let Ok(list) = FlattenedDialString::parse_for(&input, API) else {
+            let Ok(list) = FlattenedDialString::parse_for(&input, API.measured()) else {
                 return Ok(());
             };
             for leg in list.legs() {

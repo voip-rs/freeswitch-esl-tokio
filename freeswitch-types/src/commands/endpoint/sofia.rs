@@ -566,7 +566,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "sofia/internal/1000@example.com"
         );
     }
@@ -582,16 +582,18 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "{originate_timeout=30}sofia/internal/1000@example.com"
         );
     }
 
     #[test]
     fn sofia_endpoint_from_str() {
-        let ep =
-            SofiaEndpoint::parse_for("sofia/internal/1000@example.com", DialStringCarrier::EslApi)
-                .unwrap();
+        let ep = SofiaEndpoint::parse_for(
+            "sofia/internal/1000@example.com",
+            DialStringCarrier::EslApi.measured(),
+        )
+        .unwrap();
         assert_eq!(ep.profile, "internal");
         assert_eq!(ep.destination, "1000@example.com");
         assert!(ep
@@ -603,7 +605,7 @@ mod tests {
     fn sofia_endpoint_from_str_with_variables() {
         let ep = SofiaEndpoint::parse_for(
             "{originate_timeout=30}sofia/internal/1000@example.com",
-            DialStringCarrier::EslApi,
+            DialStringCarrier::EslApi.measured(),
         )
         .unwrap();
         assert_eq!(ep.profile, "internal");
@@ -623,8 +625,8 @@ mod tests {
             destination: "sip:user@host:5060".into(),
             variables: None,
         };
-        let s = ep.render(DialStringCarrier::EslApi);
-        let parsed = SofiaEndpoint::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+        let s = ep.render(DialStringCarrier::EslApi.measured());
+        let parsed = SofiaEndpoint::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -666,7 +668,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "sofia/gateway/my_provider/18005551234"
         );
     }
@@ -680,7 +682,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "sofia/gateway/external::my_provider/18005551234"
         );
     }
@@ -697,7 +699,7 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "{sip_h_X-Custom=value}sofia/gateway/gw1/1234"
         );
     }
@@ -706,7 +708,7 @@ mod tests {
     fn sofia_gateway_from_str() {
         let ep = SofiaGateway::parse_for(
             "sofia/gateway/my_provider/18005551234",
-            DialStringCarrier::EslApi,
+            DialStringCarrier::EslApi.measured(),
         )
         .unwrap();
         assert_eq!(ep.gateway, "my_provider");
@@ -720,7 +722,7 @@ mod tests {
     fn sofia_gateway_from_str_with_profile() {
         let ep = SofiaGateway::parse_for(
             "sofia/gateway/external::my_provider/18005551234",
-            DialStringCarrier::EslApi,
+            DialStringCarrier::EslApi.measured(),
         )
         .unwrap();
         assert_eq!(ep.gateway, "my_provider");
@@ -740,8 +742,8 @@ mod tests {
             profile: Some("external".into()),
             variables: None,
         };
-        let s = ep.render(DialStringCarrier::EslApi);
-        let parsed = SofiaGateway::parse_for(&s, DialStringCarrier::EslApi).unwrap();
+        let s = ep.render(DialStringCarrier::EslApi.measured());
+        let parsed = SofiaGateway::parse_for(&s, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -782,7 +784,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "${sofia_contact(1000@example.com)}"
         );
     }
@@ -796,7 +798,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "${sofia_contact(internal/1000@example.com)}"
         );
     }
@@ -810,7 +812,7 @@ mod tests {
             variables: None,
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "${sofia_contact(*/1000@example.com)}"
         );
     }
@@ -827,7 +829,7 @@ mod tests {
             variables: Some(vars),
         };
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "{presence_id=1000@example.com}${sofia_contact(1000@example.com)}"
         );
     }
@@ -862,7 +864,7 @@ mod tests {
             profile: Some("*".into()),
             variables: None,
         };
-        let s = ep.render(DialStringCarrier::EslApi);
+        let s = ep.render(DialStringCarrier::EslApi.measured());
         let parsed = SofiaContact::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }
@@ -873,7 +875,7 @@ mod tests {
             .unwrap()
             .with_profile("user@realm")
             .unwrap();
-        let s = ep.render(DialStringCarrier::EslApi);
+        let s = ep.render(DialStringCarrier::EslApi.measured());
         assert_eq!(s, "${sofia_contact(user@realm/1000@example.com)}");
         // Round-trip: the first @ is in profile, the parser splits on / first
         // then finds @ in the user_at_domain part

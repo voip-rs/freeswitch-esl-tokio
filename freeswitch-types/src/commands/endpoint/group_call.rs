@@ -142,7 +142,7 @@ mod tests {
     fn group_call_display() {
         let ep = GroupCall::new("support", "example.com").unwrap();
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "${group_call(support@example.com)}"
         );
     }
@@ -153,7 +153,7 @@ mod tests {
             .unwrap()
             .with_order(GroupCallOrder::All);
         assert_eq!(
-            ep.render(DialStringCarrier::EslApi),
+            ep.render(DialStringCarrier::EslApi.measured()),
             "${group_call(support@example.com+A)}"
         );
     }
@@ -181,7 +181,7 @@ mod tests {
         let ep = GroupCall::new("calltakers", "example.com")
             .unwrap()
             .with_order(GroupCallOrder::Enterprise);
-        let s = ep.render(DialStringCarrier::EslApi);
+        let s = ep.render(DialStringCarrier::EslApi.measured());
         let parsed = GroupCall::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }

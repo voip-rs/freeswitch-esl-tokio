@@ -430,10 +430,10 @@ where
     }
 }
 
-/// Unit tests name a carrier alone and read it at the measured revision.
 #[cfg(test)]
-impl From<DialStringCarrier> for DialStringTarget {
-    fn from(carrier: DialStringCarrier) -> Self {
-        Self::new(carrier, BlockParse::MEASURED)
+impl DialStringCarrier {
+    /// This carrier at the measured revision, for unit tests that vary only the carrier.
+    pub(crate) fn measured(self) -> DialStringTarget {
+        DialStringTarget::new(self, BlockParse::MEASURED)
     }
 }

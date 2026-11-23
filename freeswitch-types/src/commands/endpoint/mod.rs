@@ -72,12 +72,8 @@ macro_rules! impl_dial_string_with_variables {
             }
 
             /// This leg as `target` reads it.
-            pub fn render(
-                &self,
-                target: impl Into<$crate::commands::variables::DialStringTarget>,
-            ) -> String {
+            pub fn render(&self, target: $crate::commands::variables::DialStringTarget) -> String {
                 target
-                    .into()
                     .argument(|f, target| self.write_for(f, target))
                     .to_string()
             }
@@ -112,10 +108,10 @@ macro_rules! impl_endpoint_parse {
                 /// [`DialStringTarget`](crate::commands::DialStringTarget), mirroring `render`.
                 pub fn parse_for(
                     s: &str,
-                    target: impl Into<$crate::commands::variables::DialStringTarget>,
+                    target: $crate::commands::variables::DialStringTarget,
                 ) -> Result<Self, $crate::commands::originate::OriginateError> {
                     let (variables, ep) =
-                        $crate::commands::endpoint::parse_leg(s, target.into(), Self::parse_bare)?;
+                        $crate::commands::endpoint::parse_leg(s, target, Self::parse_bare)?;
                     Ok(Self { variables, ..ep })
                 }
             }
@@ -471,8 +467,8 @@ impl Endpoint {
     }
 
     /// This leg as `target` reads it.
-    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
-        self.display_for(target.into())
+    pub fn render(&self, target: DialStringTarget) -> String {
+        self.display_for(target)
             .to_string()
     }
 
@@ -485,8 +481,7 @@ impl Endpoint {
     /// mirroring [`render`](Self::render).
     ///
     /// A `sofia_contact` or `group_call` expression parses at the dialplan carrier only.
-    pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
-        let target = target.into();
+    pub fn parse_for(s: &str, target: DialStringTarget) -> Result<Self, OriginateError> {
         let (variables, mut endpoint) = parse_leg(s, target, Self::parse_bare)?;
         endpoint.check_expanded(target.carrier())?;
         endpoint.set_variables(variables)?;

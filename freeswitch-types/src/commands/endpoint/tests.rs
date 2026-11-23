@@ -10,7 +10,7 @@ fn a_leading_block_closes_at_its_matching_bracket() {
         ("<sip_h_Call-Info=<url>>sofia/gw/x", "sofia/gw/x"),
         ("{a={b}}sofia/internal/1000", "sofia/internal/1000"),
     ] {
-        let ep = Endpoint::parse_for(input, DialStringCarrier::EslApi)
+        let ep = Endpoint::parse_for(input, DialStringCarrier::EslApi.measured())
             .unwrap_or_else(|e| panic!("{input}: {e}"));
         assert!(
             ep.variables()
@@ -19,33 +19,45 @@ fn a_leading_block_closes_at_its_matching_bracket() {
         );
         assert_eq!(ep.module_text(), module_text, "{input}");
     }
-    assert!(Endpoint::parse_for("{a=b", DialStringCarrier::EslApi).is_err());
+    assert!(Endpoint::parse_for("{a=b", DialStringCarrier::EslApi.measured()).is_err());
 }
 
 // --- Endpoint::parse_for dispatch ---
 
 #[test]
 fn endpoint_from_str_sofia() {
-    let ep =
-        Endpoint::parse_for("sofia/internal/1000@example.com", DialStringCarrier::EslApi).unwrap();
+    let ep = Endpoint::parse_for(
+        "sofia/internal/1000@example.com",
+        DialStringCarrier::EslApi.measured(),
+    )
+    .unwrap();
     assert!(matches!(ep, Endpoint::Sofia(_)));
 }
 
 #[test]
 fn endpoint_from_str_sofia_gateway() {
-    let ep = Endpoint::parse_for("sofia/gateway/my_gw/1234", DialStringCarrier::EslApi).unwrap();
+    let ep = Endpoint::parse_for(
+        "sofia/gateway/my_gw/1234",
+        DialStringCarrier::EslApi.measured(),
+    )
+    .unwrap();
     assert!(matches!(ep, Endpoint::SofiaGateway(_)));
 }
 
 #[test]
 fn endpoint_from_str_loopback() {
-    let ep = Endpoint::parse_for("loopback/9199/test", DialStringCarrier::EslApi).unwrap();
+    let ep =
+        Endpoint::parse_for("loopback/9199/test", DialStringCarrier::EslApi.measured()).unwrap();
     assert!(matches!(ep, Endpoint::Loopback(_)));
 }
 
 #[test]
 fn endpoint_from_str_user() {
-    let ep = Endpoint::parse_for("user/1000@example.com", DialStringCarrier::EslApi).unwrap();
+    let ep = Endpoint::parse_for(
+        "user/1000@example.com",
+        DialStringCarrier::EslApi.measured(),
+    )
+    .unwrap();
     assert!(matches!(ep, Endpoint::User(_)));
 }
 
@@ -53,7 +65,7 @@ fn endpoint_from_str_user() {
 fn endpoint_parse_for_dialplan_sofia_contact() {
     let ep = Endpoint::parse_for(
         "${sofia_contact(1000@example.com)}",
-        DialStringCarrier::Dialplan,
+        DialStringCarrier::Dialplan.measured(),
     )
     .unwrap();
     assert!(matches!(ep, Endpoint::SofiaContact(_)));
@@ -63,7 +75,7 @@ fn endpoint_parse_for_dialplan_sofia_contact() {
 fn endpoint_parse_for_dialplan_group_call() {
     let ep = Endpoint::parse_for(
         "${group_call(support@example.com+A)}",
-        DialStringCarrier::Dialplan,
+        DialStringCarrier::Dialplan.measured(),
     )
     .unwrap();
     assert!(matches!(ep, Endpoint::GroupCall(_)));
@@ -87,7 +99,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
             assert_eq!(refused, Err(unexpanded(kind)), "{text} at {target:?}");
         }
         assert_eq!(
-            Endpoint::parse_for(text, DialStringCarrier::EslApi),
+            Endpoint::parse_for(text, DialStringCarrier::EslApi.measured()),
             Err(unexpanded(kind)),
             "{text}"
         );
@@ -118,7 +130,7 @@ fn an_expression_is_refused_where_nothing_expands_it() {
 
 #[test]
 fn endpoint_from_str_error() {
-    let ep = Endpoint::parse_for("error/USER_BUSY", DialStringCarrier::EslApi).unwrap();
+    let ep = Endpoint::parse_for("error/USER_BUSY", DialStringCarrier::EslApi.measured()).unwrap();
     assert!(matches!(ep, Endpoint::Error(_)));
 }
 
@@ -127,12 +139,14 @@ fn endpoint_from_str_error() {
 #[test]
 fn a_block_on_an_endpoint_that_cannot_hold_one_is_refused() {
     for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
-        let msg = Endpoint::parse_for("{a=b}error/USER_BUSY", carrier)
+        let msg = Endpoint::parse_for("{a=b}error/USER_BUSY", carrier.measured())
             .expect_err(&format!("accepted at {carrier:?}"))
             .to_string();
         assert!(msg.contains("error"), "does not name the type: {msg}");
     }
-    assert!(Endpoint::parse_for("{a=b}error/USER_BUSY", DialStringCarrier::EslApi).is_err());
+    assert!(
+        Endpoint::parse_for("{a=b}error/USER_BUSY", DialStringCarrier::EslApi.measured()).is_err()
+    );
 }
 
 /// The two entry points have to agree: `from_str` is `parse_for` at the
@@ -148,8 +162,8 @@ fn from_str_matches_parse_for_at_the_default_carrier() {
         "verto/1234",
     ] {
         assert_eq!(
-            Endpoint::parse_for(input, DialStringCarrier::EslApi).is_ok(),
-            Endpoint::parse_for(input, DialStringCarrier::EslApi).is_ok(),
+            Endpoint::parse_for(input, DialStringCarrier::EslApi.measured()).is_ok(),
+            Endpoint::parse_for(input, DialStringCarrier::EslApi.measured()).is_ok(),
             "{input}"
         );
     }
@@ -165,7 +179,7 @@ fn a_target_and_its_bare_carrier_agree() {
     let target = DialStringTarget::new(DialStringCarrier::Dialplan, BlockParse::MEASURED)
         .with_block_parse(BlockParse::PairSplitCleans);
     let by_target = Endpoint::parse_for(input, target).unwrap();
-    let by_carrier = Endpoint::parse_for(input, DialStringCarrier::Dialplan).unwrap();
+    let by_carrier = Endpoint::parse_for(input, DialStringCarrier::Dialplan.measured()).unwrap();
     assert_eq!(by_target, by_carrier);
     assert_eq!(
         by_target
@@ -179,13 +193,14 @@ fn a_target_and_its_bare_carrier_agree() {
 /// the switch keeps is endpoint text.
 #[test]
 fn whitespace_other_than_a_space_is_kept() {
-    let ep = Endpoint::parse_for("<v0==>loopback/\u{b}", DialStringCarrier::EslApi).unwrap();
+    let ep =
+        Endpoint::parse_for("<v0==>loopback/\u{b}", DialStringCarrier::EslApi.measured()).unwrap();
     let Endpoint::Loopback(loopback) = &ep else {
         panic!("expected Loopback: {ep:?}");
     };
     assert_eq!(loopback.extension(), "\u{b}");
 
-    assert!(Variables::parse_for("\u{b}{k=v}", DialStringCarrier::Dialplan).is_err());
+    assert!(Variables::parse_for("\u{b}{k=v}", DialStringCarrier::Dialplan.measured()).is_err());
 
     let bridge = crate::commands::BridgeDialString::parse_for(
         "loopback/9199/test\t",
@@ -197,7 +212,7 @@ fn whitespace_other_than_a_space_is_kept() {
 
 #[test]
 fn endpoint_from_str_unknown_errors() {
-    let result = Endpoint::parse_for("verto/1234", DialStringCarrier::EslApi);
+    let result = Endpoint::parse_for("verto/1234", DialStringCarrier::EslApi.measured());
     assert!(result.is_err());
 }
 
@@ -205,7 +220,7 @@ fn endpoint_from_str_unknown_errors() {
 fn endpoint_from_str_with_variables() {
     let ep = Endpoint::parse_for(
         "{timeout=30}sofia/internal/1000@example.com",
-        DialStringCarrier::EslApi,
+        DialStringCarrier::EslApi.measured(),
     )
     .unwrap();
     if let Endpoint::Sofia(inner) = &ep {
@@ -224,7 +239,7 @@ fn endpoint_from_str_with_variables() {
 fn endpoint_display_delegates_to_inner() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com").unwrap());
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "sofia/internal/1000@example.com"
     );
 }
@@ -302,7 +317,7 @@ fn error_endpoint_refuses_a_variable_block() {
 #[test]
 fn parse_refuses_a_block_on_an_error_endpoint() {
     assert_eq!(
-        Endpoint::parse_for("{k=v}error/USER_BUSY", DialStringCarrier::EslApi),
+        Endpoint::parse_for("{k=v}error/USER_BUSY", DialStringCarrier::EslApi.measured()),
         Err(OriginateError::VariablesNotSupported("error"))
     );
     assert_eq!(
@@ -429,9 +444,9 @@ fn audio_endpoints_render_and_parse_per_module() {
                 .unwrap(),
             None => AudioEndpoint::new(),
         });
-        assert_eq!(ep.render(DialStringCarrier::EslApi), wire);
+        assert_eq!(ep.render(DialStringCarrier::EslApi.measured()), wire);
 
-        let parsed = Endpoint::parse_for(wire, DialStringCarrier::EslApi).unwrap();
+        let parsed = Endpoint::parse_for(wire, DialStringCarrier::EslApi.measured()).unwrap();
         assert_eq!(parsed, ep, "{wire}");
         assert!(
             parsed
@@ -458,13 +473,13 @@ fn audio_endpoint_carries_variables() {
             .with_variables(vars),
     );
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "{codec=PCMU}portaudio/auto_answer"
     );
     assert_eq!(
         Endpoint::parse_for(
-            &ep.render(DialStringCarrier::EslApi),
-            DialStringCarrier::EslApi
+            &ep.render(DialStringCarrier::EslApi.measured()),
+            DialStringCarrier::EslApi.measured()
         )
         .unwrap(),
         ep
@@ -541,8 +556,8 @@ fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
     ];
 
     for ep in cases {
-        let rendered = ep.render(DialStringCarrier::Dialplan);
-        let back = Endpoint::parse_for(&rendered, DialStringCarrier::Dialplan)
+        let rendered = ep.render(DialStringCarrier::Dialplan.measured());
+        let back = Endpoint::parse_for(&rendered, DialStringCarrier::Dialplan.measured())
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, ep, "rendered {rendered}");
     }
@@ -647,12 +662,20 @@ fn an_endpoint_cut_by_the_blank_split_is_refused() {
         r"{v=x\\'y}loopback/9199/test",
     ] {
         assert!(
-            Endpoint::parse_for(input, DialStringCarrier::EslApi).is_err(),
+            Endpoint::parse_for(input, DialStringCarrier::EslApi.measured()).is_err(),
             "{input}"
         );
     }
-    assert!(Endpoint::parse_for("{v='a b'}loopback/9199/test", DialStringCarrier::EslApi).is_ok());
-    assert!(Endpoint::parse_for("{v=a b}loopback/9199/test", DialStringCarrier::Dialplan).is_ok());
+    assert!(Endpoint::parse_for(
+        "{v='a b'}loopback/9199/test",
+        DialStringCarrier::EslApi.measured()
+    )
+    .is_ok());
+    assert!(Endpoint::parse_for(
+        "{v=a b}loopback/9199/test",
+        DialStringCarrier::Dialplan.measured()
+    )
+    .is_ok());
 }
 
 // --- From impls ---
@@ -902,7 +925,7 @@ fn fields_the_switch_cannot_receive_are_refused_at_parse() {
         "loopback/SECRET:_:x/test",
         "user/SECRET:_:x@example.com",
     ] {
-        let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan)
+        let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan.measured())
             .expect_err(input)
             .to_string();
         assert!(
@@ -962,13 +985,15 @@ fn fields_the_switch_cannot_receive_are_refused_at_config_load() {
 /// whole text is the extension.
 #[test]
 fn a_loopback_application_is_one_extension() {
-    let ep =
-        LoopbackEndpoint::parse_for("loopback/app=bridge:null/farend", DialStringCarrier::EslApi)
-            .unwrap();
+    let ep = LoopbackEndpoint::parse_for(
+        "loopback/app=bridge:null/farend",
+        DialStringCarrier::EslApi.measured(),
+    )
+    .unwrap();
     assert_eq!(ep.extension(), "app=bridge:null/farend");
     assert_eq!(ep.context(), None);
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "loopback/app=bridge:null/farend"
     );
 }
@@ -1014,7 +1039,7 @@ fn expression_and_audio_fields_the_switch_misreads_are_refused() {
         "${sofia_contact(SECRET@example.com/x)}",
         "${group_call(g@SECRET:_:x)}",
     ] {
-        let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan)
+        let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan.measured())
             .expect_err(input)
             .to_string();
         assert!(!msg.contains("SECRET"), "{input}: {msg}");
@@ -1098,7 +1123,7 @@ fn expression_fields_split_where_the_functions_split() {
     );
     let contact = SofiaContact::on_profile("p", "u/x", "example.com").unwrap();
     assert_eq!(
-        SofiaContact::parse_bare(&contact.render(DialStringCarrier::EslApi)).unwrap(),
+        SofiaContact::parse_bare(&contact.render(DialStringCarrier::EslApi.measured())).unwrap(),
         contact
     );
     assert!(serde_json::from_str::<Endpoint>(
@@ -1111,8 +1136,11 @@ fn expression_fields_split_where_the_functions_split() {
 /// `\\` as one backslash.
 #[test]
 fn parse_reads_the_block_as_the_switch_installs_it() {
-    let ep = Endpoint::parse_for(r"{k=a\\\\\\b}loopback/9199", DialStringCarrier::EslApi)
-        .unwrap_or_else(|e| panic!("{e}"));
+    let ep = Endpoint::parse_for(
+        r"{k=a\\\\\\b}loopback/9199",
+        DialStringCarrier::EslApi.measured(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
         ep.variables()
             .and_then(|vars| vars.get("k")),
@@ -1124,7 +1152,7 @@ fn parse_reads_the_block_as_the_switch_installs_it() {
 #[test]
 fn the_enterprise_separator_is_refused_in_any_field() {
     for input in ["loopback/9199/SECRET:_:x", "{k=v}sofia/internal/SECRET:_:x"] {
-        let msg = Endpoint::parse_for(input, DialStringCarrier::EslApi)
+        let msg = Endpoint::parse_for(input, DialStringCarrier::EslApi.measured())
             .expect_err(input)
             .to_string();
         assert!(!msg.contains("SECRET"), "{input}: {msg}");
@@ -1313,8 +1341,12 @@ fn qualified_constructors_build_what_parse_builds() {
         ),
     ];
     for (built, text, carrier) in cases {
-        assert_eq!(built.render(carrier), text);
-        assert_eq!(Endpoint::parse_for(text, carrier), Ok(built), "{text}");
+        assert_eq!(built.render(carrier.measured()), text);
+        assert_eq!(
+            Endpoint::parse_for(text, carrier.measured()),
+            Ok(built),
+            "{text}"
+        );
     }
     assert!(SofiaGateway::on_profile("p^", "gw", "1").is_err());
     assert!(SofiaContact::on_profile("", "u", "d").is_err());

@@ -103,13 +103,13 @@ fn caret_guard(target: DialStringTarget, field: EscapedField) -> String {
 /// block also escapes the pipe, which the leg split would otherwise read.
 pub(crate) fn escape_value(
     value: &str,
-    target: impl Into<DialStringTarget>,
+    target: DialStringTarget,
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
     escape_text(
         value,
-        target.into(),
+        target,
         EscapedField::Value {
             scope: vars_type,
             commas_separate,

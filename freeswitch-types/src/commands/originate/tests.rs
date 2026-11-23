@@ -35,7 +35,7 @@ fn parse_strips_only_the_switch_whitespace() {
 fn endpoint_uri_only() {
     let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "123@example.com").unwrap());
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "sofia/internal/123@example.com"
     );
 }
@@ -51,7 +51,7 @@ fn endpoint_uri_with_variable() {
             .with_variables(vars),
     );
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "{one_variable=1}sofia/internal/123@example.com"
     );
 }
@@ -69,7 +69,7 @@ fn endpoint_variable_with_quote() {
     // An endpoint renders for the ESL API carrier, which is the deeper of
     // the two escapings.
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         r"{one_variable=one\\\\\\\'quote}sofia/internal/123@example.com"
     );
 }
@@ -113,7 +113,7 @@ fn loopback_endpoint_display() {
             .with_variables(vars),
     );
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "{one_variable=1}loopback/aUri/aContext"
     );
 }
@@ -129,7 +129,7 @@ fn sofia_gateway_endpoint_display() {
             .with_variables(vars),
     );
     assert_eq!(
-        ep.render(DialStringCarrier::EslApi),
+        ep.render(DialStringCarrier::EslApi.measured()),
         "{one_variable=1}sofia/gateway/internal/aUri"
     );
 }

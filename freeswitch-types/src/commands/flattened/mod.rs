@@ -213,13 +213,13 @@ impl FlattenedDialString {
     /// Read `input` through every pass `target` applies.
     pub fn parse_for(
         input: &str,
-        target: impl Into<DialStringTarget>,
+        target: DialStringTarget,
     ) -> Result<Self, FlattenedDialStringError> {
         if input.ends_with('\n') {
             return Err(FlattenedDialStringError::TrailingNewline);
         }
-        let list = pipeline::read(input, target.into())
-            .map_err(FlattenedDialStringError::from_pipeline)?;
+        let list =
+            pipeline::read(input, target).map_err(FlattenedDialStringError::from_pipeline)?;
         let DialList {
             blocks,
             threads,
@@ -433,9 +433,8 @@ impl FlattenedDialString {
 
     /// The list rendered by this crate for `target`, carrying only the pairs
     /// that set a value.
-    pub fn render(&self, target: impl Into<DialStringTarget>) -> String {
+    pub fn render(&self, target: DialStringTarget) -> String {
         target
-            .into()
             .argument(|f, target| self.write_for(f, target))
             .to_string()
     }

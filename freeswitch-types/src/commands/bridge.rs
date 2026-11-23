@@ -478,7 +478,10 @@ mod tests {
             bridge.render(BlockParse::MEASURED),
             r"{cid=it\\\\\\'s}sofia/gateway/gw/18005551234"
         );
-        assert_eq!(vars.render(DialStringCarrier::EslApi), r"{cid=it\\\\\\\'s}");
+        assert_eq!(
+            vars.render(DialStringCarrier::EslApi.measured()),
+            r"{cid=it\\\\\\\'s}"
+        );
     }
 
     /// Both halves have to agree on the carrier. Rendering at dialplan depth
@@ -1012,7 +1015,7 @@ mod tests {
         let group = bracket_around_block(':', "a,b");
         let rendered = group
             .iter()
-            .map(|endpoint| endpoint.render(CARRIER))
+            .map(|endpoint| endpoint.render(CARRIER.measured()))
             .collect::<Vec<_>>()
             .join(",");
         assert!(
@@ -1044,7 +1047,7 @@ mod tests {
     fn joined(endpoints: &[Endpoint], separator: &str) -> String {
         endpoints
             .iter()
-            .map(|endpoint| endpoint.render(DialStringCarrier::EslApi))
+            .map(|endpoint| endpoint.render(DialStringCarrier::EslApi.measured()))
             .collect::<Vec<_>>()
             .join(separator)
     }

@@ -432,7 +432,7 @@ fn render_list(spec: &ListSpec, target: DialStringTarget) -> Option<RenderedList
 fn endpoint_text(target: &LegTarget) -> String {
     match target {
         LegTarget::Error(error) => format!("error/{}", error.as_written()),
-        LegTarget::Endpoint(endpoint) => endpoint.render(DialStringCarrier::EslApi),
+        LegTarget::Endpoint(endpoint) => endpoint.render(DialStringCarrier::EslApi.measured()),
         LegTarget::Unparsed(unparsed) => unparsed
             .endpoint()
             .to_owned(),

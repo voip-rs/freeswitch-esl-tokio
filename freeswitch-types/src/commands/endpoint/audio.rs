@@ -119,7 +119,7 @@ mod tests {
     use crate::commands::variables::DialStringCarrier;
 
     fn parse(s: &str) -> Endpoint {
-        Endpoint::parse_for(s, DialStringCarrier::EslApi).unwrap()
+        Endpoint::parse_for(s, DialStringCarrier::EslApi.measured()).unwrap()
     }
 
     #[test]
@@ -160,6 +160,6 @@ mod tests {
     #[test]
     fn parse_refuses_a_longer_module_name() {
         assert!(AudioEndpoint::parse_bare("alsafoo/bar", "alsa").is_err());
-        assert!(Endpoint::parse_for("alsafoo/bar", DialStringCarrier::EslApi).is_err());
+        assert!(Endpoint::parse_for("alsafoo/bar", DialStringCarrier::EslApi.measured()).is_err());
     }
 }
