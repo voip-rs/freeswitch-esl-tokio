@@ -412,10 +412,9 @@ impl EslClient {
     ) -> EslResult<(Self, EslEventStream)> {
         if let AuthMethod::User { user, .. } = &method {
             if !user.contains('@') {
-                return Err(EslError::auth_failed(format!(
-                    "Invalid username format '{}': must be user@domain (e.g., admin@default)",
-                    user
-                )));
+                return Err(EslError::auth_failed(
+                    "userauth user has no @domain (e.g. admin@default)",
+                ));
             }
         }
 
