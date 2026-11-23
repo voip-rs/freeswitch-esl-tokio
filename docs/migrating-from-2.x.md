@@ -150,6 +150,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | a bare CR inside a line, or leading whitespace on one, was part of the line | a bare CR ends a line and leading spaces and tabs are stripped, as the switch reads it |
 | `SdpCodecError::ParseFailure`'s source downcast to `sdp_types::ParserError` | the source is crate-private and names the fault with its byte offset in `Display`; sdp-types is no longer a dependency |
 | `SdpCodecError::ParseFailure { message, source }`, `message` always `failed to parse SDP` | `ParseFailure { source }`; `Display` reads `SDP parse failure` and the fault is the source's, so match with `{ .. }` and print the chain |
+| `ParseSdpDirectionError` with a private field | `ParseSdpDirectionError(pub String)`, the rejected attribute, as the other `Parse*Error` newtypes |
 | a port-0 section carried the names, fmtp and direction its `a=` lines gave | by default it names only the static payload types of its format list and is inactive, as the switch reads it; `SdpCodecs::parse_with_options` with `SdpParseOptions::default().with_port_zero_attributes(true)` reads those lines as written |
 | `"AUDIO".parse::<SdpMediaType>()` gave `Other("AUDIO")` | `Audio`: the media type matches in any case, as the switch reads it; `Display` stays lowercase |
 | attribute names matched byte-exactly and the first direction attribute won | `rtpmap`, `fmtp`, `ptime` and the direction names match in any case, and the last direction attribute in a section wins |

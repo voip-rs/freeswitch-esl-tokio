@@ -93,7 +93,7 @@ impl fmt::Display for SdpDirection {
 
 /// Errors returned when an unrecognized direction attribute is encountered.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseSdpDirectionError(String);
+pub struct ParseSdpDirectionError(pub String);
 
 impl fmt::Display for ParseSdpDirectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
