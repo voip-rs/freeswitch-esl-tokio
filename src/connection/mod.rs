@@ -222,6 +222,9 @@ struct SharedState {
     /// Re-exec channel caller half (taken by teardown_for_reexec)
     #[cfg(unix)]
     reexec: Mutex<Option<ReexecCaller>>,
+    /// Run by the reader before dispatching its next message.
+    #[cfg(test)]
+    induced_panic: std::sync::Mutex<Option<fn()>>,
 }
 
 /// What the reader does when the event queue is full.
@@ -587,6 +590,8 @@ impl EslClient {
             mode,
             #[cfg(unix)]
             reexec: Mutex::new(Some(ReexecCaller { stop_tx, result_rx })),
+            #[cfg(test)]
+            induced_panic: std::sync::Mutex::new(None),
         });
         let (event_tx, event_rx) = mpsc::channel(queue_size);
 
@@ -642,6 +647,67 @@ mod tests {
                 .contains("nodomain-sentinel"),
             "{err}"
         );
+    }
+
+    /// The disconnect reason after the reader panics on its next message.
+    async fn reason_after_reader_panic(hook: fn()) -> String {
+        use tokio::io::AsyncWriteExt;
+
+        let listener = TcpListener::bind("[::1]:0")
+            .await
+            .unwrap();
+        let addr = listener
+            .local_addr()
+            .unwrap();
+        let (client_stream, accept_result) =
+            tokio::join!(TcpStream::connect(addr), listener.accept());
+        let (mut server_stream, _) = accept_result.unwrap();
+        let (client, mut events) = EslClient::split_and_spawn_with_options(
+            client_stream.unwrap(),
+            EslParser::new(),
+            EslConnectOptions::default(),
+            None,
+            ConnectionMode::Inbound,
+        );
+        *client
+            .shared
+            .induced_panic
+            .lock()
+            .unwrap() = Some(hook);
+        server_stream
+            .write_all(b"Content-Type: command/reply\nReply-Text: +OK\n\n")
+            .await
+            .unwrap();
+        let end = tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("the reader exits");
+        assert!(end.is_none(), "{end:?}");
+        match client.status() {
+            ConnectionStatus::Disconnected(DisconnectReason::IoError(reason)) => reason,
+            other => panic!("expected IoError, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reader_panic_reports_its_str_payload() {
+        let reason = reason_after_reader_panic(|| panic!("static-payload-sentinel")).await;
+        assert!(reason.contains("static-payload-sentinel"), "{reason}");
+    }
+
+    #[tokio::test]
+    async fn a_reader_panic_reports_its_string_payload() {
+        let reason = reason_after_reader_panic(|| {
+            let n = 42;
+            panic!("formatted-payload-sentinel {n}")
+        })
+        .await;
+        assert!(reason.contains("formatted-payload-sentinel 42"), "{reason}");
+    }
+
+    #[tokio::test]
+    async fn a_reader_panic_without_a_message_says_so() {
+        let reason = reason_after_reader_panic(|| std::panic::panic_any(7u8)).await;
+        assert!(reason.contains("non-string payload"), "{reason}");
     }
 
     #[tokio::test]

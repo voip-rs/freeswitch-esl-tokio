@@ -545,6 +545,18 @@ async fn drain_for_reexec(
     }
 }
 
+#[cfg(test)]
+fn run_induced_panic(shared: &SharedState) {
+    let hook = shared
+        .induced_panic
+        .lock()
+        .expect("test seam lock")
+        .take();
+    if let Some(hook) = hook {
+        hook();
+    }
+}
+
 /// Traffic-idle check for the read-timeout tick; a zero threshold disables it.
 fn liveness_expired(shared: &SharedState, last_recv: Instant) -> bool {
     use std::sync::atomic::Ordering;
@@ -612,6 +624,8 @@ async fn reader_loop_inner(
                     stalled: Duration::ZERO,
                 };
 
+                #[cfg(test)]
+                run_induced_panic(&shared);
                 let flow = dispatch_message(message, &parser, &shared, &mut sink).await;
                 // A stall reads nothing, but the peer never stopped sending.
                 last_recv += sink.stalled;
