@@ -443,6 +443,36 @@ mod tests {
         assert!(BridgeDialString::new(vec![loopbacks(MAX_PEERS)]).is_ok());
     }
 
+    /// A group with no legs renders an empty `|` field, and no groups an empty argument.
+    #[test]
+    fn new_refuses_an_empty_group_and_no_groups() {
+        let shown = |groups| {
+            BridgeDialString::new(groups)
+                .expect_err("refused")
+                .to_string()
+        };
+        let empty_group = shown(vec![loopbacks(1), vec![]]);
+        assert!(empty_group.contains("group 1"), "{empty_group}");
+        assert!(!empty_group.contains("bracket"), "{empty_group}");
+        let no_groups = shown(vec![]);
+        assert!(no_groups.contains("no legs"), "{no_groups}");
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn config_refuses_an_empty_group_and_no_groups() {
+        let load = |json| {
+            serde_json::from_value::<BridgeDialString>(json)
+                .expect_err("refused")
+                .to_string()
+        };
+        let empty_group = load(serde_json::json!({ "groups": [[]] }));
+        assert!(empty_group.contains("group 0"), "{empty_group}");
+        assert!(!empty_group.contains("bracket"), "{empty_group}");
+        let no_groups = load(serde_json::json!({ "groups": [] }));
+        assert!(no_groups.contains("no legs"), "{no_groups}");
+    }
+
     // === Render ===
 
     /// What renders for a revision parses back at it.
