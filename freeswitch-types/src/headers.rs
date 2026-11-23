@@ -263,8 +263,112 @@ pub fn normalize_header_key(raw: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Wire key, its `normalize_header_key` output, and whether a store holding
+    /// it answers a query in another ASCII casing. Pinned, not derived.
+    pub(crate) const KEY_TABLE: &[(&str, &str, bool)] = &[
+        ("Unique-ID", "Unique-ID", true),
+        ("unique-id", "Unique-ID", true),
+        ("UNIQUE-ID", "Unique-ID", true),
+        ("uNIQUE-iD", "Unique-ID", true),
+        (
+            "Channel-Write-codec-bit-rate",
+            "Channel-Write-Codec-Bit-Rate",
+            true,
+        ),
+        ("event-date-gmt", "Event-Date-GMT", true),
+        ("FREESWITCH-IPV6", "FreeSWITCH-IPv6", true),
+        ("priority", "priority", true),
+        ("PRIORITY", "priority", true),
+        ("Priority", "priority", true),
+        ("event", "event", true),
+        ("EVENT", "event", true),
+        ("Uptime-msec", "Uptime-msec", true),
+        ("UPTIME-MSEC", "Uptime-msec", true),
+        ("pl_data", "pl_data", false),
+        ("PL_DATA", "pl_data", false),
+        ("Pl_Data", "pl_data", false),
+        ("profile-name", "profile-name", true),
+        ("PROFILE-NAME", "profile-name", true),
+        ("profile_name", "profile_name", false),
+        ("Profile_Name", "profile_name", false),
+        ("GATEWAY_NAME", "gateway_name", false),
+        ("variable_sip_call_id", "variable_sip_call_id", false),
+        (
+            "variable_sip_h_X-My-CUSTOM-Header",
+            "variable_sip_h_X-My-CUSTOM-Header",
+            false,
+        ),
+        (
+            "variable_sip_h_x-my-custom-header",
+            "variable_sip_h_x-my-custom-header",
+            false,
+        ),
+        ("VARIABLE_SIP_CALL_ID", "VARIABLE_SIP_CALL_ID", false),
+        ("Variable_Unique-ID", "Variable_Unique-ID", false),
+        ("variable_", "variable_", false),
+        ("variable_pl_data", "variable_pl_data", false),
+        ("variable_priority", "variable_priority", false),
+        ("variable_Unique-ID", "variable_Unique-ID", false),
+        ("variablE_priority", "variablE_priority", false),
+        ("sip_h_Diversion", "sip_h_Diversion", false),
+        ("sip_i_contact", "sip_i_contact", false),
+        ("C911P-Action", "C911P-Action", true),
+        ("c911p-action", "c911p-action", true),
+        ("Content-Type", "Content-Type", true),
+        ("content-length", "content-length", true),
+        ("X-Custom-Not-In-Enum", "X-Custom-Not-In-Enum", true),
+        ("Unique_ID", "Unique_ID", false),
+        ("Unique-ID ", "Unique-ID ", true),
+        (" Unique-ID", " Unique-ID", true),
+        ("Unique-IDx", "Unique-IDx", true),
+        ("Unique-I", "Unique-I", true),
+        ("", "", true),
+        ("É-Header", "É-Header", true),
+        ("unique-\u{131}d", "unique-\u{131}d", true),
+        ("\u{ff35}nique-ID", "\u{ff35}nique-ID", true),
+        ("\u{dc}NIQUE-ID", "\u{dc}NIQUE-ID", true),
+        ("pl_d\u{e4}ta", "pl_d\u{e4}ta", false),
+    ];
+
+    /// `s` in canonical, lower, upper and alternating ASCII case.
+    pub(crate) fn casings(s: &str) -> [String; 4] {
+        let alternating = s
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i % 2 == 0 {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        [
+            s.to_string(),
+            s.to_ascii_lowercase(),
+            s.to_ascii_uppercase(),
+            alternating,
+        ]
+    }
+
+    #[test]
+    fn normalize_header_key_matches_the_pinned_table() {
+        for &(input, normalized, _) in KEY_TABLE {
+            assert_eq!(normalize_header_key(input), normalized, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn normalize_header_key_canonicalizes_every_event_header_in_any_casing() {
+        for v in EventHeader::ALL {
+            for input in casings(v.as_str()) {
+                assert_eq!(normalize_header_key(&input), v.as_str(), "{input:?}");
+            }
+        }
+    }
 
     /// Serde carries the name the switch writes, the same text `Display` gives.
     #[cfg(feature = "serde")]

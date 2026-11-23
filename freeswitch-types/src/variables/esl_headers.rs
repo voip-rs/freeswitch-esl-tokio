@@ -376,6 +376,135 @@ mod tests {
     use sip_header::SipHeaderLookup;
     use sip_header_catalog::{RowErrorKind, SipHeaderRowsExt};
 
+    #[test]
+    fn a_store_of_each_pinned_key_answers_as_the_table_says() {
+        use crate::headers::tests::{casings, KEY_TABLE};
+
+        for &(input, stored, folds) in KEY_TABLE {
+            let mut h = EslHeaders::new();
+            h.insert(input, "v");
+            assert_eq!(
+                h.iter()
+                    .collect::<Vec<_>>(),
+                [(stored, "v")],
+                "{input:?}"
+            );
+            assert_eq!(h.header_str(stored), Some("v"), "{input:?}");
+            for query in casings(stored) {
+                let expected = (folds || query == stored).then_some("v");
+                assert_eq!(h.header_str(&query), expected, "{input:?} as {query:?}");
+                assert_eq!(
+                    h.sip_header_rows_str(&query),
+                    Ok(expected
+                        .into_iter()
+                        .collect()),
+                    "{input:?} as {query:?}"
+                );
+            }
+            if let Some(name) = stored.strip_prefix("variable_") {
+                assert_eq!(h.variable_str(name), Some("v"), "{input:?}");
+            }
+            let removable = folds || input == stored;
+            assert_eq!(
+                h.remove(input),
+                removable.then(|| "v".to_string()),
+                "{input:?}"
+            );
+            assert_eq!(h.is_empty(), removable, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn a_store_answers_every_event_header_in_any_casing() {
+        use crate::headers::tests::casings;
+
+        for v in EventHeader::ALL {
+            for input in casings(v.as_str()) {
+                let mut h = EslHeaders::new();
+                h.insert(input.as_str(), "v");
+                assert_eq!(
+                    h.as_map()
+                        .keys()
+                        .collect::<Vec<_>>(),
+                    [v.as_str()],
+                    "{input:?}"
+                );
+                assert_eq!(h.header(*v), Some("v"), "{input:?}");
+                let folds = !v
+                    .as_str()
+                    .contains('_');
+                for query in casings(v.as_str()) {
+                    let expected = (folds || query == v.as_str()).then_some("v");
+                    assert_eq!(h.header_str(&query), expected, "{input:?} as {query:?}");
+                }
+            }
+        }
+    }
+
+    /// Two casings of one key in one store collapse or stay apart per the table.
+    #[test]
+    fn the_pinned_keys_in_one_store_keep_first_spellings() {
+        use crate::headers::tests::KEY_TABLE;
+
+        let h: EslHeaders = KEY_TABLE
+            .iter()
+            .map(|&(input, _, _)| (input, input))
+            .collect();
+        assert_eq!(
+            h.iter()
+                .collect::<Vec<_>>(),
+            [
+                ("Unique-ID", "uNIQUE-iD"),
+                (
+                    "Channel-Write-Codec-Bit-Rate",
+                    "Channel-Write-codec-bit-rate"
+                ),
+                ("Event-Date-GMT", "event-date-gmt"),
+                ("FreeSWITCH-IPv6", "FREESWITCH-IPV6"),
+                ("priority", "Priority"),
+                ("event", "EVENT"),
+                ("Uptime-msec", "UPTIME-MSEC"),
+                ("pl_data", "Pl_Data"),
+                ("profile-name", "PROFILE-NAME"),
+                ("profile_name", "Profile_Name"),
+                ("gateway_name", "GATEWAY_NAME"),
+                ("variable_sip_call_id", "variable_sip_call_id"),
+                (
+                    "variable_sip_h_X-My-CUSTOM-Header",
+                    "variable_sip_h_X-My-CUSTOM-Header"
+                ),
+                (
+                    "variable_sip_h_x-my-custom-header",
+                    "variable_sip_h_x-my-custom-header"
+                ),
+                ("VARIABLE_SIP_CALL_ID", "VARIABLE_SIP_CALL_ID"),
+                ("Variable_Unique-ID", "Variable_Unique-ID"),
+                ("variable_", "variable_"),
+                ("variable_pl_data", "variable_pl_data"),
+                ("variable_priority", "variable_priority"),
+                ("variable_Unique-ID", "variable_Unique-ID"),
+                ("variablE_priority", "variablE_priority"),
+                ("sip_h_Diversion", "sip_h_Diversion"),
+                ("sip_i_contact", "sip_i_contact"),
+                ("C911P-Action", "c911p-action"),
+                ("Content-Type", "Content-Type"),
+                ("content-length", "content-length"),
+                ("X-Custom-Not-In-Enum", "X-Custom-Not-In-Enum"),
+                ("Unique_ID", "Unique_ID"),
+                ("Unique-ID ", "Unique-ID "),
+                (" Unique-ID", " Unique-ID"),
+                ("Unique-IDx", "Unique-IDx"),
+                ("Unique-I", "Unique-I"),
+                ("", ""),
+                ("É-Header", "É-Header"),
+                ("unique-\u{131}d", "unique-\u{131}d"),
+                ("\u{ff35}nique-ID", "\u{ff35}nique-ID"),
+                ("\u{dc}NIQUE-ID", "\u{dc}NIQUE-ID"),
+                ("pl_d\u{e4}ta", "pl_d\u{e4}ta"),
+            ]
+        );
+    }
+
     /// Equal stores hash alike, whichever spelling and order they first saw.
     #[test]
     fn stores_equal_under_folding_hash_alike() {
