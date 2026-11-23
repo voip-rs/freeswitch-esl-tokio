@@ -101,13 +101,13 @@ class SourceResolver:
 
 
 def rust_define_header_enum_names(path: Path) -> set[str]:
-    """Extract wire names from a define_header_enum! block."""
+    """Extract wire names from a header_enum! / define_header_enum! block."""
     text = path.read_text()
     names: set[str] = set()
     in_block = False
     depth = 0
     for line in text.splitlines():
-        if "define_header_enum!" in line:
+        if re.match(r"\s*(header_enum|[\w:]*define_header_enum)!", line):
             in_block = True
             depth = 0
         if in_block:

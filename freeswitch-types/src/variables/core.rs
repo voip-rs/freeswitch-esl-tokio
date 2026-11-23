@@ -1,7 +1,8 @@
 //! Typed channel variable names from FreeSWITCH core.
 
-sip_header_catalog::define_header_enum! {
+header_enum! {
     tests_mod: channel_variable_generated_tests,
+    serde_tests: channel_variable_serde_tests,
     serde(cfg(feature = "serde")),
     error_type: ParseChannelVariableError => "unknown channel variable",
     /// Core FreeSWITCH channel variable names (the part after the `variable_` prefix).

@@ -249,6 +249,16 @@ macro_rules! esl_event_types {
                 Self::parse_event_type(s).ok_or_else(|| ParseEventTypeError(s.to_string()))
             }
         }
+
+        #[cfg(test)]
+        mod esl_event_type_serde_tests {
+            use super::*;
+
+            wire_serde_test! {
+                EslEventType,
+                [$($variant => $wire,)+ $($extra_variant => $extra_wire),*]
+            }
+        }
     };
 }
 

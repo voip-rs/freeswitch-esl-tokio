@@ -1,7 +1,8 @@
 //! Typed mod_conference channel variable names.
 
-sip_header_catalog::define_header_enum! {
+header_enum! {
     tests_mod: conference_variable_generated_tests,
+    serde_tests: conference_variable_serde_tests,
     serde(cfg(feature = "serde")),
     error_type: ParseConferenceVariableError => "unknown conference variable",
     /// mod_conference channel variable names (the part after the `variable_` prefix).

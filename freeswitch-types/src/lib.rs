@@ -41,6 +41,8 @@ pub mod lossy_values;
 pub mod prelude;
 #[cfg(feature = "sdp")]
 pub mod sdp;
+#[cfg(feature = "serde")]
+mod serde_name;
 pub mod sofia;
 #[cfg(any(feature = "esl", feature = "sdp"))]
 pub(crate) mod switch_passes;

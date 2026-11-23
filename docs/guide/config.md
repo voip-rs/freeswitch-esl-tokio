@@ -38,8 +38,11 @@ client.bgapi(&originate.render(block_parse)).await?;
 
 `EventSubscription` also serializes, so subscriptions can live in config files:
 
-```yaml
-format: Plain
+```rust
+# use freeswitch_esl_tokio::{EslEventType, EventSubscription};
+let subscription: EventSubscription = yaml_serde::from_str(
+    r#"
+format: plain
 events:
 - CHANNEL_CREATE
 - CHANNEL_ANSWER
@@ -47,10 +50,16 @@ events:
 - HEARTBEAT
 custom_subclasses:
 - "sofia::register"
-# Each filter is a (header, value) tuple
+## Each filter is a (header, value) tuple
 filters:
 - [Call-Direction, inbound]
+"#,
+)?;
+assert!(subscription.events().contains(&EslEventType::ChannelCreate));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Every enum with a wire name, event types, hangup causes and header names among them, is written as the switch spells it (`CHANNEL_CREATE`, `USER_BUSY`, `Unique-ID`) and read back in any ASCII case. The Rust variant name (`ChannelCreate`), which 2.x wrote, still reads.
 
 The order of `events` does not matter: `CUSTOM` is terminal on the wire and the serializer always emits it last. See [event-command-grammar.md](../event-command-grammar.md) for the grammar, what the raw string commands do not guarantee, and why a bare `CUSTOM` subscribes to nothing.
 
@@ -58,17 +67,31 @@ The order of `events` does not matter: `CUSTOM` is terminal on the wire and the 
 
 `Variables` deserializes ergonomically -- a flat map defaults to `Default` scope:
 
-```yaml
+```rust
+# use freeswitch_esl_tokio::{Variables, VariablesType};
+let flat: Variables = yaml_serde::from_str(
+    r#"
 originate_timeout: "600"
 sip_h_X-Custom: value
+"#,
+)?;
+assert_eq!(flat.scope(), VariablesType::Default);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Other scopes use the explicit form:
 
-```yaml
+```rust
+# use freeswitch_esl_tokio::{Variables, VariablesType};
+let scoped: Variables = yaml_serde::from_str(
+    r#"
 scope: enterprise
 vars:
   key: value
+"#,
+)?;
+assert_eq!(scoped.scope(), VariablesType::Enterprise);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## FreeSWITCH version and parser revision
@@ -86,25 +109,36 @@ Map it with `BlockParse::for_version` when `block_parse` is absent, and pass the
 
 The `!sofia_gateway` prefix in the example above is a YAML tag -- it tells the deserializer which endpoint type to build from the fields that follow. Each variant of the `Endpoint` enum has its own tag:
 
-```yaml
-# SIP gateway routing
-endpoint: !sofia_gateway
+```rust
+# use freeswitch_esl_tokio::Endpoint;
+let endpoints: Vec<Endpoint> = yaml_serde::from_str(
+    r#"
+## SIP gateway routing
+- !sofia_gateway
   gateway: my_provider
   destination: "18005551234"
 
-# Direct SIP profile routing
-endpoint: !sofia
+## Direct SIP profile routing
+- !sofia
   profile: internal
   destination: "1000@example.com"
 
-# Internal loopback
-endpoint: !loopback
+## Internal loopback
+- !loopback
   extension: "9199"
 
-# Directory-based routing
-endpoint: !user
+## Directory-based routing
+- !user
   name: "1001"
   domain: example.com
+
+## Hang up with a cause, named as the switch names it
+- !error
+  cause: USER_BUSY
+"#,
+)?;
+assert_eq!(endpoints.len(), 5);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 This is the format produced by `yaml_serde`. JSON libraries represent the same data differently (`{"sofia_gateway": {"gateway": ...}}` instead of a YAML tag), but both deserialize into the same Rust types.

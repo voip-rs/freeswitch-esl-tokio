@@ -3,6 +3,11 @@
 //! These are `#[macro_use]`-imported from `lib.rs` and are not part of the
 //! public API. They exist to reduce mechanical repetition in types that are
 //! "wire-string ↔ enum" mappings (see `channel.rs`, `sofia/`).
+//!
+//! Every enum with a wire spelling goes through `wire_enum!`, `header_enum!`
+//! or `esl_event_types!`, and each takes its serde from `serde_name`, so the
+//! serialized form is the wire name everywhere. Each also requires a test
+//! module, where that serde is checked over every variant.
 
 /// Generate a single-field parse-error newtype.
 ///
@@ -35,6 +40,60 @@ macro_rules! parse_error {
     };
 }
 
+/// The test every generated enum carries: serde over each `Variant => "wire"` row.
+macro_rules! wire_serde_test {
+    ($Enum:ident, [$($Variant:ident => $wire:literal),+ $(,)?]) => {
+        #[cfg(feature = "serde")]
+        #[test]
+        fn serde_reads_wire_and_variant_names() {
+            crate::serde_name::tests::assert_wire_names(&[
+                $( ($Enum::$Variant, $wire, stringify!($Variant)), )+
+            ]);
+        }
+    };
+}
+
+/// [`sip_header_catalog::define_header_enum!`] with this crate's serde instead of
+/// the catalog's, which reads back no 2.x variant name.
+///
+/// `serde_tests:` names the module holding the serde test, beside the catalog's
+/// own `tests_mod:`.
+macro_rules! header_enum {
+    (
+        tests_mod: $tests_mod:ident,
+        serde_tests: $serde_tests:ident,
+        serde(cfg(feature = "serde")),
+        error_type: $Err:ident => $err_msg:literal,
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Name:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $variant:ident => $wire:literal
+            ),+ $(,)?
+        }
+    ) => {
+        sip_header_catalog::define_header_enum! {
+            tests_mod: $tests_mod,
+            serde(cfg(feature = "serde")),
+            error_type: $Err => $err_msg,
+            $(#[$enum_meta])*
+            $vis enum $Name {
+                $(
+                    $(#[$var_meta])*
+                    $variant => $wire
+                ),+
+            }
+        }
+
+        #[cfg(test)]
+        mod $serde_tests {
+            use super::*;
+
+            wire_serde_test! { $Name, [$($variant => $wire),+] }
+        }
+    };
+}
+
 /// Generate a wire-string enum with `ALL`, `as_str`, `Display`, `FromStr` and a
 /// `Parse<Name>Error`. The macro adds `#[non_exhaustive]`, `#[allow(missing_docs)]`
 /// and the serde derives; the caller supplies the rest.
@@ -49,18 +108,15 @@ macro_rules! parse_error {
 ///         Outbound => "outbound",
 ///     }
 ///     error ParseCallDirectionError("call direction");
+///     tests: call_direction_wire_tests;
 /// }
 /// ```
 ///
-/// Trailing clauses, in this order. `numeric:` needs a discriminant on every
-/// row. `FromStr` is strict canonical case; `tests:` checks it rejects any other.
-///
-/// ```ignore
-///     numeric: from_number(u8);
-///     tests: channel_state_wire_tests;
-/// ```
+/// `numeric: from_number(u8);` may precede `tests:` and needs a discriminant on
+/// every row. `FromStr` is strict canonical case; the test module checks it
+/// rejects any other.
 macro_rules! wire_enum {
-    // With tests + numeric: emit base + numeric + test module.
+    // With numeric lookups.
     (
         $(#[$enum_meta:meta])*
         $vis:vis enum $Enum:ident {
@@ -74,6 +130,7 @@ macro_rules! wire_enum {
         tests: $tests_mod:ident;
     ) => {
         wire_enum! {
+            @base
             $(#[$enum_meta])*
             $vis enum $Enum {
                 $(
@@ -82,13 +139,53 @@ macro_rules! wire_enum {
                 ),+
             }
             error $Error($label);
-            numeric: $numeric_fn($repr);
+        }
+
+        impl $Enum {
+            /// Look up by numeric discriminant.
+            pub fn $numeric_fn(n: $repr) -> Option<Self> {
+                match n {
+                    $( $disc => Some(Self::$Variant), )+
+                    _ => None,
+                }
+            }
+
+            /// Numeric discriminant value.
+            pub fn as_number(&self) -> $repr {
+                *self as $repr
+            }
         }
 
         wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
     };
 
-    // Internal: emit the standard test module.
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Enum:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $Variant:ident $(= $disc:literal)? => $wire:literal
+            ),+ $(,)?
+        }
+        error $Error:ident($label:literal);
+        tests: $tests_mod:ident;
+    ) => {
+        wire_enum! {
+            @base
+            $(#[$enum_meta])*
+            $vis enum $Enum {
+                $(
+                    $(#[$var_meta])*
+                    $Variant $(= $disc)? => $wire
+                ),+
+            }
+            error $Error($label);
+        }
+
+        wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
+    };
+
+    // Internal: the standard test module.
     (
         @tests $Enum:ident, $Error:ident, $label:literal, $tests_mod:ident,
         $($Variant:ident => $wire:literal),+
@@ -146,111 +243,14 @@ macro_rules! wire_enum {
                     format!("unknown {} ({} bytes)", $label, BOGUS.len()),
                 );
             }
+
+            wire_serde_test! { $Enum, [$($Variant => $wire),+] }
         }
     };
 
-    // Numeric only, no tests.
+    // Internal: everything but the test module.
     (
-        $(#[$enum_meta:meta])*
-        $vis:vis enum $Enum:ident {
-            $(
-                $(#[$var_meta:meta])*
-                $Variant:ident = $disc:literal => $wire:literal
-            ),+ $(,)?
-        }
-        error $Error:ident($label:literal);
-        numeric: $numeric_fn:ident($repr:ty);
-    ) => {
-        wire_enum! {
-            $(#[$enum_meta])*
-            $vis enum $Enum {
-                $(
-                    $(#[$var_meta])*
-                    $Variant = $disc => $wire
-                ),+
-            }
-            error $Error($label);
-        }
-
-        impl $Enum {
-            /// Look up by numeric discriminant.
-            pub fn $numeric_fn(n: $repr) -> Option<Self> {
-                match n {
-                    $( $disc => Some(Self::$Variant), )+
-                    _ => None,
-                }
-            }
-
-            /// Numeric discriminant value.
-            pub fn as_number(&self) -> $repr {
-                *self as $repr
-            }
-        }
-    };
-
-    // With tests: emit the base expansion then the test module.
-    (
-        $(#[$enum_meta:meta])*
-        $vis:vis enum $Enum:ident {
-            $(
-                $(#[$var_meta:meta])*
-                $Variant:ident $(= $disc:literal)? => $wire:literal
-            ),+ $(,)?
-        }
-        error $Error:ident($label:literal);
-        tests: $tests_mod:ident;
-    ) => {
-        wire_enum! {
-            $(#[$enum_meta])*
-            $vis enum $Enum {
-                $(
-                    $(#[$var_meta])*
-                    $Variant $(= $disc)? => $wire
-                ),+
-            }
-            error $Error($label);
-        }
-
-        wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
-    };
-
-    // Base expansion, no tests.
-    (
-        $(#[$enum_meta:meta])*
-        $vis:vis enum $Enum:ident {
-            $(
-                $(#[$var_meta:meta])*
-                $Variant:ident $(= $disc:literal)? => $wire:literal
-            ),+ $(,)?
-        }
-        error $Error:ident($label:literal);
-    ) => {
-        wire_enum! {
-            @decl
-            $(#[$enum_meta])*
-            $vis enum $Enum {
-                $(
-                    $(#[$var_meta])*
-                    $Variant $(= $disc)? => $wire
-                ),+
-            }
-            error $Error($label);
-        }
-
-        impl ::std::str::FromStr for $Enum {
-            type Err = $Error;
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                match s {
-                    $( $wire => Ok(Self::$Variant), )+
-                    _ => Err($Error(s.to_string())),
-                }
-            }
-        }
-    };
-
-    // Internal: everything but FromStr, which each public arm supplies.
-    (
-        @decl
+        @base
         $(#[$enum_meta:meta])*
         $vis:vis enum $Enum:ident {
             $(
@@ -292,6 +292,16 @@ macro_rules! wire_enum {
         impl AsRef<str> for $Enum {
             fn as_ref(&self) -> &str {
                 self.as_str()
+            }
+        }
+
+        impl ::std::str::FromStr for $Enum {
+            type Err = $Error;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $( $wire => Ok(Self::$Variant), )+
+                    _ => Err($Error(s.to_string())),
+                }
             }
         }
 

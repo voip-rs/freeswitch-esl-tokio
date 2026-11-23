@@ -44,8 +44,9 @@ impl fmt::Display for RtpStatUnit {
     }
 }
 
-sip_header_catalog::define_header_enum! {
+header_enum! {
     tests_mod: core_media_variable_generated_tests,
+    serde_tests: core_media_variable_serde_tests,
     serde(cfg(feature = "serde")),
     error_type: ParseCoreMediaVariableError => "unknown core media variable",
     /// RTP media statistics channel variable names (the part after the `variable_` prefix).

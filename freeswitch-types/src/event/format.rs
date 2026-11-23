@@ -10,6 +10,7 @@ wire_enum! {
         Xml => "xml",
     }
     error ParseEventFormatError("event format");
+    tests: event_format_wire_tests;
 }
 
 impl EventFormat {
