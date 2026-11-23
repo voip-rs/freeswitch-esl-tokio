@@ -62,23 +62,10 @@ fn refuse_filter_header(header: &str, fault: Option<FilterHeaderFault>) -> EslRe
     })
 }
 
-/// Builder for custom ESL commands not covered by [`EslClient`](crate::EslClient) methods.
-///
-/// Produces the wire-format string including headers and optional body.
-///
-/// ```
-/// use freeswitch_esl_tokio::CommandBuilder;
-///
-/// let cmd = CommandBuilder::new("mycommand")
-///     .header("X-Custom", "value").unwrap()
-///     .body("payload data")
-///     .build();
-/// assert!(cmd.starts_with("mycommand\n"));
-/// assert!(cmd.contains("X-Custom: value"));
-/// assert!(cmd.contains("Content-Length: 12"));
-/// ```
+/// Writes a command carrying a header block and an optional length-delimited
+/// body: `sendmsg` and `sendevent`.
 #[derive(Debug)]
-pub struct CommandBuilder {
+pub(crate) struct CommandBuilder {
     command: String,
     headers: IndexMap<String, String>,
     body: Option<String>,
@@ -86,7 +73,7 @@ pub struct CommandBuilder {
 
 impl CommandBuilder {
     /// Start building a command with the given command line.
-    pub fn new(command: &str) -> Self {
+    pub(crate) fn new(command: &str) -> Self {
         Self {
             command: command.to_string(),
             headers: IndexMap::new(),
@@ -97,7 +84,7 @@ impl CommandBuilder {
     /// Add header to command.
     ///
     /// Returns an error if the name or value contains a line break or NUL.
-    pub fn header(mut self, name: &str, value: &str) -> EslResult<Self> {
+    pub(crate) fn header(mut self, name: &str, value: &str) -> EslResult<Self> {
         validate_wire_text(name, "header name")?;
         validate_wire_text(value, "header value")?;
         self.headers
@@ -108,13 +95,13 @@ impl CommandBuilder {
     /// Set command body.
     ///
     /// The body is length-delimited so it may contain newlines.
-    pub fn body(mut self, body: &str) -> Self {
+    pub(crate) fn body(mut self, body: &str) -> Self {
         self.body = Some(body.to_string());
         self
     }
 
     /// Build the command string
-    pub fn build(self) -> String {
+    pub(crate) fn build(self) -> String {
         let mut result = self.command;
         result.push_str(LINE_TERMINATOR);
 

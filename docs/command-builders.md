@@ -80,7 +80,7 @@ freeswitch-types/src/
     └── sip_multipart.rs    # SIP multipart body extraction
 
 src/
-├── command.rs              # ESL protocol: EslCommand, CommandBuilder, EslResponse
+├── command.rs              # ESL protocol: EslCommand, EslResponse
 └── app/
     └── dptools.rs          # AppCommand — answer, hangup, bridge, playback, ...
 ```
