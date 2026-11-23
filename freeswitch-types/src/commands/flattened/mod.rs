@@ -17,11 +17,11 @@ use crate::switch_passes::brackets::{install, same_header, Block, Pair, PairEffe
 use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{
-    channel_variables, endpoint_variables, DialList, Leg, PastLimit, Thread, ENTERPRISE_DELIM,
-    MAX_PEERS,
+    channel_variables, endpoint_variables, switch_true, DialList, Leg, PastLimit, Thread,
+    ENTERPRISE_DELIM, MAX_PEERS,
 };
 use crate::switch_passes::{pipeline, PipelineError};
-use crate::variables::VariableName;
+use crate::variables::{SofiaVariable, VariableName};
 
 #[cfg(test)]
 mod tests;
@@ -721,7 +721,12 @@ impl FlattenedLeg {
     /// to [`SofiaEndpoint::channel_name`](crate::commands::SofiaEndpoint::channel_name), defaulting
     /// to `Encoded` only when the originating channel is known to export nothing.
     pub fn destination_encoding(&self) -> Option<DestinationEncoding> {
-        None
+        let value = self.endpoint_variable(SofiaVariable::SofiaSuppressUrlEncoding)?;
+        Some(if switch_true(value) {
+            DestinationEncoding::Suppressed
+        } else {
+            DestinationEncoding::Encoded
+        })
     }
 
     /// What the leg dials.

@@ -409,12 +409,18 @@ pub(crate) fn channel_variables<'a>(
     channel
 }
 
-/// The variables the leg's endpoint module reads.
+/// `originate_var_event`, what the leg's endpoint module reads: `switch_event_dup` of `inherited`
+/// (enterprise then thread), then `switch_event_merge` of the leg's own, so the leg's value wins
+/// whatever `local_var_clobber` says, and a `${` value is kept as written.
 pub(crate) fn endpoint_variables<'a>(
     inherited: impl IntoIterator<Item = &'a Block>,
     leg: &'a Leg,
 ) -> Vec<(&'a str, &'a str)> {
-    channel_variables(inherited, leg, true)
+    let mut event = install(inherited);
+    for (name, value) in install(&leg.blocks) {
+        set_header(&mut event, name, value);
+    }
+    event
 }
 
 /// `switch_true`.
