@@ -955,6 +955,20 @@ mod tests {
         }
     }
 
+    /// `set_var(..)?` reaches an `EslResult` as `transfer(..)?` does, as a
+    /// refusal of caller input.
+    #[test]
+    fn an_undeliverable_variable_converts_with_question_mark() {
+        fn set(value: &str) -> EslResult<crate::EslCommand> {
+            Ok(crate::AppCommand::set_var("sip_h_X-Test", value)?)
+        }
+        let err = set("a\u{1}b").expect_err("a control character is refused");
+        assert!(matches!(err, EslError::UndeliverableVariable(_)), "{err:?}");
+        assert!(!err.is_connection_error());
+        assert!(!err.is_recoverable());
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
     /// The reader keeps only text for a disconnect, so it writes the chain.
     #[test]
     fn display_chain_carries_every_cause() {
