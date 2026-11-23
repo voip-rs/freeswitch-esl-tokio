@@ -136,7 +136,7 @@ fn variables_corpus(records: &mut Vec<String>) {
             .cloned();
         for sep in seps {
             let sep_label = sep.map_or("comma".to_string(), |c| c.to_string());
-            let Ok(mut vars) = Variables::with_vars(scope, entries.clone()) else {
+            let Ok(mut vars) = Variables::from_pairs(scope, entries.clone()) else {
                 rec(
                     records,
                     format!("vars/{scope:?}/sep-{sep_label}/build-err"),
@@ -178,7 +178,7 @@ fn variables_corpus(records: &mut Vec<String>) {
     // every other value sharing the block.
     for scope in scopes {
         for &(name, v) in VALUES {
-            let Ok(vars) = Variables::with_vars(scope, [("k", v)]) else {
+            let Ok(vars) = Variables::from_pairs(scope, [("k", v)]) else {
                 rec(
                     records,
                     format!("vars/{scope:?}/single-{name}/build-err"),
@@ -331,7 +331,7 @@ fn endpoint_corpus(records: &mut Vec<String>) {
     }
 
     let attach_vars = |ep: Endpoint| -> Result<Endpoint, OriginateError> {
-        let vars = Variables::with_vars(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
+        let vars = Variables::from_pairs(VariablesType::Channel, [("ov0", "a,b"), ("ov1", "x")])
             .expect("plain pairs build");
         ep.with_variables(vars)
     };
@@ -525,7 +525,7 @@ fn originate_corpus(records: &mut Vec<String>) {
 }
 
 fn bridge_corpus(records: &mut Vec<String>) {
-    let vars = Variables::with_vars(VariablesType::Default, [("hangup_after_bridge", "true")])
+    let vars = Variables::from_pairs(VariablesType::Default, [("hangup_after_bridge", "true")])
         .expect("a plain pair builds");
     let ep1: Endpoint = SofiaGateway::new("gw-a", "it's,weird")
         .unwrap()

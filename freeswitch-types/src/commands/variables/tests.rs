@@ -1644,7 +1644,7 @@ fn insert_overwriting_a_name_refuses_at_its_position() {
 /// A pair inserted after the separator was chosen would split on it.
 #[test]
 fn insert_after_with_separator_refuses_the_separator() {
-    let vars = Variables::with_vars(VariablesType::Default, [("a", "1")])
+    let vars = Variables::from_pairs(VariablesType::Default, [("a", "1")])
         .unwrap()
         .with_separator(';')
         .unwrap();
@@ -1665,7 +1665,7 @@ fn insert_after_with_separator_refuses_the_separator() {
 
 #[test]
 fn with_vars_refuses_the_first_pair_insert_refuses() {
-    let err = Variables::with_vars(
+    let err = Variables::from_pairs(
         VariablesType::Default,
         [("a", "1"), ("b", ""), ("c", "x:_:y")],
     )
@@ -1699,7 +1699,7 @@ fn set_scope_refuses_a_scope_a_held_pair_cannot_be_written_in() {
             (1, VariablePart::Name, VariableFault::QuoteInChannelScope),
         ),
     ] {
-        let mut vars = Variables::with_vars(VariablesType::Default, pairs).unwrap();
+        let mut vars = Variables::from_pairs(VariablesType::Default, pairs).unwrap();
         let err = vars
             .set_scope(VariablesType::Channel)
             .expect_err("channel scope");
@@ -1707,7 +1707,7 @@ fn set_scope_refuses_a_scope_a_held_pair_cannot_be_written_in() {
         assert_eq!(vars.scope(), VariablesType::Default);
     }
 
-    let mut piped = Variables::with_vars(VariablesType::Default, [("a", "1")])
+    let mut piped = Variables::from_pairs(VariablesType::Default, [("a", "1")])
         .unwrap()
         .with_separator('|')
         .unwrap();
@@ -1716,7 +1716,7 @@ fn set_scope_refuses_a_scope_a_held_pair_cannot_be_written_in() {
         .is_err());
     assert_eq!(piped.scope(), VariablesType::Default);
 
-    let mut plain = Variables::with_vars(VariablesType::Default, [("k", "it's")]).unwrap();
+    let mut plain = Variables::from_pairs(VariablesType::Default, [("k", "it's")]).unwrap();
     plain
         .set_scope(VariablesType::Enterprise)
         .expect("a quote is carried outside channel scope");

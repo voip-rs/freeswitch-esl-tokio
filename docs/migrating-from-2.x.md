@@ -75,7 +75,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `"name".parse::<DialplanType>()` refuses any name but `inline` and `xml` | accepts any dialplan name but `undef`, which `ParseDialplanTypeError` now reports alone |
 | `Application::to_string_with_dialplan` | no public replacement; render the `Originate` |
 | `Variables::insert(k, v)` returns `()` | returns `Result<(), OriginateError>`, refusing what parsing a block refuses |
-| `Variables::with_vars(scope, pairs)` returns `Variables` | returns `Result<Variables, OriginateError>` |
+| `Variables::with_vars(scope, pairs)` returns `Variables` | `Variables::from_pairs(scope, pairs)`, returning `Result<Variables, OriginateError>` |
 | `Variables::set_scope(scope)` returns `()` | returns `Result<(), OriginateError>`, refusing a scope a held pair or the chosen separator cannot be written in |
 | `Variables::iter_mut()`, `values_mut()` | removed; `insert` the new value under the same name, which keeps its position |
 | a variable pair refused as `OriginateError::ParseError(String)` | `OriginateError::UndeliverableVariable { index, variable }`; `variable` is an `UndeliverableVariable` naming the `VariablePart` and the `VariableFault`, the same from parse, config load and the builder |

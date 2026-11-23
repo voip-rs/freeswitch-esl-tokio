@@ -197,7 +197,7 @@ impl Variables {
 
     /// Create from an existing set of key-value pairs, refusing the first one
     /// [`insert`](Self::insert) refuses.
-    pub fn with_vars(
+    pub fn from_pairs(
         vars_type: VariablesType,
         vars: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
     ) -> Result<Self, OriginateError> {
@@ -397,7 +397,7 @@ impl<'de> serde::Deserialize<'de> for Variables {
         };
         // A config naming a value the wire cannot carry fails at load rather
         // than on the call it was loaded for.
-        let vars = Self::with_vars(vars_type, inner).map_err(serde::de::Error::custom)?;
+        let vars = Self::from_pairs(vars_type, inner).map_err(serde::de::Error::custom)?;
         match separator {
             Some(sep) => vars
                 .with_separator(sep)

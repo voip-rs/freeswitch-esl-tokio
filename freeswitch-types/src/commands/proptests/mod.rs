@@ -116,7 +116,7 @@ fn build_vars(
     entries: &[Entry],
     sep: Option<char>,
 ) -> Option<Variables> {
-    let vars = Variables::with_vars(
+    let vars = Variables::from_pairs(
         scope,
         entries
             .iter()
