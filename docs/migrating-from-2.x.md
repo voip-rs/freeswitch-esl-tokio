@@ -60,6 +60,7 @@ let pai = event.p_asserted_identity()?; // Result<Option<SipHeaderAddrList>, _>
 | `header(EventHeader)` on `HeaderLookup` and `EslEvent`; `EslResponse::header(impl AsRef<str>)` | `header(impl EventHeaderName)` on all three; a string name goes through `header_str` |
 | `HeaderLookup::first_header(names: [EventHeader; N])` | takes `[H; N]` for any `H: EventHeaderName`, as `header()` does; a turbofish `first_header::<N>` becomes `first_header::<_, N>`. `EventHeaderName` is in the prelude |
 | an unknown dash key stored Title-Cased (`C911P-Action` as `C911p-Action`) | stored as first spelled; a later write in another casing replaces the value under that key. A store or spool written by 2.x still answers every casing |
+| `normalize_header_key("c911p-action")` returns `C911p-Action`, an unknown dash key Title-Cased | returns an unknown key verbatim (`c911p-action`); a known `EventHeader` still takes its canonical spelling. A key compared against its output needs a case-insensitive comparison or an `EslHeaders` lookup |
 | `DisconnectReason::ServerNotice` with `controlled_session_uuid: None` on a session-bound notice | carries the UUID the switch sent |
 
 - A `define_header_enum!` enum of your own headers reads through `header()` once it implements `EventHeaderName` (one `as_str`), as a variable enum does with `VariableName`.

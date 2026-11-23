@@ -51,7 +51,7 @@ The wrapper can define its own variable enums for module-specific variables:
 ```rust
 // In wrapper crate:
 define_header_enum! {
-    error_type: ParseConferenceVariableError,
+    error_type: ParseConferenceVariableError => "unknown conference variable",
     pub enum ConferenceVariable {
         ConferenceName => "conference_name",
         ConferenceMemberFlags => "conference_member_flags",
@@ -73,7 +73,7 @@ Headers a deployment's own modules emit get the same treatment through `EventHea
 
 ```rust
 define_header_enum! {
-    error_type: ParseSiteHeaderError,
+    error_type: ParseSiteHeaderError => "unknown site header",
     pub enum SiteHeader {
         Action => "C911P-Action",
     }

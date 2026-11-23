@@ -1,4 +1,14 @@
-# Reading events
+# Reading euse freeswitch_esl_tokio::{ChannelTimetable, HeaderLookup, TimetablePrefix};
+
+// Works with any header store, not coupled to EslEvent; header_str resolves
+// a key in any casing, as the switch spells one header several ways:
+let timetable = ChannelTimetable::from_lookup(
+    TimetablePrefix::Caller,
+    |key| headers.header_str(key),
+)?;
+
+// Custom prefix for dynamic headers (e.g. "Hunt-Channel-Created-Time"):
+let hunt_tt = ChannelTimetable::from_lookup("Hunt", |key| headers.header_str(key))?;ents
 
 ## Typed event accessors
 
@@ -63,19 +73,20 @@ let other = event.other_leg_timetable()?;
 # fn main() {}
 ```
 
-`ChannelTimetable::from_lookup` works the same way against any key-value store, not just `EslEvent` -- illustrative only below, since `headers` and `subscription_headers` stand for an arbitrary lookup and an arbitrary subscription-building collection:
+`ChannelTimetable::from_lookup` works the same way against any header store, not just `EslEvent` -- illustrative only below, since `headers` stands for an `EslHeaders` your code keeps (any `HeaderLookup` serves) and `subscription_headers` for an arbitrary subscription-building collection:
 
 ```rust,ignore
-use freeswitch_esl_tokio::{ChannelTimetable, TimetablePrefix};
+use freeswitch_esl_tokio::{ChannelTimetable, HeaderLookup, TimetablePrefix};
 
-// Works with any key-value store, not coupled to EslEvent:
+// Not coupled to EslEvent; header_str resolves a key in any casing, as the
+// switch spells one header several ways:
 let timetable = ChannelTimetable::from_lookup(
     TimetablePrefix::Caller,
-    |key| headers.get(key).map(|v| v.as_str()),
+    |key| headers.header_str(key),
 )?;
 
 // Custom prefix for dynamic headers (e.g. "Hunt-Channel-Created-Time"):
-let hunt_tt = ChannelTimetable::from_lookup("Hunt", |key| headers.get(key))?;
+let hunt_tt = ChannelTimetable::from_lookup("Hunt", |key| headers.header_str(key))?;
 
 // Build subscription filters using SUFFIXES constant:
 let prefix = TimetablePrefix::Caller.as_str();
