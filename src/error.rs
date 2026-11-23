@@ -1020,4 +1020,20 @@ mod tests {
         assert!(chain.starts_with(&err.to_string()), "{chain}");
         assert!(chain.ends_with(&cause), "{chain}");
     }
+
+    #[test]
+    fn display_chain_prints_a_header_parse_cause_once() {
+        let inner = freeswitch_types::channel::ParseHangupCauseError("BOGUS".into());
+        let cause = inner.to_string();
+        let chain = EslError::HeaderParse(inner.into())
+            .display_chain()
+            .to_string();
+        assert_eq!(
+            chain
+                .matches(&cause)
+                .count(),
+            1,
+            "{chain}"
+        );
+    }
 }

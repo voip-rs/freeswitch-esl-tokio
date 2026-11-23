@@ -688,11 +688,13 @@ mod tests {
                 format!("{err:?}").starts_with(expected),
                 "{err:?} should be {expected}"
             );
-            assert!(
-                err.source()
-                    .is_some(),
-                "{err:?} must expose its inner error as source"
-            );
+            let cause = err
+                .source()
+                .expect("the inner error is the source")
+                .to_string();
+            assert!(!err
+                .to_string()
+                .contains(&cause));
         }
     }
 
@@ -704,16 +706,6 @@ mod tests {
         assert!(err
             .source()
             .is_some());
-    }
-
-    // Display delegates: the union adds no prefix of its own, so a caller
-    // printing `{e}` sees exactly what the typed parser said.
-    #[test]
-    fn display_delegates_to_the_inner_error() {
-        let inner = ParseChannelStateError("CS_NONSENSE".into());
-        let expected = inner.to_string();
-        let err: ParseHeaderError = inner.into();
-        assert_eq!(err.to_string(), expected);
     }
 
     fn store_with(pairs: &[(&str, &str)]) -> EslHeaders {
