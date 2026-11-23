@@ -372,7 +372,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let auth = match args.user {
-        Some(ref user) => AuthMethod::user(user, &args.password),
+        // Refuses a user the switch would split differently, before connecting.
+        Some(ref user) => AuthMethod::user(user, &args.password)?,
         None => AuthMethod::password(&args.password),
     };
     let connect_result =

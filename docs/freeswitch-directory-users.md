@@ -240,7 +240,7 @@ use freeswitch_esl_tokio::{AuthMethod, EslClient, EslConnectOptions};
 let (client, mut events) = EslClient::connect_with_auth(
     "localhost",
     8021,
-    AuthMethod::user("admin@default", "SuperSecretPassword"), // user@domain required
+    AuthMethod::user("admin@default", "SuperSecretPassword")?, // user@domain required
     EslConnectOptions::default(),
 ).await?;
 ```

@@ -265,7 +265,8 @@ async fn live_connect_userauth_truncated_response() {
             "many-events@default",
             env.password
                 .as_str(),
-        ),
+        )
+        .expect("the user holds no colon"),
         opts,
     )
     .await

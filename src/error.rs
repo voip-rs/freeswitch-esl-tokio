@@ -240,6 +240,17 @@ pub enum EslError {
         /// The connect timeout in milliseconds, which bounds each handshake read.
         timeout_ms: u64,
     },
+
+    /// A `userauth` user holding a `:`, where mod_event_socket ends the user or
+    /// the domain and starts the password. Nothing was sent.
+    #[error(
+        "userauth user ({} bytes) holds a ':', where the switch starts the password",
+        user.len()
+    )]
+    ColonInAuthUser {
+        /// The user as given.
+        user: String,
+    },
 }
 
 /// Route each typed parser's error into [`EslError::HeaderParse`], so a reader
@@ -408,6 +419,7 @@ impl EslError {
             EslError::MissingField { .. } => false,
             EslError::ConnectTimeout { .. } => false,
             EslError::HandshakeTimeout { .. } => false,
+            EslError::ColonInAuthUser { .. } => false,
         }
     }
 
@@ -462,6 +474,7 @@ impl EslError {
             EslError::MissingField { .. } => false,
             EslError::ConnectTimeout { .. } => true,
             EslError::HandshakeTimeout { .. } => true,
+            EslError::ColonInAuthUser { .. } => false,
         }
     }
 
@@ -782,6 +795,13 @@ mod tests {
             (EslError::Timeout { timeout_ms: 5000 }, false, true),
             (EslError::ConnectTimeout { timeout_ms: 5000 }, true, false),
             (EslError::HandshakeTimeout { timeout_ms: 5000 }, true, false),
+            (
+                EslError::ColonInAuthUser {
+                    user: "a:b@c".into(),
+                },
+                false,
+                false,
+            ),
             (EslError::protocol_error("bad framing"), true, false),
             (
                 EslError::InvalidHeader {
@@ -909,6 +929,9 @@ mod tests {
             },
             EslError::UnexpectedReply {
                 reply_text: secret.into(),
+            },
+            EslError::ColonInAuthUser {
+                user: format!("{secret}:x@example.com"),
             },
         ];
         for err in cases {

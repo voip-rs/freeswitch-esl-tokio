@@ -5,7 +5,7 @@ use tracing::{debug, trace, warn};
 
 use super::{read_into_parser, ReadStep};
 use crate::{
-    command::{EslCommand, EslResponse, Secret},
+    command::{check_userauth_user, EslCommand, EslResponse, Secret},
     constants::{CONTENT_TYPE_COMMAND_REPLY, HEADER_CONTENT_TYPE},
     error::{EslError, EslResult},
     protocol::{EslMessage, EslParser, MessageType},
@@ -37,11 +37,17 @@ impl AuthMethod {
     }
 
     /// Authenticate as a directory user, spelled `user@domain`.
-    pub fn user(user: impl Into<String>, password: impl Into<String>) -> Self {
-        Self::User {
-            user: user.into(),
+    ///
+    /// Refuses a user holding a `:` with [`EslError::ColonInAuthUser`]: the switch
+    /// would read part of it as the password. The password may hold any character
+    /// but a line break or NUL.
+    pub fn user(user: impl Into<String>, password: impl Into<String>) -> EslResult<Self> {
+        let user = user.into();
+        check_userauth_user(&user)?;
+        Ok(Self::User {
+            user,
             password: Secret::new(password),
-        }
+        })
     }
 }
 
@@ -226,6 +232,17 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
 mod tests {
     use super::*;
     use tokio::io::AsyncReadExt;
+
+    #[test]
+    fn user_refuses_a_colon_on_either_side_of_the_at() {
+        for user in ["adm:in@default", "admin@def:ault"] {
+            assert!(matches!(
+                AuthMethod::user(user, "pass"),
+                Err(EslError::ColonInAuthUser { .. })
+            ));
+        }
+        assert!(AuthMethod::user("admin@default", "pa:ss@word").is_ok());
+    }
 
     #[test]
     fn salvage_truncated_auth_response_realistic() {

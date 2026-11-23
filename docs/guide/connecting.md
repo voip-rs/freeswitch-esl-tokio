@@ -48,7 +48,7 @@ Multi-tenant with per-user ACL:
 let (client, mut events) = EslClient::connect_with_auth(
     "localhost",
     8021,
-    AuthMethod::user("admin@default", "ClueCon"),
+    AuthMethod::user("admin@default", "ClueCon")?,
     EslConnectOptions::default(),
 )
 .await?;

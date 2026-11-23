@@ -51,6 +51,17 @@ fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
     Ok(())
 }
 
+/// Refuse a `userauth` user mod_event_socket would split elsewhere: it starts
+/// the password at a `:` on either side of the `@`, and never escapes one.
+pub(crate) fn check_userauth_user(user: &str) -> EslResult<()> {
+    if user.contains(':') {
+        return Err(EslError::ColonInAuthUser {
+            user: user.to_string(),
+        });
+    }
+    Ok(())
+}
+
 /// Refuse a filter header carrying the `fault` that [`FilterHeaderFault`] found.
 fn refuse_filter_header(header: &str, fault: Option<FilterHeaderFault>) -> EslResult<()> {
     let Some(fault) = fault else {
@@ -380,6 +391,7 @@ impl EslCommand {
             EslCommand::Auth { password } => validate_wire_text(&password.0, "password"),
             EslCommand::UserAuth { user, password } => {
                 validate_wire_text(user, "user")?;
+                check_userauth_user(user)?;
                 validate_wire_text(&password.0, "password")
             }
             EslCommand::Api { command } => validate_wire_text(command, "api command"),
