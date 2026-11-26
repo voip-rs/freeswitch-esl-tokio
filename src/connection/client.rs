@@ -1064,13 +1064,19 @@ impl EslClient {
     ///
     /// Sets the connection status to [`crate::DisconnectReason::ClientRequested`]
     /// before closing the socket, so callers can distinguish client-initiated
-    /// disconnects from server-initiated ones. A connection that had already
-    /// ended keeps the reason it ended with. A command in flight sees the
+    /// disconnects from server-initiated ones. A command in flight sees the
     /// status change and gives up the writer, failing with a connection error.
+    ///
+    /// On a connection that had already ended this returns `Ok` and leaves the
+    /// socket alone: after a re-exec teardown it belongs to the next process.
     pub async fn disconnect(&self) -> EslResult<()> {
         info!("Client requested disconnect");
-        self.shared
-            .publish_disconnect(DisconnectReason::ClientRequested);
+        if !self
+            .shared
+            .publish_disconnect(DisconnectReason::ClientRequested)
+        {
+            return Ok(());
+        }
         let mut writer = self
             .writer
             .lock()

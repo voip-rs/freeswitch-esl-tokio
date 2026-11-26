@@ -381,8 +381,9 @@ struct SharedState {
 impl SharedState {
     /// Moves the status from `Connected` to `Disconnected(reason)`. The first
     /// reason stands: a later one, such as the EOF the switch answers a
-    /// `disconnect()` with, is a consequence of it.
-    fn publish_disconnect(&self, reason: DisconnectReason) {
+    /// `disconnect()` with, is a consequence of it. `false` when the
+    /// connection had already ended.
+    fn publish_disconnect(&self, reason: DisconnectReason) -> bool {
         self.status_tx
             .send_if_modified(|status| {
                 if !matches!(status, ConnectionStatus::Connected) {
@@ -390,7 +391,7 @@ impl SharedState {
                 }
                 *status = ConnectionStatus::Disconnected(reason);
                 true
-            });
+            })
     }
 }
 
