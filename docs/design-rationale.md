@@ -344,6 +344,10 @@ by its place among the owed ones, never to the newer waiter. A command dropped
 before it was fully written leaves the stream unframeable, so the next command
 closes the connection rather than guess.
 
+The wait, write included, ends when the connection's status leaves Connected,
+whatever the command's timeout, so a command without one cannot outlive its
+connection or hold `disconnect()` behind it.
+
 A command queue was rejected: the switch does not pipeline, so it would add
 machinery without throughput.
 
