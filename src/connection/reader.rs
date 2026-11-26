@@ -262,10 +262,17 @@ pub(super) async fn reader_loop(
     // `event_tx` and the re-exec channel are still alive here: a consumer or a
     // teardown that sees them close must find the status already published.
     shared.publish_disconnect(reason);
+    close_reexec_channel(&shared, reexec);
+    fail_pending_reply(&shared).await;
+}
+
+/// Drops the re-exec channel, which a waiting teardown reads as the reader
+/// gone.
+#[cfg_attr(not(test), allow(unused_variables))]
+fn close_reexec_channel(shared: &SharedState, reexec: ReexecReader) {
     drop(reexec);
     #[cfg(test)]
     run_test_hook(&shared.after_reexec_report);
-    fail_pending_reply(&shared).await;
 }
 
 /// `panic!` carries a `&'static str` for a literal message and a `String` for a
@@ -483,15 +490,13 @@ fn fail_reexec(
             reason: failure.into(),
             source: source.map(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
         };
-        if tx
-            .send(Err(error))
-            .is_err()
-        {
+        let sent = tx.send(Err(error));
+        #[cfg(test)]
+        run_test_hook(&shared.after_reexec_report);
+        if sent.is_err() {
             debug!("Re-exec caller gone before the drain failure was delivered");
         }
     }
-    #[cfg(test)]
-    run_test_hook(&shared.after_reexec_report);
     reason
 }
 

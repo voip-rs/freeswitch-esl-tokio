@@ -1060,7 +1060,17 @@ mod tests {
                     .await
             }
         });
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while client
+                .writer
+                .try_lock()
+                .is_ok()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("teardown holds the writer while it waits for the re-exec lock");
         let command = tokio::spawn({
             let client = client.clone();
             async move {
@@ -1069,7 +1079,10 @@ mod tests {
                     .await
             }
         });
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // On this single-threaded runtime one yield runs the command up to
+        // the writer lock, where it parks.
+        tokio::task::yield_now().await;
+        assert!(!command.is_finished(), "the command did not queue");
         drop(held);
 
         let handoff = tokio::time::timeout(Duration::from_secs(10), teardown)
