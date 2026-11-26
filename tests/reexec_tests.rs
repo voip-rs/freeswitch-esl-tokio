@@ -335,3 +335,49 @@ async fn teardown_wins_race_against_stalled_dispatch() {
         "every event is either delivered or counted as dropped"
     );
 }
+
+/// A drain the switch cuts short mid-message ends the reader; the status must
+/// say so rather than read `Connected` over a reader that is gone.
+#[tokio::test]
+async fn a_failed_drain_publishes_the_disconnect() {
+    use std::time::Duration;
+
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    // One write: the reader takes the partial message with the heartbeat, so
+    // the drain starts mid-body.
+    mock.send_raw(concat!(
+        "Content-Type: text/event-plain\nContent-Length: 21\n\nEvent-Name: HEARTBEAT\n",
+        "Content-Type: text/event-plain\nContent-Length: 100\n\npartial",
+    ))
+    .await
+    .unwrap();
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
+
+    let teardown = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .teardown_for_reexec()
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    mock.drop_connection()
+        .await;
+
+    let err = tokio::time::timeout(Duration::from_secs(10), teardown)
+        .await
+        .expect("teardown returns")
+        .unwrap()
+        .expect_err("the body never completed");
+    assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+    let end = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("the reader exits");
+    assert!(end.is_none(), "{end:?}");
+    assert_eq!(
+        client.status(),
+        ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
+    );
+}

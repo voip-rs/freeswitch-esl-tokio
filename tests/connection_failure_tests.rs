@@ -1343,3 +1343,44 @@ async fn an_event_queue_size_past_the_channel_limit_is_clamped() {
         assert!(client.is_connected());
     }
 }
+
+/// The client's own reason for ending the connection outlives the EOF the
+/// switch answers it with.
+#[tokio::test]
+async fn disconnect_reason_survives_the_eof_that_follows() {
+    let (mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client
+        .disconnect()
+        .await
+        .unwrap();
+    mock.drop_connection()
+        .await;
+    assert_eq!(
+        status_once_closed(&client, &mut events).await,
+        ConnectionStatus::Disconnected(DisconnectReason::ClientRequested)
+    );
+}
+
+/// A write cut short reports the unframeable stream as the reason, not the
+/// close the switch answers it with.
+#[tokio::test]
+async fn unframeable_reason_survives_the_close_that_follows() {
+    let (mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_command_timeout(Duration::from_millis(500));
+    let huge = "x".repeat(32 * 1024 * 1024);
+    let err = tokio::time::timeout(Duration::from_secs(30), client.api(&huge))
+        .await
+        .expect("the command timeout covers the write")
+        .expect_err("the write cannot finish");
+    assert!(matches!(err, EslError::ProtocolError { .. }), "{err:?}");
+    mock.drop_connection()
+        .await;
+    assert!(
+        matches!(
+            status_once_closed(&client, &mut events).await,
+            ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_))
+        ),
+        "{:?}",
+        client.status()
+    );
+}

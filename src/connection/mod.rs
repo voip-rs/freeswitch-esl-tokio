@@ -856,6 +856,15 @@ mod tests {
             .await
             .expect_err("write on a shut-down half must fail");
         assert!(matches!(err, EslError::Io(_)), "got: {err}");
+        // An I/O error may follow a partial write, so the stream is closed.
+        assert!(
+            matches!(
+                client.status(),
+                ConnectionStatus::Disconnected(DisconnectReason::IoError(_))
+            ),
+            "{:?}",
+            client.status()
+        );
 
         // The failed command must not leave its waiter installed, and no
         // stale reply can be in flight for a command that never hit the wire.
