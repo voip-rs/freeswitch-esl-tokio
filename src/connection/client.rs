@@ -21,6 +21,9 @@ impl EslClient {
     /// The writer lock is held through the entire send-and-receive cycle to
     /// prevent concurrent commands from overwriting the pending reply slot
     /// (ESL is a sequential request/response protocol).
+    ///
+    /// Dropping the future once the command is written keeps correlation: its
+    /// reply is still owed and is kept from the next command.
     pub async fn send_command(&self, command: EslCommand) -> EslResult<EslResponse> {
         if !self.is_connected() {
             return Err(EslError::NotConnected);
@@ -50,7 +53,15 @@ impl EslClient {
             if pending.reader_dead {
                 return Err(EslError::ConnectionClosed);
             }
-            pending.waiting = Some(tx);
+            // A waiter still here belongs to a command whose future was dropped
+            // mid-wait; its reply is still owed and must not land on this one.
+            if pending
+                .waiting
+                .replace(tx)
+                .is_some()
+            {
+                pending.stale_replies += 1;
+            }
         }
 
         // Write command
