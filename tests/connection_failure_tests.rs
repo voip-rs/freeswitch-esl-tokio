@@ -827,6 +827,28 @@ async fn command_dropped_mid_write_closes_the_connection() {
     assert!(!client.is_connected());
 }
 
+/// A client that dropped its event stream ends its reader at the next item it
+/// would deliver, here a late reply; the status must say so rather than keep
+/// reporting a connection every command now fails on.
+#[tokio::test]
+async fn dropped_event_stream_is_reported_in_the_status() {
+    let (mut mock, client, events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    drop(events);
+    client.set_command_timeout(Duration::from_millis(100));
+
+    let (timed_out, _) = tokio::join!(client.api("status"), mock.read_command());
+    assert!(matches!(timed_out, Err(EslError::CommandTimeout { .. })));
+    mock.reply_api("late")
+        .await
+        .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while client.is_connected() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(!client.is_connected(), "{:?}", client.status());
+}
+
 #[tokio::test]
 async fn timeout_normal_reply_still_routes_correctly() {
     // Regression: verify reply routing works normally when there is no timeout.
