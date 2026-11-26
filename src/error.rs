@@ -8,19 +8,22 @@
 //!   Reconnect.
 //! - **Recoverable errors** ([`EslError::is_recoverable`]): the session is up and
 //!   only this command failed (a command timeout, `-ERR`, a full queue). Retry
-//!   the command, or move on.
+//!   the command, or move on. A timed-out command may still have run: its
+//!   result follows as `LateReply`, so a retry of one that is not idempotent
+//!   can run it twice.
 //! - **Neither**: sending the same thing again fails the same way. A caller
 //!   value the library refused before sending (`WireTerminatorInField`,
 //!   `TransferArgument`, `Originate`, …), a credential the switch refused at
 //!   connect (`AuthenticationFailed`), or a value the switch sent that did not
 //!   parse (`HeaderParse`, an event or response body). Fix the input or the
 //!   configuration; a reconnect loop on these only spins. `UnsolicitedReply`
-//!   sits here too: a reply nothing waited for, reported while the session
-//!   carries on.
+//!   and `LateReply` sit here too: a reply nothing waited for, reported while
+//!   the session carries on.
 
 use crate::app::dptools::TransferArgumentError;
 use crate::command::EslResponse;
 use crate::commands::OriginateError;
+use crate::connection::CommandTicket;
 use crate::constants::{HEADER_CONTENT_TYPE, REPLY_PREFIX_ERR, REPLY_PREFIX_USAGE};
 use crate::HeaderLookup;
 use freeswitch_types::event::FilterHeaderFault;
@@ -87,14 +90,16 @@ pub enum EslError {
     /// A command's reply did not arrive within the command timeout, on a
     /// connection that is still up.
     ///
-    /// The connection remains usable. The library increments an internal
-    /// stale-reply counter so that the server's late reply — when it
-    /// eventually arrives — is silently discarded rather than routed to
-    /// the next command's waiter, preserving reply correlation.
-    #[error("Operation timed out after {timeout_ms}ms")]
+    /// The connection remains usable and the command may still have run on the
+    /// switch. Its reply, if it comes, arrives on the event stream as
+    /// [`EslError::LateReply`] carrying the same `ticket`, and never reaches
+    /// the next command.
+    #[error("command {ticket} timed out after {timeout_ms}ms")]
     CommandTimeout {
         /// Elapsed time in milliseconds before the operation was abandoned.
         timeout_ms: u64,
+        /// Pairs this timeout with its [`EslError::LateReply`].
+        ticket: CommandTicket,
     },
 
     /// Invalid event format
@@ -279,7 +284,7 @@ pub enum EslError {
     /// but the switch answered something this client did not send.
     #[error(
         "unsolicited {} with no command pending (reply text {} bytes, body {} bytes)",
-        unsolicited_content_type(response),
+        reply_content_type(response),
         response.reply_text().map_or(0, str::len),
         response.body().map_or(0, str::len)
     )]
@@ -287,9 +292,26 @@ pub enum EslError {
         /// The reply as received.
         response: Box<EslResponse>,
     },
+
+    /// The reply to a command that returned [`EslError::CommandTimeout`] with
+    /// the same `ticket`, or whose future was dropped while it waited. The
+    /// command ran on the switch and this is its result; later replies still
+    /// correlate.
+    #[error(
+        "late {} for command {ticket} (reply text {} bytes, body {} bytes)",
+        reply_content_type(response),
+        response.reply_text().map_or(0, str::len),
+        response.body().map_or(0, str::len)
+    )]
+    LateReply {
+        /// The reply as received.
+        response: Box<EslResponse>,
+        /// The command this answers.
+        ticket: CommandTicket,
+    },
 }
 
-fn unsolicited_content_type(response: &EslResponse) -> &str {
+fn reply_content_type(response: &EslResponse) -> &str {
     response
         .headers()
         .header_str(HEADER_CONTENT_TYPE)
@@ -466,6 +488,7 @@ impl EslError {
             EslError::UndeliverableVariable(_) => false,
             EslError::InvalidBodyLine { .. } => false,
             EslError::UnsolicitedReply { .. } => false,
+            EslError::LateReply { .. } => false,
         }
     }
 
@@ -524,6 +547,7 @@ impl EslError {
             EslError::UndeliverableVariable(_) => false,
             EslError::InvalidBodyLine { .. } => false,
             EslError::UnsolicitedReply { .. } => false,
+            EslError::LateReply { .. } => false,
         }
     }
 
@@ -808,7 +832,11 @@ mod tests {
     fn non_command_failed_variants_do_not_classify() {
         assert_eq!(EslError::QueueFull.command_failure(), None);
         assert_eq!(
-            EslError::CommandTimeout { timeout_ms: 10 }.command_failure(),
+            EslError::CommandTimeout {
+                timeout_ms: 10,
+                ticket: CommandTicket(0),
+            }
+            .command_failure(),
             None
         );
         assert_eq!(
@@ -844,7 +872,14 @@ mod tests {
             (io(ErrorKind::UnexpectedEof), true, false),
             (EslError::ConnectionClosed, true, false),
             (EslError::NotConnected, true, false),
-            (EslError::CommandTimeout { timeout_ms: 5000 }, false, true),
+            (
+                EslError::CommandTimeout {
+                    timeout_ms: 5000,
+                    ticket: CommandTicket(0),
+                },
+                false,
+                true,
+            ),
             (EslError::ConnectTimeout { timeout_ms: 5000 }, true, false),
             (EslError::HandshakeTimeout { timeout_ms: 5000 }, true, false),
             (

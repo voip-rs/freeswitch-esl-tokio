@@ -24,7 +24,8 @@ impl EslClient {
     /// (ESL is a sequential request/response protocol).
     ///
     /// Dropping the future once the command is written keeps correlation: its
-    /// reply is still owed and is kept from the next command.
+    /// reply is still owed and arrives on the event stream as
+    /// [`EslError::LateReply`], as does that of a command that timed out.
     pub async fn send_command(&self, command: EslCommand) -> EslResult<EslResponse> {
         if !self.is_connected() {
             return Err(EslError::NotConnected);
@@ -40,7 +41,7 @@ impl EslClient {
             .await;
 
         // Set up reply channel
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
         {
             let mut pending = self
                 .shared
@@ -54,15 +55,7 @@ impl EslClient {
             if pending.reader_dead {
                 return Err(EslError::ConnectionClosed);
             }
-            // A waiter still here belongs to a command whose future was dropped
-            // mid-wait; its reply is still owed and must not land on this one.
-            if pending
-                .waiting
-                .replace(tx)
-                .is_some()
-            {
-                pending.stale_replies += 1;
-            }
+            pending.install(tx);
         }
 
         // Write command
@@ -75,10 +68,8 @@ impl EslClient {
                 .pending_reply
                 .lock()
                 .await;
-            // Mirror of the timeout branch, minus the stale_replies
-            // increment: the command never hit the wire, so no reply can be
-            // in flight for it. Leaving the sender installed would make
-            // teardown_for_reexec see a phantom in-flight command.
+            // Never hit the wire, so no reply is owed: drop the waiter rather
+            // than move it to `stale`, or reexec sees a phantom in-flight command.
             pending.waiting = None;
             drop(pending);
             drop(writer);
@@ -90,7 +81,7 @@ impl EslClient {
             .shared
             .command_timeout_ms
             .load(Ordering::Relaxed);
-        let message = match timeout(Duration::from_millis(timeout_ms), rx).await {
+        let message = match timeout(Duration::from_millis(timeout_ms), &mut rx).await {
             Ok(Ok(message)) => message,
             Ok(Err(e)) => {
                 debug!("pending reply channel closed: {e}");
@@ -103,17 +94,26 @@ impl EslClient {
                     .pending_reply
                     .lock()
                     .await;
-                // take() == Some: the reply is still in flight and would land on
-                // the next waiter, so count it. None: the reader already took it.
-                if pending
+                let owed = pending
                     .waiting
-                    .take()
-                    .is_some()
-                {
-                    pending.stale_replies += 1;
+                    .take();
+                if let Some((ticket, _)) = owed {
+                    pending
+                        .stale
+                        .push_back(ticket);
+                    drop(writer);
+                    return Err(EslError::CommandTimeout { timeout_ms, ticket });
                 }
-                drop(writer);
-                return Err(EslError::CommandTimeout { timeout_ms });
+                drop(pending);
+                // The reader took the waiter between the timeout and the lock:
+                // the reply was sent, or the reader exited and dropped it.
+                match rx.try_recv() {
+                    Ok(message) => message,
+                    Err(e) => {
+                        debug!("pending reply channel closed: {e}");
+                        return Err(EslError::ConnectionClosed);
+                    }
+                }
             }
         };
 
@@ -925,7 +925,8 @@ impl EslEventStream {
     /// notification per overflow episode -- subsequent calls return real events.
     /// Parse errors from the reader task are also surfaced here, and so is a
     /// command reply no command was waiting for, as
-    /// [`EslError::UnsolicitedReply`]; the session stays up after either.
+    /// [`EslError::UnsolicitedReply`], or one whose command timed out or was
+    /// dropped, as [`EslError::LateReply`]; the session stays up after each.
     ///
     /// Matching `Some(Ok(event))` in a `while let` ends the loop on a parse
     /// error as well as on disconnect, with nothing to tell the two apart; use

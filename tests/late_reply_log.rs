@@ -25,10 +25,10 @@ impl std::io::Write for CapturedLog {
     }
 }
 
-/// A late reply's text is subscriber data (a `getvar` value): the discard
-/// warning names its length, never the text.
+/// A late reply's text is subscriber data (a `getvar` value): the warning that
+/// it went to the event stream names its length, never the text.
 #[tokio::test]
-async fn stale_reply_warning_does_not_quote_the_reply_text() {
+async fn late_reply_warning_does_not_quote_the_reply_text() {
     let log = CapturedLog::default();
     let writer = log.clone();
     let subscriber = tracing_subscriber::fmt()
@@ -79,7 +79,7 @@ async fn stale_reply_warning_does_not_quote_the_reply_text() {
     let reply = next
         .await
         .unwrap()
-        .expect("the reply after the stale one reaches its command");
+        .expect("the reply after the late one reaches its command");
     assert_eq!(reply.body(), Some("1.0"));
 
     let text = String::from_utf8(
@@ -90,8 +90,8 @@ async fn stale_reply_warning_does_not_quote_the_reply_text() {
     )
     .unwrap();
     assert!(
-        text.contains("Discarded stale"),
-        "no discard warning: {text}"
+        text.contains("late command/reply"),
+        "no late-reply warning: {text}"
     );
     assert!(!text.contains("late-getvar-sentinel"), "{text}");
 }

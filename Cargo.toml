@@ -94,5 +94,5 @@ name = "reexec_tests"
 required-features = ["test-util"]
 
 [[test]]
-name = "stale_reply_log"
+name = "late_reply_log"
 required-features = ["test-util"]

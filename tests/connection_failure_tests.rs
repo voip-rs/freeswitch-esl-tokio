@@ -1,7 +1,7 @@
 //! Integration tests using mock ESL server: disconnect handling, in-flight
 //! command wakeup on every disconnect path, malformed event bodies, the
 //! reader-exit race, permission-denied recovery, liveness/stall detection,
-//! command timeouts and stale-reply handling, and rude rejection.
+//! command timeouts and late-reply delivery, and rude rejection.
 
 mod mock_server;
 
@@ -497,7 +497,7 @@ async fn test_command_timeout_default() {
         .api("status")
         .await
     {
-        Err(EslError::CommandTimeout { timeout_ms }) => assert_eq!(timeout_ms, 5000),
+        Err(EslError::CommandTimeout { timeout_ms, .. }) => assert_eq!(timeout_ms, 5000),
         other => panic!("expected a Timeout, got: {:?}", other),
     }
 }
@@ -536,7 +536,7 @@ async fn test_command_timeout_cleanup() {
         .read_command()
         .await
         .unwrap();
-    // A's late reply -- reader discards it via stale-reply counter.
+    // A's late reply goes to the event stream, not to B.
     mock.reply_api("stale")
         .await
         .unwrap();
@@ -553,9 +553,7 @@ async fn test_command_timeout_cleanup() {
 
 #[tokio::test]
 async fn timeout_stale_reply_does_not_corrupt_next_command() {
-    // Regression: before the stale-reply counter fix, the server's late reply
-    // for command A was delivered to command B's waiter, giving B the wrong reply.
-    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Short timeout so A times out before the mock replies.
     client.set_command_timeout(Duration::from_millis(100));
@@ -576,11 +574,12 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
         .await
         .expect("cmd_a join timeout")
         .expect("cmd_a panicked");
-    assert!(
-        matches!(a_result, Err(EslError::CommandTimeout { .. })),
-        "command A should timeout, got: {:?}",
-        a_result
-    );
+    let Err(EslError::CommandTimeout {
+        ticket: ticket_a, ..
+    }) = a_result
+    else {
+        panic!("command A should timeout, got: {a_result:?}");
+    };
 
     // Restore normal timeout and spawn B.
     client.set_command_timeout(Duration::from_secs(5));
@@ -620,13 +619,111 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
         "B must get B's reply, got: {}",
         reply_text
     );
+
+    let (err, ticket, response) = next_late_reply(&mut events).await;
+    assert_eq!(ticket, ticket_a);
+    assert_eq!(response.reply_text(), Some("+OK reply-for-A"));
+    assert!(!err.is_connection_error(), "{err:?}");
+    assert!(!err.is_recoverable(), "{err:?}");
+    let shown = err.to_string();
+    assert!(shown.contains("command/reply"), "{shown}");
+    assert!(!shown.contains("reply-for-A"), "{shown}");
+}
+
+/// The next stream item, which must be a `LateReply`.
+async fn next_late_reply(
+    events: &mut freeswitch_esl_tokio::EslEventStream,
+) -> (
+    EslError,
+    freeswitch_esl_tokio::CommandTicket,
+    freeswitch_esl_tokio::EslResponse,
+) {
+    let item = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("timeout")
+        .expect("the stream stays open");
+    let err = item.expect_err("a late reply is not an event");
+    let EslError::LateReply { response, ticket } = &err else {
+        panic!("expected LateReply, got {err:?}");
+    };
+    let (ticket, response) = (*ticket, (**response).clone());
+    (err, ticket, response)
+}
+
+/// Commands queued behind one the switch is still running each time out; their
+/// replies arrive later, in order, each carrying its own command's ticket.
+#[tokio::test]
+async fn queued_timeouts_each_get_their_late_reply() {
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_command_timeout(Duration::from_millis(100));
+
+    let spawn_api = |cmd: &'static str| {
+        let client = client.clone();
+        tokio::spawn(async move {
+            client
+                .api(cmd)
+                .await
+        })
+    };
+    let cmd_a = spawn_api("msleep 3000");
+    mock.read_command()
+        .await
+        .unwrap();
+    let cmd_b = spawn_api("status");
+    mock.read_command()
+        .await
+        .unwrap();
+
+    let mut tickets = Vec::new();
+    for cmd in [cmd_a, cmd_b] {
+        match cmd
+            .await
+            .expect("panicked")
+        {
+            Err(EslError::CommandTimeout { ticket, .. }) => tickets.push(ticket),
+            other => panic!("expected CommandTimeout, got {other:?}"),
+        }
+    }
+    assert_ne!(tickets[0], tickets[1]);
+
+    mock.reply_api("reply-for-A")
+        .await
+        .unwrap();
+    mock.reply_api("reply-for-B")
+        .await
+        .unwrap();
+    for (ticket, body) in tickets
+        .iter()
+        .zip(["reply-for-A", "reply-for-B"])
+    {
+        let (err, late_ticket, response) = next_late_reply(&mut events).await;
+        assert_eq!(late_ticket, *ticket);
+        assert_eq!(response.body(), Some(body));
+        assert!(err
+            .to_string()
+            .contains("api/response"));
+    }
+
+    client.set_command_timeout(Duration::from_secs(5));
+    let cmd_c = spawn_api("version");
+    mock.read_command()
+        .await
+        .unwrap();
+    mock.reply_api("1.0")
+        .await
+        .unwrap();
+    let reply = cmd_c
+        .await
+        .expect("panicked")
+        .expect("the session still correlates");
+    assert_eq!(reply.body(), Some("1.0"));
 }
 
 /// A command whose future the caller drops while it waits still has a reply
 /// coming; the next command must not take that reply as its own.
 #[tokio::test]
 async fn cancelled_command_reply_does_not_reach_the_next_command() {
-    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let client_a = client.clone();
     let cmd_a = tokio::spawn(async move {
@@ -665,6 +762,33 @@ async fn cancelled_command_reply_does_not_reach_the_next_command() {
         .expect("cmd_b panicked")
         .expect("command B should succeed");
     assert_eq!(b_result.reply_text(), Some("+OK reply-for-B"));
+
+    let (_, _, response) = next_late_reply(&mut events).await;
+    assert_eq!(response.reply_text(), Some("+OK reply-for-A"));
+}
+
+/// A reply to a dropped command that lands before any other command is sent
+/// reaches the stream too, rather than failing to send into the dropped waiter.
+#[tokio::test]
+async fn cancelled_command_reply_before_the_next_command_is_delivered() {
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    let dropped = tokio::time::timeout(Duration::from_millis(100), async {
+        client
+            .api("status")
+            .await
+    });
+    let (dropped, _) = tokio::join!(dropped, mock.read_command());
+    assert!(
+        dropped.is_err(),
+        "the caller's own timeout drops the command"
+    );
+
+    mock.reply_ok_text("reply-for-dropped")
+        .await
+        .unwrap();
+    let (_, _, response) = next_late_reply(&mut events).await;
+    assert_eq!(response.reply_text(), Some("+OK reply-for-dropped"));
 }
 
 #[tokio::test]

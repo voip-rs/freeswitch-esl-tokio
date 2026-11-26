@@ -224,8 +224,8 @@ pub use command::{
 #[cfg(unix)]
 pub use connection::ReexecHandoff;
 pub use connection::{
-    AuthMethod, ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
-    EslEventStream, EventOverflow, SwallowedEventTypes,
+    AuthMethod, CommandTicket, ConnectionMode, ConnectionStatus, DisconnectReason, EslClient,
+    EslConnectOptions, EslEventStream, EventOverflow, SwallowedEventTypes,
 };
 pub use constants::UNDEF_VALUE;
 pub use error::{CommandFailure, EslError, EslResult};

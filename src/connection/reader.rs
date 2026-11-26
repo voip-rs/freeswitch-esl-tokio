@@ -303,7 +303,9 @@ async fn fail_pending_reply(shared: &SharedState) {
     {
         debug!("Failing in-flight command waiter: reader loop exited");
     }
-    pending.stale_replies = 0;
+    pending
+        .stale
+        .clear();
 }
 
 /// Pick the body format from `Content-Type`, parse the event, hand it over.
@@ -354,17 +356,14 @@ async fn dispatch_parsed_event(
     ControlFlow::Continue(())
 }
 
-/// Hands a reply no command was waiting for to the caller, who alone can tell
-/// what the switch answered. Called with the pending-reply lock released, since
-/// the dispatch may wait for queue capacity.
-async fn dispatch_unsolicited_reply(
-    message: EslMessage,
+/// Hands a reply no command is awaiting to the caller, who alone can tell what
+/// the switch answered. Called with the pending-reply lock released, since the
+/// dispatch may wait for queue capacity.
+async fn dispatch_reply_report(
+    error: EslError,
     shared: &SharedState,
     sink: &mut EventSink<'_>,
 ) -> ControlFlow<Option<DisconnectReason>> {
-    let error = EslError::UnsolicitedReply {
-        response: Box::new(EslResponse::from_message(message)),
-    };
     // Display names the content type and lengths, never the text.
     warn!("{error}; delivered on the event stream");
     if !dispatch_event(sink, shared, Err(error)).await {
@@ -390,33 +389,31 @@ async fn dispatch_message(
                 .pending_reply
                 .lock()
                 .await;
-            if pending.stale_replies > 0 {
-                // A previous command timed out and its server reply
-                // arrived late. Discard to preserve correlation.
-                pending.stale_replies -= 1;
-                let reply_len = message
-                    .headers
-                    .header_str("Reply-Text")
-                    .map(str::len);
-                warn!(
-                    "Discarded stale {:?} reply (Reply-Text bytes: {:?}) to preserve \
-                     command-reply correlation; {} stale replies remaining",
-                    message.message_type, reply_len, pending.stale_replies,
-                );
-            } else if let Some(tx) = pending
+            let late = |ticket, message| EslError::LateReply {
+                response: Box::new(EslResponse::from_message(message)),
+                ticket,
+            };
+            let report = if let Some(ticket) = pending
+                .stale
+                .pop_front()
+            {
+                late(ticket, message)
+            } else if let Some((ticket, tx)) = pending
                 .waiting
                 .take()
             {
-                if tx
-                    .send(message)
-                    .is_err()
-                {
-                    debug!("Reply channel closed before delivery (timeout race); reply discarded");
+                // Fails only when the command's future was dropped mid-wait.
+                match tx.send(message) {
+                    Ok(()) => return ControlFlow::Continue(()),
+                    Err(message) => late(ticket, message),
                 }
             } else {
-                drop(pending);
-                return dispatch_unsolicited_reply(message, shared, sink).await;
-            }
+                EslError::UnsolicitedReply {
+                    response: Box::new(EslResponse::from_message(message)),
+                }
+            };
+            drop(pending);
+            return dispatch_reply_report(report, shared, sink).await;
         }
         MessageType::Disconnect => {
             let disposition = message
@@ -431,10 +428,10 @@ async fn dispatch_message(
                 .header_str("Controlled-Session-UUID")
                 .map(str::to_string);
             info!("Received disconnect notice from server");
-            return ControlFlow::Break(Some(DisconnectReason::ServerNotice {
+            ControlFlow::Break(Some(DisconnectReason::ServerNotice {
                 controlled_session_uuid,
                 body: message.body,
-            }));
+            }))
         }
         MessageType::RudeRejection => {
             let reason = message
@@ -450,7 +447,7 @@ async fn dispatch_message(
             ) {
                 debug!("Event channel closed before the rude rejection was delivered");
             }
-            return ControlFlow::Break(Some(DisconnectReason::AccessDenied(reason)));
+            ControlFlow::Break(Some(DisconnectReason::AccessDenied(reason)))
         }
         MessageType::AuthRequest => {
             // Post-authentication it means FreeSWITCH and the client are out of
@@ -464,10 +461,9 @@ async fn dispatch_message(
             ) {
                 debug!("Event channel closed before the desync error was delivered");
             }
-            return ControlFlow::Break(Some(DisconnectReason::ProtocolError(reason)));
+            ControlFlow::Break(Some(DisconnectReason::ProtocolError(reason)))
         }
     }
-    ControlFlow::Continue(())
 }
 
 /// The teardown caller awaits this channel, so a drain that ends without

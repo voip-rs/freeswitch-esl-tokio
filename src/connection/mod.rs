@@ -1,5 +1,7 @@
 //! Connection management for ESL
 
+use std::collections::VecDeque;
+use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
@@ -172,19 +174,34 @@ pub enum ConnectionMode {
 /// Default command timeout in milliseconds (5 seconds)
 const DEFAULT_COMMAND_TIMEOUT_MS: u64 = 5000;
 
-/// Slot for the in-flight command waiter and its stale-reply counter.
+/// One command sent on a connection, numbered in send order.
 ///
-/// ESL carries no correlation IDs, so a reply owed to a command that timed out,
-/// or whose future was dropped while it waited, has to be counted here before
-/// the next waiter can consume it by mistake. A waiter found on install is such
-/// a dropped command's.
+/// [`EslError::CommandTimeout`] hands it out and the [`EslError::LateReply`]
+/// answering the same command carries it back. Unique per connection only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CommandTicket(pub(crate) u64);
+
+impl fmt::Display for CommandTicket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
+/// Slot for the in-flight command waiter and the replies still owed.
+///
+/// ESL carries no correlation IDs and the switch answers in order, so every
+/// reply it owes belongs to the installed waiter or to a ticket in `stale`,
+/// oldest first. A command that timed out, or whose future was dropped while
+/// it waited, moves to `stale`; its reply is then delivered as
+/// [`EslError::LateReply`] and never reaches the next waiter. A waiter found on
+/// install is such a dropped command's.
 struct PendingReply {
     /// Waiter for the currently in-flight command (`None` between commands).
-    waiting: Option<oneshot::Sender<EslMessage>>,
-    /// Late replies the reader drains before dispatching to `waiting`. Non-zero
-    /// coexists with `waiting: Some`: the next command installs while one is
-    /// still in flight.
-    stale_replies: u32,
+    waiting: Option<(CommandTicket, oneshot::Sender<EslMessage>)>,
+    /// Commands whose reply is owed but nobody awaits. Non-empty coexists with
+    /// `waiting: Some`: the next command installs while one is still in flight.
+    stale: VecDeque<CommandTicket>,
+    next_ticket: u64,
     /// Set by the reader loop on exit and checked under this same lock before a
     /// waiter is installed, which closes the window after `is_connected()`.
     reader_dead: bool,
@@ -194,9 +211,24 @@ impl PendingReply {
     fn new() -> Self {
         Self {
             waiting: None,
-            stale_replies: 0,
+            stale: VecDeque::new(),
+            next_ticket: 0,
             reader_dead: false,
         }
+    }
+
+    /// Installs the waiter for a command about to be written.
+    fn install(&mut self, tx: oneshot::Sender<EslMessage>) -> CommandTicket {
+        let ticket = CommandTicket(self.next_ticket);
+        self.next_ticket += 1;
+        if let Some((abandoned, _)) = self
+            .waiting
+            .replace((ticket, tx))
+        {
+            self.stale
+                .push_back(abandoned);
+        }
+        ticket
     }
 }
 
@@ -233,8 +265,8 @@ struct SharedState {
 ///
 /// Waiting is only sound on a connection that issues no commands: the reader
 /// serves replies from the same loop, and the switch's listener stops reading
-/// while its write to us is stalled, so a command sent during a wait fails and
-/// its late reply is discarded as stale. An events-only connection still issues
+/// while its write to us is stalled, so a command sent during a wait times out
+/// and its reply arrives as `EslError::LateReply`. An events-only connection still issues
 /// commands when it subscribes and re-subscribes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -767,7 +799,9 @@ mod tests {
                     .is_none(),
                 "waiting slot must be cleared on write failure"
             );
-            assert_eq!(pending.stale_replies, 0);
+            assert!(pending
+                .stale
+                .is_empty());
         }
 
         // User-visible symptom: teardown_for_reexec must not report a
@@ -783,5 +817,71 @@ mod tests {
                 result.err()
             );
         }
+    }
+
+    /// The reader takes the waiter after the timeout fired but before
+    /// `send_command` re-locks: the reply was delivered, so the command
+    /// succeeds instead of timing out with its reply lost.
+    #[tokio::test]
+    async fn reply_delivered_inside_the_timeout_window_is_returned() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = TcpListener::bind("[::1]:0")
+            .await
+            .unwrap();
+        let addr = listener
+            .local_addr()
+            .unwrap();
+        let (client_stream, accept_result) =
+            tokio::join!(TcpStream::connect(addr), listener.accept());
+        let (mut server_stream, _) = accept_result.unwrap();
+        let (client, _events) = EslClient::split_and_spawn_with_options(
+            client_stream.unwrap(),
+            EslParser::new(),
+            EslConnectOptions::default(),
+            None,
+            ConnectionMode::Inbound,
+        );
+        let timeout = Duration::from_millis(300);
+        client.set_command_timeout(timeout);
+
+        let cmd = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .api("status")
+                    .await
+            }
+        });
+        let mut written = Vec::new();
+        while !written.ends_with(b"\n\n") {
+            let mut buf = [0u8; 256];
+            let n = server_stream
+                .read(&mut buf)
+                .await
+                .unwrap();
+            assert!(n > 0, "client closed before writing its command");
+            written.extend_from_slice(&buf[..n]);
+        }
+
+        // tokio's Mutex grants in request order: the reader queues on the lock
+        // first, the timed-out send_command second.
+        let held = client
+            .shared
+            .pending_reply
+            .lock()
+            .await;
+        server_stream
+            .write_all(b"Content-Type: api/response\nContent-Length: 6\n\nwindow")
+            .await
+            .unwrap();
+        tokio::time::sleep(timeout + Duration::from_millis(200)).await;
+        drop(held);
+
+        let response = cmd
+            .await
+            .unwrap()
+            .expect("the reply arrived, so the command did not time out");
+        assert_eq!(response.body(), Some("window"));
     }
 }
