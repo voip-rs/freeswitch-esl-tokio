@@ -371,19 +371,71 @@ async fn a_failed_drain_publishes_the_disconnect() {
         .expect("teardown returns")
         .unwrap()
         .expect_err("the body never completed");
-    assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+    // Read before anything else runs: the reader publishes before it reports.
+    let status = client.status();
+    assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+    assert!(
+        err.is_connection_error() && !err.is_recoverable(),
+        "{err:?}"
+    );
+    assert_eq!(
+        status,
+        ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
+    );
     let end = tokio::time::timeout(Duration::from_secs(5), events.recv())
         .await
         .expect("the reader exits");
     assert!(end.is_none(), "{end:?}");
-    assert_eq!(
-        client.status(),
-        ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
+}
+
+/// A reader that exits mid-drain without a result for teardown, here on a
+/// framing fault, leaves the status set by the time teardown reports it.
+#[tokio::test]
+async fn a_reader_lost_mid_drain_is_published_before_teardown_returns() {
+    use std::time::Duration;
+
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    mock.send_raw(concat!(
+        "Content-Type: text/event-plain\nContent-Length: 21\n\nEvent-Name: HEARTBEAT\n",
+        "Content-Type: text/event-plain\nContent-Length: 4\n\n",
+    ))
+    .await
+    .unwrap();
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
+
+    let teardown = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .teardown_for_reexec()
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Completes the body, then a message whose framing the parser refuses.
+    mock.send_raw("abcdContent-Type: text/garbage\n\n")
+        .await
+        .unwrap();
+
+    let err = tokio::time::timeout(Duration::from_secs(10), teardown)
+        .await
+        .expect("teardown returns")
+        .unwrap()
+        .expect_err("the reader stopped mid-drain");
+    let status = client.status();
+    assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+    assert!(
+        matches!(
+            status,
+            ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_))
+        ),
+        "{status:?}"
     );
 }
 
 /// A drain that outlasts teardown's own deadline is abandoned with it: the
-/// caller gets `ReexecFailed` with the status already saying the connection
+/// caller gets `ReexecReaderLost` with the status already saying the connection
 /// ended, and the reader stops rather than finish later as `ReexecTeardown`.
 #[tokio::test]
 async fn a_drain_past_the_teardown_deadline_is_abandoned() {
@@ -421,7 +473,7 @@ async fn a_drain_past_the_teardown_deadline_is_abandoned() {
         .await
         .unwrap()
         .expect_err("the body never completed in time");
-    assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+    assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
     let status = client.status();
     assert!(
         matches!(

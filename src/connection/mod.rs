@@ -1072,7 +1072,7 @@ mod tests {
             .teardown_for_reexec()
             .await
             .expect_err("the reader is gone");
-        assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+        assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
         assert_eq!(
             client
                 .shared

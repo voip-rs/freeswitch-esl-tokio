@@ -959,6 +959,15 @@ mod tests {
                 false,
                 false,
             ),
+            #[cfg(unix)]
+            (
+                EslError::ReexecReaderLost {
+                    reason: "connection closed during drain".into(),
+                    source: None,
+                },
+                true,
+                false,
+            ),
         ];
         for (err, connection, recoverable) in cases {
             assert_eq!(err.is_connection_error(), *connection, "{err:?}");
