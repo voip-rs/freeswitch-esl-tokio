@@ -198,6 +198,20 @@ impl<C> BgJobTracker<C> {
             .map(|s| s.as_str())
     }
 
+    /// Pending jobs with their context (no specific order).
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &C)> {
+        self.pending
+            .iter()
+            .map(|(uuid, ctx)| (uuid.as_str(), ctx))
+    }
+
+    /// Pending jobs with mutable access to their context (no specific order).
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut C)> {
+        self.pending
+            .iter_mut()
+            .map(|(uuid, ctx)| (uuid.as_str(), ctx))
+    }
+
     /// Retain only jobs matching the predicate, removing the rest.
     ///
     /// Long-lived trackers **must** call this periodically to evict stale
@@ -495,6 +509,31 @@ mod tests {
             .collect();
         uuids.sort();
         assert_eq!(uuids, vec!["uuid-a", "uuid-b"]);
+    }
+
+    #[test]
+    fn iter_mut_changes_reach_the_completed_context() {
+        let mut bg = BgJobTracker::new();
+        bg.track("uuid-a".into(), 1u32);
+        bg.track("uuid-b".into(), 2u32);
+
+        for (uuid, ctx) in bg.iter_mut() {
+            if uuid == "uuid-b" {
+                *ctx = 20;
+            }
+        }
+        let mut seen: Vec<(&str, u32)> = bg
+            .iter()
+            .map(|(uuid, ctx)| (uuid, *ctx))
+            .collect();
+        seen.sort();
+        assert_eq!(seen, vec![("uuid-a", 1), ("uuid-b", 20)]);
+
+        let event = bg_job_event("uuid-b", "+OK");
+        let (ctx, _) = bg
+            .try_complete(&event)
+            .expect("should match");
+        assert_eq!(ctx, 20);
     }
 
     #[test]
