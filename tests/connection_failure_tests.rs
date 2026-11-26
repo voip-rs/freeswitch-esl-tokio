@@ -1384,3 +1384,50 @@ async fn unframeable_reason_survives_the_close_that_follows() {
         client.status()
     );
 }
+
+/// The connect timeout bounds the whole handshake: a switch that trickles its
+/// auth reply a byte at a time, each inside the timeout, still runs out of it.
+#[tokio::test]
+async fn a_trickled_auth_reply_runs_out_the_connect_timeout() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (listener, port) = mock_server::setup_raw_pair().await;
+    let peer = tokio::spawn(async move {
+        let (mut sock, _) = listener
+            .accept()
+            .await
+            .unwrap();
+        sock.write_all(b"Content-Type: auth/request\n\n")
+            .await
+            .unwrap();
+        let mut command = [0u8; 256];
+        let n = sock
+            .read(&mut command)
+            .await
+            .unwrap();
+        assert!(n > 0, "client sent no auth command");
+        for byte in b"Content-Type: command/reply\nReply-Text: +OK accepted\n\n" {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            if sock
+                .write_all(&[*byte])
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    });
+    let options = EslConnectOptions::default().with_connect_timeout(Duration::from_millis(500));
+    let started = tokio::time::Instant::now();
+    let result =
+        EslClient::connect_with_options("localhost", port, DEFAULT_ESL_PASSWORD, options).await;
+    let elapsed = started.elapsed();
+    peer.abort();
+    let err = result.expect_err("the reply did not complete within the connect timeout");
+    assert!(
+        matches!(err, EslError::HandshakeTimeout { timeout_ms: 500 }),
+        "{err:?}"
+    );
+    // The first line alone takes four seconds to arrive.
+    assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+}
