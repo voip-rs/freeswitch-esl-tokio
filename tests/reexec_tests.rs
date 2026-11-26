@@ -381,3 +381,67 @@ async fn a_failed_drain_publishes_the_disconnect() {
         ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
     );
 }
+
+/// A drain that outlasts teardown's own deadline is abandoned with it: the
+/// caller gets `ReexecFailed` with the status already saying the connection
+/// ended, and the reader stops rather than finish later as `ReexecTeardown`.
+#[tokio::test]
+async fn a_drain_past_the_teardown_deadline_is_abandoned() {
+    use std::time::Duration;
+
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    mock.send_raw(concat!(
+        "Content-Type: text/event-plain\nContent-Length: 21\n\nEvent-Name: HEARTBEAT\n",
+        "Content-Type: text/event-plain\nContent-Length: 40\n\n",
+    ))
+    .await
+    .unwrap();
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
+
+    let teardown = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .teardown_for_reexec()
+                .await
+        }
+    });
+    // Each byte lands inside the reader's per-read drain timeout, so only
+    // teardown's overall deadline ends the drain.
+    let mut sent = 0;
+    while !teardown.is_finished() && sent < 30 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        mock.send_raw("x")
+            .await
+            .unwrap();
+        sent += 1;
+    }
+    let err = teardown
+        .await
+        .unwrap()
+        .expect_err("the body never completed in time");
+    assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+    let status = client.status();
+    assert!(
+        matches!(
+            status,
+            ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_))
+        ),
+        "{status:?}"
+    );
+
+    // Well inside the reader's own drain timeout, which a reader still
+    // draining would wait out.
+    let end = tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(item) = events
+            .recv()
+            .await
+        {
+            drop(item);
+        }
+    })
+    .await;
+    assert!(end.is_ok(), "the reader kept running");
+    assert_eq!(client.status(), status);
+}

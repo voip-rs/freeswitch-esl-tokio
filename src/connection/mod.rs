@@ -981,4 +981,102 @@ mod tests {
             .expect("the reply arrived, so the command did not time out");
         assert_eq!(response.body(), Some("window"));
     }
+
+    /// A client over a socket whose server end the test drives by hand.
+    async fn hand_driven_pair() -> (TcpStream, EslClient, EslEventStream) {
+        let listener = TcpListener::bind("[::1]:0")
+            .await
+            .unwrap();
+        let addr = listener
+            .local_addr()
+            .unwrap();
+        let (client_stream, accept_result) =
+            tokio::join!(TcpStream::connect(addr), listener.accept());
+        let (server_stream, _) = accept_result.unwrap();
+        let (client, events) = EslClient::split_and_spawn_with_options(
+            client_stream.unwrap(),
+            EslParser::new(),
+            EslConnectOptions::default(),
+            None,
+            ConnectionMode::Inbound,
+        );
+        (server_stream, client, events)
+    }
+
+    /// A command that reaches the writer while teardown is between its
+    /// in-flight check and the stop signal must not reach the wire: its reply
+    /// would cross the exec with nobody to pair it with.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_command_racing_teardown_is_not_written() {
+        use tokio::io::AsyncReadExt;
+
+        let (mut server, client, _events) = hand_driven_pair().await;
+        let held = client
+            .shared
+            .reexec
+            .lock()
+            .await;
+        let teardown = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .teardown_for_reexec()
+                    .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let command = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .noop()
+                    .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        drop(held);
+
+        let handoff = tokio::time::timeout(Duration::from_secs(10), teardown)
+            .await
+            .expect("teardown returns")
+            .unwrap();
+        assert!(handoff.is_ok(), "{:?}", handoff.err());
+        let err = tokio::time::timeout(Duration::from_secs(5), command)
+            .await
+            .expect("the command returns")
+            .unwrap()
+            .expect_err("the connection was handed off");
+        assert!(err.is_connection_error(), "{err:?}");
+        let mut buf = [0u8; 64];
+        let read = tokio::time::timeout(Duration::from_millis(300), server.read(&mut buf)).await;
+        assert!(read.is_err(), "the command reached the wire: {read:?}");
+    }
+
+    /// Teardown switches liveness off before it signals the reader; a teardown
+    /// refused at that signal must leave the timeout as the caller set it.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_teardown_refused_at_the_stop_signal_restores_liveness() {
+        let (server, client, mut events) = hand_driven_pair().await;
+        client.set_liveness_timeout(Duration::from_secs(7));
+        drop(server);
+        let end = tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("the reader exits on EOF");
+        assert!(end.is_none(), "{end:?}");
+
+        let err = client
+            .teardown_for_reexec()
+            .await
+            .expect_err("the reader is gone");
+        assert!(matches!(err, EslError::ReexecFailed { .. }), "{err:?}");
+        assert_eq!(
+            client
+                .shared
+                .liveness_timeout_ms
+                .load(Ordering::Relaxed),
+            7000
+        );
+    }
 }
