@@ -285,7 +285,8 @@ impl<'a> BgJobResult<'a> {
             .job_uuid()
     }
 
-    /// The raw result body (the output of the original `bgapi` command).
+    /// The raw result body (the output of the original `bgapi` command), as
+    /// verbatim as [`EslResponse::body`](crate::EslResponse::body) for `api`.
     pub fn body(&self) -> Option<&'a str> {
         self.0
             .body()
@@ -293,7 +294,9 @@ impl<'a> BgJobResult<'a> {
 
     /// Parse the result body, handling `+OK`/`-ERR` prefixes.
     ///
-    /// Delegates to [`parse_api_body`].
+    /// Delegates to [`parse_api_body`], which strips `+OK ` and the trailing
+    /// newline just as [`EslResponse::api_result`](crate::EslResponse::api_result)
+    /// does for `api`; use [`body`](Self::body) for the text as the switch sent it.
     pub fn parse_body(&self) -> EslResult<&'a str> {
         parse_api_body(
             self.0

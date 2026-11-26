@@ -307,7 +307,8 @@ struct SharedState {
 #[non_exhaustive]
 pub enum EventOverflow {
     /// Drop the arriving event, count it, and arm an `EslError::QueueFull`
-    /// notice for the consumer.
+    /// notice for the consumer. A reply delivered on the stream
+    /// (`LateReply`, `UnsolicitedReply`) is dropped the same way.
     #[default]
     DropIncoming,
     /// Wait up to this long for capacity, then fall back to `DropIncoming`.

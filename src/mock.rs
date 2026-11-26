@@ -144,7 +144,9 @@ impl MockConnection {
 
     /// Next command, through its terminating blank line.
     ///
-    /// [`io::ErrorKind::UnexpectedEof`] when the client closes first.
+    /// [`io::ErrorKind::UnexpectedEof`] when the client closes first. Waits
+    /// without limit; bound it with `tokio::time::timeout` in a test that
+    /// expects a command, which loses any partly read line when it fires.
     pub async fn read_command(&mut self) -> io::Result<String> {
         let mut command = String::new();
         while !command.ends_with("\n\n") {

@@ -293,6 +293,13 @@ impl EslClient {
     /// To subscribe to all events, use
     /// [`subscribe_all_events`](Self::subscribe_all_events).
     ///
+    /// One token the login's `esl-allowed-events` refuses fails the whole
+    /// command with `-ERR permission denied`, yet the tokens the switch applied
+    /// before it stay subscribed, and so does the format. On a connection with
+    /// no earlier successful subscription they deliver nothing until the next
+    /// one succeeds. A [`CommandFailed`](EslError::CommandFailed) is no proof
+    /// that nothing changed: send an event the login may lack in its own call.
+    ///
     /// The order of `events` is not load-bearing: `CUSTOM` is emitted last
     /// whatever position it was given in.
     ///
@@ -393,6 +400,9 @@ impl EslClient {
     /// event-type/subclass distinction is gone once the list is one flat
     /// string, so the detectable case comes back as a [`SwallowedEventTypes`].
     ///
+    /// A refused token leaves the ones before it subscribed; see
+    /// [`subscribe_events`](Self::subscribe_events).
+    ///
     /// ```rust,no_run
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), Box<dyn std::error::Error>> {
     /// use freeswitch_esl_tokio::EventFormat;
@@ -457,6 +467,9 @@ impl EslClient {
     ///
     /// The caller retains ownership of the subscription for use during
     /// reconnection.
+    ///
+    /// The events go out as one command, so a refused token leaves the ones
+    /// before it subscribed; see [`subscribe_events`](Self::subscribe_events).
     pub async fn apply_subscription(
         &self,
         sub: &freeswitch_types::EventSubscription,
@@ -522,6 +535,9 @@ impl EslClient {
     /// applied. If the old subscription doesn't match what the server
     /// actually has (e.g. after a reconnection), use [`resubscribe`](Self::resubscribe)
     /// instead.
+    ///
+    /// A refused token in step 1 leaves the ones before it subscribed and
+    /// skips the later steps; see [`subscribe_events`](Self::subscribe_events).
     pub async fn resubscribe_from(
         &self,
         old: &freeswitch_types::EventSubscription,

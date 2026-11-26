@@ -297,6 +297,10 @@ pub enum EslError {
     /// the same `ticket`, or whose future was dropped while it waited. The
     /// command ran on the switch and this is its result; later replies still
     /// correlate.
+    ///
+    /// A dropped future never received its ticket, so its reply pairs only by
+    /// order. Like any stream item, it is dropped and counted when the event
+    /// queue is full under `EventOverflow::DropIncoming`.
     #[error(
         "late {} for command {ticket} (reply text {} bytes, body {} bytes)",
         reply_content_type(response),
