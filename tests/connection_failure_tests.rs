@@ -667,6 +667,42 @@ async fn cancelled_command_reply_does_not_reach_the_next_command() {
     assert_eq!(b_result.reply_text(), Some("+OK reply-for-B"));
 }
 
+/// A command dropped before its bytes all reached the socket leaves the wire in
+/// a state nothing can repair; the next command closes the connection rather
+/// than write after a fragment or wait on a reply nobody owes.
+#[tokio::test]
+async fn command_dropped_mid_write_closes_the_connection() {
+    let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_command_timeout(Duration::from_millis(500));
+
+    // The mock never reads, so a command larger than both socket buffers
+    // cannot finish writing.
+    let huge = "x".repeat(64 * 1024 * 1024);
+    let stuck = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api(&huge)
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!stuck.is_finished(), "the write was expected to block");
+    stuck.abort();
+    assert!(stuck
+        .await
+        .unwrap_err()
+        .is_cancelled());
+
+    // Bounded here because a write into the full buffer would never finish.
+    let err = tokio::time::timeout(Duration::from_secs(5), client.api("status"))
+        .await
+        .expect("refused before writing")
+        .expect_err("the wire state is unknown");
+    assert!(err.is_connection_error(), "{err:?}");
+    assert!(!client.is_connected());
+}
+
 #[tokio::test]
 async fn timeout_normal_reply_still_routes_correctly() {
     // Regression: verify reply routing works normally when there is no timeout.
