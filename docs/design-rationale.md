@@ -332,24 +332,20 @@ These exist because production ESL daemons run with debug logging enabled
 during incident investigation. A sysadmin grepping logs should not find an ESL
 password or a caller's number.
 
-## Sequential command serialization
+## Replies correlate by position, one waiter at a time
 
-ESL is a strictly sequential protocol: one command in flight, one reply.
-There are no request IDs, no multiplexing, no out-of-order replies. The
-server processes commands in the order received and responds in the same
-order.
+ESL carries no request IDs, so a reply belongs to a command only by its place
+in the order. One waiter is installed at a time, and the writer lock is held
+from installing it through its reply, never just through the write.
 
-The writer half is behind `Arc<Mutex>`, and the lock is held through the
-entire send-and-wait-for-reply cycle — not just through the write. This was
-a deliberate fix for a race condition found in the pre-v1.0 review: if the
-lock was released after writing (before the reply arrived), two concurrent
-`send_command()` calls could interleave, and the second caller's
-`pending_reply` oneshot would overwrite the first's, causing misrouted
-replies.
+A command nobody awaits any more, timed out or dropped, stays owed: the next
+command may be written while that reply is outstanding, and the reply is routed
+by its place among the owed ones, never to the newer waiter. A command dropped
+before it was fully written leaves the stream unframeable, so the next command
+closes the connection rather than guess.
 
-The simpler approach (hold the lock longer) was chosen over a queue-based
-design because ESL doesn't support pipelining anyway — a command queue would
-add complexity with no throughput benefit.
+A command queue was rejected: the switch does not pipeline, so it would add
+machinery without throughput.
 
 ## Every error is a reconnect, a retry, or a refusal
 
