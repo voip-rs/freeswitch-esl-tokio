@@ -103,11 +103,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(EslEventType::ChannelDestroy) => {
                 // The cause lands here, but CHANNEL_STATE with CS_DESTROY comes
                 // after this event, so this is not where the loop ends.
-                let cause = match event.hangup_cause() {
-                    Ok(Some(c)) => c.to_string(),
-                    Ok(None) => "no cause header".into(),
-                    Err(e) => format!("unparseable: {e}"),
-                };
+                // A cause this crate does not list is kept as the switch spelled it.
+                let cause = event
+                    .hangup_cause()
+                    .map_or_else(|| "no cause header".into(), |c| c.to_string());
                 println!("channel destroyed: {call_uuid} ({cause})");
             }
             Some(EslEventType::ChannelState) if event.is_terminal_channel_state()? => break,

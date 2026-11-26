@@ -235,6 +235,85 @@ impl HangupCause {
     }
 }
 
+/// A `Hangup-Cause` value as the switch sent it, typed when this crate knows
+/// the name.
+///
+/// Every value round-trips byte for byte through [`as_str`](Self::as_str),
+/// `Display`, `FromStr` and serde. Serde reads a name the way [`HangupCause`]'s
+/// does, so a value stored as a variant name reads back as `Known`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum HangupCauseValue {
+    /// A cause this crate lists.
+    Known(HangupCause),
+    /// A name this crate does not list, as received. Includes the switch's own
+    /// `UNKNOWN`, which it emits for a cause value outside its table.
+    Unrecognized(Box<str>),
+}
+
+impl HangupCauseValue {
+    /// The wire name, or the received text for an unrecognized cause.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Known(cause) => cause.as_str(),
+            Self::Unrecognized(name) => name,
+        }
+    }
+
+    /// The typed cause, `None` when unrecognized.
+    pub fn known(&self) -> Option<HangupCause> {
+        match self {
+            Self::Known(cause) => Some(*cause),
+            Self::Unrecognized(_) => None,
+        }
+    }
+}
+
+impl From<HangupCause> for HangupCauseValue {
+    fn from(cause: HangupCause) -> Self {
+        Self::Known(cause)
+    }
+}
+
+impl fmt::Display for HangupCauseValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for HangupCauseValue {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.parse::<HangupCause>()
+            .map_or_else(|_| Self::Unrecognized(s.into()), Self::Known))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for HangupCauseValue {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for HangupCauseValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::IntoDeserializer;
+
+        // serde's own message quotes the value; serde_name replaces it the same way.
+        let name = String::deserialize(deserializer).map_err(|_| {
+            <D::Error as serde::de::Error>::custom("invalid hangup cause: expected a string")
+        })?;
+        let as_cause: serde::de::value::StrDeserializer<'_, serde::de::value::Error> = name
+            .as_str()
+            .into_deserializer();
+        Ok(HangupCause::deserialize(as_cause)
+            .map_or_else(|_| Self::Unrecognized(name.into()), Self::Known))
+    }
+}
+
 /// Channel timing data from FreeSWITCH's `switch_channel_timetable_t`.
 ///
 /// Timestamps are epoch microseconds (`i64`). A value of `0` means the
@@ -632,6 +711,69 @@ mod tests {
     fn hangup_cause_from_number_unknown() {
         assert!(HangupCause::from_number(999).is_none());
         assert!(HangupCause::from_number(4).is_none());
+    }
+
+    #[test]
+    fn hangup_cause_value_round_trips_every_known_cause() {
+        for &cause in HangupCause::ALL {
+            let value: HangupCauseValue = cause
+                .as_str()
+                .parse()
+                .unwrap();
+            assert_eq!(value, HangupCauseValue::Known(cause));
+            assert_eq!(value.as_str(), cause.as_str());
+            assert_eq!(value.to_string(), cause.as_str());
+            assert_eq!(value.known(), Some(cause));
+        }
+    }
+
+    #[test]
+    fn hangup_cause_value_keeps_an_unlisted_name_verbatim() {
+        for name in ["UNKNOWN", "SOME_FUTURE_CAUSE", "Normal_Clearing", ""] {
+            let value: HangupCauseValue = name
+                .parse()
+                .unwrap();
+            assert_eq!(value, HangupCauseValue::Unrecognized(name.into()));
+            assert_eq!(value.to_string(), name);
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hangup_cause_value_serde_round_trips() {
+        let mut values: Vec<HangupCauseValue> = HangupCause::ALL
+            .iter()
+            .map(|&c| c.into())
+            .collect();
+        values.push(HangupCauseValue::Unrecognized("UNKNOWN".into()));
+        values.push(HangupCauseValue::Unrecognized("SOME_FUTURE_CAUSE".into()));
+        for value in values {
+            let json = serde_json::to_string(&value).unwrap();
+            assert_eq!(json, format!("\"{}\"", value.as_str()));
+            let back: HangupCauseValue = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, value);
+        }
+    }
+
+    /// Stored data from 2.x wrote the variant name; it must read back as Known.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hangup_cause_value_serde_reads_variant_names() {
+        for &cause in HangupCause::ALL {
+            let json = serde_json::to_string(&format!("{cause:?}")).unwrap();
+            let back: HangupCauseValue = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, HangupCauseValue::Known(cause), "{json}");
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hangup_cause_value_serde_error_does_not_quote_the_input() {
+        let err = serde_json::from_str::<HangupCauseValue>("1234567")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("hangup cause"), "{err}");
+        assert!(!err.contains("1234567"), "{err}");
     }
 
     // --- from_sip_response tests (mapping from sofia_glue_sip_cause_to_freeswitch) ---

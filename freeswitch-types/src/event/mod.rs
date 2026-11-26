@@ -659,7 +659,7 @@ mod tests {
         assert_eq!(
             event
                 .hangup_cause()
-                .unwrap(),
+                .and_then(|cause| cause.known()),
             Some(crate::channel::HangupCause::NormalClearing)
         );
         assert_eq!(event.event_subclass(), Some("sofia::register"));

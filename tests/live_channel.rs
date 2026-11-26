@@ -600,11 +600,10 @@ async fn live_uuid_kill_with_cause() {
 
     let cause = evt
         .hangup_cause()
-        .expect("should parse hangup cause")
         .expect("should have hangup cause");
     assert_eq!(
-        cause,
-        freeswitch_esl_tokio::HangupCause::UserBusy,
+        cause.known(),
+        Some(freeswitch_esl_tokio::HangupCause::UserBusy),
         "hangup cause should be USER_BUSY"
     );
 }

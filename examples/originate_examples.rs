@@ -416,9 +416,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(EslEventType::ChannelCreate) => info!("channel created: {uuid}"),
             Some(EslEventType::ChannelAnswer) => info!("channel answered: {uuid}"),
             Some(EslEventType::ChannelHangup) => match event.hangup_cause() {
-                Ok(Some(cause)) => info!("channel hangup: {uuid} cause={cause}"),
-                Ok(None) => info!("channel hangup: {uuid}, no cause header"),
-                Err(e) => error!("channel hangup: {uuid}, unparseable cause: {e}"),
+                Some(cause) => info!("channel hangup: {uuid} cause={cause}"),
+                None => info!("channel hangup: {uuid}, no cause header"),
             },
             Some(EslEventType::ChannelDestroy) => {
                 info!("channel destroyed: {uuid}");

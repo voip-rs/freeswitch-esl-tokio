@@ -31,7 +31,8 @@ if let Ok(Some(state)) = event.channel_state() {
 let cid = event.caller_id_number();     // Option<&str>
 // Typed accessors return Result<Option<T>, _> -- each accessor has its own parse-error type
 let direction = event.call_direction(); // Result<Option<CallDirection>, _>
-let cause = event.hangup_cause();       // Result<Option<HangupCause>, _>
+// hangup_cause() keeps a name this crate does not list, so it never fails
+let cause = event.hangup_cause();       // Option<HangupCauseValue>
 # let _ = (cid, direction, cause);
 # }
 # fn main() {}

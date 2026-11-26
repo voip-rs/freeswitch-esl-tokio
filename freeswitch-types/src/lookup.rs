@@ -27,8 +27,8 @@
 
 use crate::channel::{
     channel_driver, AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable,
-    HangupCause, ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError,
-    ParseChannelStateError, ParseHangupCauseError, ParseTimetableError,
+    HangupCause, HangupCauseValue, ParseAnswerStateError, ParseCallDirectionError,
+    ParseCallStateError, ParseChannelStateError, ParseHangupCauseError, ParseTimetableError,
 };
 #[cfg(feature = "esl")]
 use crate::event::{EslEventPriority, ParsePriorityError};
@@ -287,11 +287,14 @@ pub trait HeaderLookup: SipHeaderRows {
         self.header(EventHeader::DtmfSource)
     }
 
-    /// Parse the `Hangup-Cause` header into a [`HangupCause`].
-    ///
-    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
-    fn hangup_cause(&self) -> Result<Option<HangupCause>, ParseHangupCauseError> {
-        parse_opt(self.header(EventHeader::HangupCause))
+    /// The `Hangup-Cause` header; a name this crate does not list is kept as
+    /// [`HangupCauseValue::Unrecognized`]. `None` if the header is absent.
+    fn hangup_cause(&self) -> Option<HangupCauseValue> {
+        self.header(EventHeader::HangupCause)
+            .map(|name| match name.parse::<HangupCause>() {
+                Ok(cause) => HangupCauseValue::Known(cause),
+                Err(_) => HangupCauseValue::Unrecognized(name.into()),
+            })
     }
 
     /// Detect a mod_loopback bowout on a `CHANNEL_HANGUP_COMPLETE`.
@@ -541,7 +544,8 @@ pub enum ParseHeaderError {
     AnswerState(ParseAnswerStateError),
     /// From [`call_direction`](HeaderLookup::call_direction).
     CallDirection(ParseCallDirectionError),
-    /// From [`hangup_cause`](HeaderLookup::hangup_cause).
+    /// From a strict [`HangupCause`] parse; [`hangup_cause`](HeaderLookup::hangup_cause)
+    /// itself keeps an unlisted name instead of failing.
     HangupCause(ParseHangupCauseError),
     /// From [`gateway_reg_state`](HeaderLookup::gateway_reg_state).
     GatewayRegState(ParseGatewayRegStateError),
@@ -786,18 +790,24 @@ mod tests {
     fn hangup_cause_typed() {
         let s = store_with(&[("Hangup-Cause", "NORMAL_CLEARING")]);
         assert_eq!(
-            s.hangup_cause()
-                .unwrap(),
-            Some(crate::channel::HangupCause::NormalClearing)
+            s.hangup_cause(),
+            Some(HangupCauseValue::Known(HangupCause::NormalClearing))
         );
+        assert_eq!(store_with(&[]).hangup_cause(), None);
     }
 
+    /// `switch_channel_cause2str` answers `UNKNOWN` for a cause outside its
+    /// table; it and any newer name are kept as received.
     #[test]
-    fn hangup_cause_invalid_is_error() {
-        let s = store_with(&[("Hangup-Cause", "BOGUS_CAUSE")]);
-        assert!(s
-            .hangup_cause()
-            .is_err());
+    fn hangup_cause_unlisted_is_kept_verbatim() {
+        for name in ["UNKNOWN", "SOME_FUTURE_CAUSE", "normal_clearing"] {
+            let cause = store_with(&[("Hangup-Cause", name)])
+                .hangup_cause()
+                .expect("present");
+            assert_eq!(cause, HangupCauseValue::Unrecognized(name.into()));
+            assert_eq!(cause.as_str(), name);
+            assert_eq!(cause.known(), None);
+        }
     }
 
     #[test]
@@ -1372,18 +1382,6 @@ mod tests {
             },
             |s| {
                 s.presence_call_direction()
-                    .is_err()
-            },
-        ),
-        (
-            "hangup_cause",
-            |s| {
-                s.hangup_cause()
-                    .unwrap()
-                    .is_none()
-            },
-            |s| {
-                s.hangup_cause()
                     .is_err()
             },
         ),

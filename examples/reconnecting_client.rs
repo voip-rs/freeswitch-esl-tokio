@@ -29,7 +29,7 @@ mod env;
 
 use freeswitch_esl_tokio::{
     ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventType, EslResult,
-    EventFormat, EventHeader, EventSubscription, HeaderLookup, UuidSetVar,
+    EventFormat, EventHeader, EventSubscription, HangupCauseValue, HeaderLookup, UuidSetVar,
 };
 use tracing::{error, info, warn};
 
@@ -190,13 +190,14 @@ async fn handle_event(client: &EslClient, event: &EslEvent) -> EslResult<()> {
         }
         Some(EslEventType::ChannelHangupComplete) => {
             let uuid = short_uuid(event);
-            // A cause this crate does not know is a signal, not a blank: it
-            // means FreeSWITCH grew one, and collapsing it into "?" is how
-            // nobody ever finds out.
+            // A cause this crate does not list arrives verbatim as Unrecognized:
+            // the switch's own UNKNOWN, or a name a newer FreeSWITCH added.
             match event.hangup_cause() {
-                Ok(Some(cause)) => info!("{uuid}: hangup ({cause})"),
-                Ok(None) => info!("{uuid}: hangup (no cause header)"),
-                Err(e) => warn!("{uuid}: hangup with unparseable cause: {e}"),
+                Some(HangupCauseValue::Unrecognized(name)) => {
+                    warn!("{uuid}: hangup with a cause this crate does not list ({name})")
+                }
+                Some(cause) => info!("{uuid}: hangup ({cause})"),
+                None => info!("{uuid}: hangup (no cause header)"),
             }
         }
         Some(EslEventType::Heartbeat) => {

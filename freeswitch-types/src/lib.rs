@@ -67,9 +67,9 @@ pub const VARIABLE_PREFIX: &str = "variable_";
 
 pub use channel::{
     channel_driver, AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable,
-    HangupCause, ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError,
-    ParseChannelStateError, ParseHangupCauseError, ParseTimetableError, ParseTimetablePrefixError,
-    TimetableField, TimetablePrefix,
+    HangupCause, HangupCauseValue, ParseAnswerStateError, ParseCallDirectionError,
+    ParseCallStateError, ParseChannelStateError, ParseHangupCauseError, ParseTimetableError,
+    ParseTimetablePrefixError, TimetableField, TimetablePrefix,
 };
 #[cfg(feature = "esl")]
 pub use commands::{

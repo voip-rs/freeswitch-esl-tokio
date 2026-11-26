@@ -141,15 +141,11 @@ fn process_event(event: &EslEvent, active_calls: &mut HashMap<String, CallInfo>)
             let Some(call_info) = active_calls.get(uuid) else {
                 return;
             };
-            let cause = match event.hangup_cause() {
-                Ok(Some(cause)) => cause.to_string(),
-                Ok(None) => "no cause header".to_string(),
-                // FreeSWITCH grew a cause this crate does not carry yet.
-                Err(e) => {
-                    warn!("{uuid}: unparseable hangup cause: {e}");
-                    return;
-                }
-            };
+            // A cause this crate does not list is kept as received, so it
+            // still prints as the switch spelled it.
+            let cause = event
+                .hangup_cause()
+                .map_or_else(|| "no cause header".to_string(), |cause| cause.to_string());
             match call_info
                 .answered_time
                 .map(|t| t.elapsed())
