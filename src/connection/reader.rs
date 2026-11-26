@@ -18,6 +18,8 @@ use crate::{
 };
 
 use super::reexec::ReexecReader;
+#[cfg(unix)]
+use super::reexec::REEXEC_ABANDONED;
 use super::{read_into_parser, DisconnectReason, EventOverflow, ReadStep, SharedState};
 
 /// Per-iteration view of the event channel: the overflow policy, the re-exec
@@ -494,23 +496,32 @@ async fn drain_for_reexec(
             .remaining_bytes()
             .to_vec();
         debug!("Re-exec drain complete, {} residual bytes", residual.len());
-        if let Some(tx) = reexec
+        let delivered = reexec
             .result_tx
             .take()
-        {
-            if tx
-                .send(Ok(residual))
-                .is_err()
-            {
-                warn!("Re-exec caller gone before the residual bytes were delivered");
-            }
+            .is_some_and(|tx| {
+                tx.send(Ok(residual))
+                    .is_ok()
+            });
+        if !delivered {
+            warn!("Re-exec caller gone before the residual bytes were delivered");
+            return ControlFlow::Break(DisconnectReason::ProtocolError(REEXEC_ABANDONED.into()));
         }
         return ControlFlow::Break(DisconnectReason::ReexecTeardown);
     }
 
     // WaitingForBody: more socket data is needed to finish the current message.
     let drain_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS);
-    match read_into_parser(reader, parser, read_buffer, drain_timeout).await {
+    let read = read_into_parser(reader, parser, read_buffer, drain_timeout);
+    let step = tokio::select! {
+        biased;
+        () = caller_gone(reexec) => {
+            warn!("{REEXEC_ABANDONED}");
+            return ControlFlow::Break(DisconnectReason::ProtocolError(REEXEC_ABANDONED.into()));
+        }
+        step = read => step,
+    };
+    match step {
         Ok(ReadStep::Fed) => ControlFlow::Continue(()),
         Ok(ReadStep::Eof) => {
             warn!("Connection closed during re-exec drain");
@@ -544,6 +555,21 @@ async fn drain_for_reexec(
             fail_reexec(reexec, e);
             ControlFlow::Break(reason)
         }
+    }
+}
+
+/// Resolves once the teardown caller has stopped waiting for the drain.
+#[cfg(unix)]
+async fn caller_gone(reexec: &mut ReexecReader) {
+    match reexec
+        .result_tx
+        .as_mut()
+    {
+        Some(tx) => {
+            tx.closed()
+                .await
+        }
+        None => std::future::pending().await,
     }
 }
 

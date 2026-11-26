@@ -62,19 +62,28 @@ The drain logic handles this:
    - `WaitingForBody`: keep reading from the socket (with a 5-second
      drain timeout) until the body completes. Dispatch the completed
      message normally, then stop at the next `WaitingForHeaders`.
-3. **Drain timeout** (5s, `REEXEC_DRAIN_TIMEOUT_MS`): if the body
-   never arrives, return `ReexecFailed` rather than hanging.
+3. **Drain timeout** (5s, `REEXEC_DRAIN_TIMEOUT_MS`, per read): if the
+   body stops arriving, return `ReexecFailed` rather than hanging.
+4. **Teardown deadline** (the drain timeout plus 1s, overall): a body
+   that keeps trickling in is abandoned there. Teardown sets the status
+   to `Disconnected(ProtocolError(..))` and returns `ReexecFailed`; the
+   reader sees the caller gone and stops without finishing the drain.
+
+Any drain that fails ends the reader, and the status names why:
+`ConnectionClosed` when the switch closed mid-message, `ProtocolError`
+for a timeout, `IoError` for a read error. Only a `ReexecFailed`
+returned before the stop signal leaves the connection usable.
 
 Messages completed during drain are dispatched normally to the event
 channel, so the caller receives all in-flight events.
 
 ## Preconditions
 
-- **No command in-flight.** If `pending_reply` is occupied (a command
-  was sent but the reply hasn't arrived), teardown returns
-  `ReexecFailed`. The caller must wait for commands to complete. A
-  command whose future was dropped before its reply arrived still
-  counts as in flight.
+- **No command in-flight.** If a command holds the writer, or
+  `pending_reply` is occupied (a command was sent but the reply hasn't
+  arrived), teardown returns `ReexecFailed` at once. The caller must
+  wait for commands to complete. A command whose future was dropped
+  before its reply arrived still counts as in flight.
 - **Owed replies cross the exec.** A command that timed out does not
   block teardown, but the switch still owes its reply. If it has not
   arrived as `LateReply` before teardown, the new process receives it
@@ -85,10 +94,16 @@ channel, so the caller receives all in-flight events.
 
 ## Race Prevention
 
+- **The writer is held** from the in-flight check to the end of
+  teardown. A command sent meanwhile waits for it, then finds the
+  connection ended and fails with `ConnectionClosed` without writing;
+  written, its reply would reach the next process with nothing to pair
+  it with.
 - **Liveness timeout** is disabled (set to 0) before sending the stop
   signal. Otherwise, if no traffic arrives between the signal and the
   reader processing it, the reader could exit with `HeartbeatExpired`
-  and the result channel would never be sent.
+  and the result channel would never be sent. A teardown refused at the
+  signal puts the caller's timeout back.
 - **Biased select** prioritizes the stop signal over socket reads, so
   the drain begins immediately when the signal fires.
 - **A dispatch waiting on event-queue capacity** under

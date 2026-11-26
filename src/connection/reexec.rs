@@ -13,11 +13,15 @@ use tracing::info;
 use crate::error::{EslError, EslResult};
 
 #[cfg(unix)]
-use super::{ConnectionStatus, DisconnectReason, EslClient};
+use super::{DisconnectReason, EslClient};
 
 /// Result type for the reexec drain operation (residual bytes or error).
 #[cfg(unix)]
 pub(crate) type ReexecResult = Result<Vec<u8>, EslError>;
+
+/// Why a drain whose teardown caller stopped waiting ends the connection.
+#[cfg(unix)]
+pub(crate) const REEXEC_ABANDONED: &str = "re-exec teardown gave up before the drain finished";
 
 /// What [`EslClient::teardown_for_reexec`] hands over for the next process image.
 ///
@@ -79,8 +83,10 @@ impl EslClient {
     ///
     /// # Preconditions
     ///
-    /// - No ESL command may be in-flight (pending reply). Returns
-    ///   [`EslError::ReexecFailed`] if a command is pending.
+    /// - No ESL command may be in-flight (pending reply), nor hold the writer
+    ///   while it writes. Returns [`EslError::ReexecFailed`] at once if one
+    ///   does; a command sent while teardown runs waits for it and then fails
+    ///   with a connection error, never reaching the wire.
     /// - A timed-out command's reply not yet received as
     ///   [`EslError::LateReply`] does not block teardown; the new process
     ///   receives it as [`EslError::UnsolicitedReply`].
@@ -91,6 +97,11 @@ impl EslClient {
     /// - The connection status is set to
     ///   [`DisconnectReason::ReexecTeardown`], so all clones see the
     ///   connection as dead.
+    /// - A [`ReexecFailed`](EslError::ReexecFailed) returned before the reader
+    ///   was signalled leaves the connection as it was. One returned after it
+    ///   means the drain did not finish: the reader has stopped, and the status
+    ///   names why. Past teardown's own deadline the drain is abandoned and the
+    ///   status reads [`DisconnectReason::ProtocolError`].
     /// - The caller **must not drop** the `EslClient` before `exec()` (or
     ///   must [`std::mem::forget`] it) to keep the fd open.
     /// - The caller is responsible for clearing `CLOEXEC` on the fd.
@@ -98,22 +109,25 @@ impl EslClient {
         use crate::constants::REEXEC_DRAIN_TIMEOUT_MS;
         use std::os::unix::io::AsRawFd;
 
-        // Reject if a command is in-flight
+        let in_flight = || EslError::ReexecFailed {
+            reason: "command still in-flight".into(),
+            source: None,
+        };
+        // Held to the end: a command written after the in-flight check would
+        // leave its reply to the next process image.
+        let writer = self
+            .writer
+            .try_lock()
+            .map_err(|_| in_flight())?;
+        if self
+            .shared
+            .pending_reply
+            .lock()
+            .await
+            .waiting
+            .is_some()
         {
-            let pending = self
-                .shared
-                .pending_reply
-                .lock()
-                .await;
-            if pending
-                .waiting
-                .is_some()
-            {
-                return Err(EslError::ReexecFailed {
-                    reason: "command still in-flight".into(),
-                    source: None,
-                });
-            }
+            return Err(in_flight());
         }
 
         // Take the reexec channel (one-shot: fails on second call)
@@ -132,9 +146,10 @@ impl EslClient {
         };
 
         // Disable liveness to prevent HeartbeatExpired race
-        self.shared
+        let liveness_ms = self
+            .shared
             .liveness_timeout_ms
-            .store(0, Ordering::Relaxed);
+            .swap(0, Ordering::Relaxed);
 
         // A dropped receiver means the reader is already gone; reporting it here
         // keeps it out of the drain timeout below, which would name the wrong cause.
@@ -143,6 +158,9 @@ impl EslClient {
             .send(())
             .is_err()
         {
+            self.shared
+                .liveness_timeout_ms
+                .store(liveness_ms, Ordering::Relaxed);
             return Err(EslError::ReexecFailed {
                 reason: "reader task is gone, stop signal not delivered".into(),
                 source: None,
@@ -153,32 +171,30 @@ impl EslClient {
         // Extra 1s margin so the reader's own drain timeout fires first
         // with a descriptive error.
         let outer_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS) + Duration::from_secs(1);
-        let residual = timeout(outer_timeout, reexec.result_rx)
-            .await
-            .map_err(|e| EslError::ReexecFailed {
-                reason: "timed out waiting for reader to stop".into(),
-                source: Some(Box::new(e)),
-            })?
-            .map_err(|e| EslError::ReexecFailed {
+        let residual = match timeout(outer_timeout, reexec.result_rx).await {
+            Ok(result) => result.map_err(|e| EslError::ReexecFailed {
                 reason: "reader task exited without sending result".into(),
                 source: Some(Box::new(e)),
-            })??;
+            })??,
+            // Dropping the result channel stops the drain; the status is set
+            // first so it already reads as ended when the caller sees the error.
+            Err(e) => {
+                self.shared
+                    .publish_disconnect(DisconnectReason::ProtocolError(REEXEC_ABANDONED.into()));
+                return Err(EslError::ReexecFailed {
+                    reason: "timed out waiting for reader to stop".into(),
+                    source: Some(Box::new(e)),
+                });
+            }
+        };
 
-        // Get fd from writer
-        let writer = self
-            .writer
-            .lock()
-            .await;
         let fd = writer
             .as_ref()
             .as_raw_fd();
 
         // Mark connection as dead so other clones see it
         self.shared
-            .status_tx
-            .send_replace(ConnectionStatus::Disconnected(
-                DisconnectReason::ReexecTeardown,
-            ));
+            .publish_disconnect(DisconnectReason::ReexecTeardown);
 
         info!(
             "Re-exec teardown complete, fd={}, {} residual bytes",
