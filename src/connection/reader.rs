@@ -241,7 +241,7 @@ pub(super) async fn reader_loop(
     shared: Arc<SharedState>,
     event_tx: mpsc::Sender<Result<EslEvent, EslError>>,
     overflow: EventOverflow,
-    reexec: ReexecReader,
+    mut reexec: ReexecReader,
 ) {
     let result = std::panic::AssertUnwindSafe(reader_loop_inner(
         reader,
@@ -249,7 +249,7 @@ pub(super) async fn reader_loop(
         shared.clone(),
         &event_tx,
         overflow,
-        reexec,
+        &mut reexec,
     ));
     let reason = match futures_util::FutureExt::catch_unwind(result).await {
         Ok(reason) => reason,
@@ -259,9 +259,12 @@ pub(super) async fn reader_loop(
             DisconnectReason::IoError(reason)
         }
     };
-    // `event_tx` is still alive here: a consumer that sees recv() -> None must
-    // find the disconnect status already published, not a stale Connected.
+    // `event_tx` and the re-exec channel are still alive here: a consumer or a
+    // teardown that sees them close must find the status already published.
     shared.publish_disconnect(reason);
+    drop(reexec);
+    #[cfg(test)]
+    run_test_hook(&shared.after_reexec_report);
     fail_pending_reply(&shared).await;
 }
 
@@ -461,14 +464,25 @@ async fn dispatch_message(
     }
 }
 
-/// The teardown caller awaits this channel, so a drain that ends without
-/// sending leaves it blocked until its own timeout.
+/// Ends a drain that cannot finish: publishes `reason`, then reports the
+/// failure to the teardown caller, who must find the status already set.
 #[cfg(unix)]
-fn fail_reexec(reexec: &mut ReexecReader, error: EslError) {
+fn fail_reexec(
+    shared: &SharedState,
+    reexec: &mut ReexecReader,
+    reason: DisconnectReason,
+    failure: &str,
+    source: Option<EslError>,
+) -> DisconnectReason {
+    shared.publish_disconnect(reason.clone());
     if let Some(tx) = reexec
         .result_tx
         .take()
     {
+        let error = EslError::ReexecReaderLost {
+            reason: failure.into(),
+            source: source.map(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+        };
         if tx
             .send(Err(error))
             .is_err()
@@ -476,6 +490,9 @@ fn fail_reexec(reexec: &mut ReexecReader, error: EslError) {
             debug!("Re-exec caller gone before the drain failure was delivered");
         }
     }
+    #[cfg(test)]
+    run_test_hook(&shared.after_reexec_report);
+    reason
 }
 
 /// One drain step once the re-exec stop signal has fired.
@@ -484,6 +501,7 @@ fn fail_reexec(reexec: &mut ReexecReader, error: EslError) {
 /// partial body without its headers, which the new process cannot parse.
 #[cfg(unix)]
 async fn drain_for_reexec(
+    shared: &SharedState,
     reader: &mut OwnedReadHalf,
     parser: &mut EslParser,
     read_buffer: &mut [u8],
@@ -521,30 +539,28 @@ async fn drain_for_reexec(
         }
         step = read => step,
     };
-    match step {
-        Ok(ReadStep::Fed) => ControlFlow::Continue(()),
+    ControlFlow::Break(match step {
+        Ok(ReadStep::Fed) => return ControlFlow::Continue(()),
         Ok(ReadStep::Eof) => {
             warn!("Connection closed during re-exec drain");
             fail_reexec(
+                shared,
                 reexec,
-                EslError::ReexecFailed {
-                    reason: "connection closed during drain".into(),
-                    source: None,
-                },
-            );
-            ControlFlow::Break(DisconnectReason::ConnectionClosed)
+                DisconnectReason::ConnectionClosed,
+                "connection closed during drain",
+                None,
+            )
         }
         Ok(ReadStep::Idle) => {
             let reason = "drain timeout waiting for message body";
             warn!("Re-exec {reason}");
             fail_reexec(
+                shared,
                 reexec,
-                EslError::ReexecFailed {
-                    reason: reason.into(),
-                    source: None,
-                },
-            );
-            ControlFlow::Break(DisconnectReason::ProtocolError(reason.into()))
+                DisconnectReason::ProtocolError(reason.into()),
+                reason,
+                None,
+            )
         }
         Err(e) => {
             warn!(
@@ -552,10 +568,9 @@ async fn drain_for_reexec(
                 e.display_chain()
             );
             let reason = read_failure_reason(&e);
-            fail_reexec(reexec, e);
-            ControlFlow::Break(reason)
+            fail_reexec(shared, reexec, reason, "read failed during drain", Some(e))
         }
-    }
+    })
 }
 
 /// Resolves once the teardown caller has stopped waiting for the drain.
@@ -585,9 +600,8 @@ fn read_failure_reason(error: &EslError) -> DisconnectReason {
 }
 
 #[cfg(test)]
-fn run_induced_panic(shared: &SharedState) {
-    let hook = shared
-        .induced_panic
+fn run_test_hook(seam: &std::sync::Mutex<Option<fn()>>) {
+    let hook = seam
         .lock()
         .expect("test seam lock")
         .take();
@@ -626,7 +640,7 @@ async fn reader_loop_inner(
     shared: Arc<SharedState>,
     event_tx: &mpsc::Sender<Result<EslEvent, EslError>>,
     overflow: EventOverflow,
-    #[cfg_attr(not(unix), allow(unused_variables, unused_mut))] mut reexec: ReexecReader,
+    #[cfg_attr(not(unix), allow(unused_variables))] reexec: &mut ReexecReader,
 ) -> DisconnectReason {
     let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
     let mut last_recv = Instant::now();
@@ -663,7 +677,7 @@ async fn reader_loop_inner(
                 };
 
                 #[cfg(test)]
-                run_induced_panic(&shared);
+                run_test_hook(&shared.induced_panic);
                 let flow = dispatch_message(message, &parser, &shared, &mut sink).await;
                 // A stall reads nothing, but the peer never stopped sending.
                 last_recv += sink.stalled;
@@ -676,12 +690,12 @@ async fn reader_loop_inner(
                     ControlFlow::Break(reason) => {
                         #[cfg(unix)]
                         if draining {
-                            fail_reexec(
-                                &mut reexec,
-                                EslError::ReexecFailed {
-                                    reason: "reader stopped before the drain completed".into(),
-                                    source: None,
-                                },
+                            return fail_reexec(
+                                &shared,
+                                reexec,
+                                reason,
+                                "reader stopped before the drain completed",
+                                None,
                             );
                         }
                         return reason;
@@ -704,7 +718,9 @@ async fn reader_loop_inner(
         // the drain inspects for a clean stop.
         #[cfg(unix)]
         if draining {
-            match drain_for_reexec(&mut reader, &mut parser, &mut read_buffer, &mut reexec).await {
+            match drain_for_reexec(&shared, &mut reader, &mut parser, &mut read_buffer, reexec)
+                .await
+            {
                 ControlFlow::Continue(()) => continue,
                 ControlFlow::Break(reason) => return reason,
             }

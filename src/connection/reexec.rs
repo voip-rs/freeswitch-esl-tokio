@@ -97,11 +97,13 @@ impl EslClient {
     /// - The connection status is set to
     ///   [`DisconnectReason::ReexecTeardown`], so all clones see the
     ///   connection as dead.
-    /// - A [`ReexecFailed`](EslError::ReexecFailed) returned before the reader
-    ///   was signalled leaves the connection as it was. One returned after it
-    ///   means the drain did not finish: the reader has stopped, and the status
-    ///   names why. Past teardown's own deadline the drain is abandoned and the
-    ///   status reads [`DisconnectReason::ProtocolError`].
+    /// - [`ReexecFailed`](EslError::ReexecFailed) is a refusal before the
+    ///   reader was signalled and leaves the connection usable.
+    ///   [`ReexecReaderLost`](EslError::ReexecReaderLost) means the drain did
+    ///   not finish, or the reader was already gone: the connection is over,
+    ///   and the status already names why when the error returns. Past
+    ///   teardown's own deadline the drain is abandoned and the status reads
+    ///   [`DisconnectReason::ProtocolError`].
     /// - The caller **must not drop** the `EslClient` before `exec()` (or
     ///   must [`std::mem::forget`] it) to keep the fd open.
     /// - The caller is responsible for clearing `CLOEXEC` on the fd.
@@ -161,7 +163,7 @@ impl EslClient {
             self.shared
                 .liveness_timeout_ms
                 .store(liveness_ms, Ordering::Relaxed);
-            return Err(EslError::ReexecFailed {
+            return Err(EslError::ReexecReaderLost {
                 reason: "reader task is gone, stop signal not delivered".into(),
                 source: None,
             });
@@ -172,7 +174,8 @@ impl EslClient {
         // with a descriptive error.
         let outer_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS) + Duration::from_secs(1);
         let residual = match timeout(outer_timeout, reexec.result_rx).await {
-            Ok(result) => result.map_err(|e| EslError::ReexecFailed {
+            // The reader publishes its status before it drops the channel.
+            Ok(result) => result.map_err(|e| EslError::ReexecReaderLost {
                 reason: "reader task exited without sending result".into(),
                 source: Some(Box::new(e)),
             })??,
@@ -181,7 +184,7 @@ impl EslClient {
             Err(e) => {
                 self.shared
                     .publish_disconnect(DisconnectReason::ProtocolError(REEXEC_ABANDONED.into()));
-                return Err(EslError::ReexecFailed {
+                return Err(EslError::ReexecReaderLost {
                     reason: "timed out waiting for reader to stop".into(),
                     source: Some(Box::new(e)),
                 });

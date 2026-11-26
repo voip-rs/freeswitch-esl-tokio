@@ -329,6 +329,10 @@ struct SharedState {
     /// Run by the reader before dispatching its next message.
     #[cfg(test)]
     induced_panic: std::sync::Mutex<Option<fn()>>,
+    /// Run by the reader once a re-exec failure has reached the teardown
+    /// caller, which may then be woken.
+    #[cfg(test)]
+    after_reexec_report: std::sync::Mutex<Option<fn()>>,
 }
 
 impl SharedState {
@@ -716,6 +720,8 @@ impl EslClient {
             reexec: Mutex::new(Some(ReexecCaller { stop_tx, result_rx })),
             #[cfg(test)]
             induced_panic: std::sync::Mutex::new(None),
+            #[cfg(test)]
+            after_reexec_report: std::sync::Mutex::new(None),
         });
         let (event_tx, event_rx) = mpsc::channel(queue_size);
 
@@ -1053,6 +1059,91 @@ mod tests {
         let mut buf = [0u8; 64];
         let read = tokio::time::timeout(Duration::from_millis(300), server.read(&mut buf)).await;
         assert!(read.is_err(), "the command reached the wire: {read:?}");
+    }
+
+    /// Starts a teardown mid-body, lets the server end the drain with `ending`
+    /// (closing the socket after it when `close`), and returns the error with
+    /// the status read the moment teardown returned. The reader stalls once it
+    /// has reported, so a status it publishes later is not there yet.
+    #[cfg(unix)]
+    async fn status_when_teardown_fails(
+        ending: &'static [u8],
+        close: bool,
+    ) -> (EslError, ConnectionStatus) {
+        use tokio::io::AsyncWriteExt;
+
+        let (mut server, client, mut events) = hand_driven_pair().await;
+        *client
+            .shared
+            .after_reexec_report
+            .lock()
+            .unwrap() = Some(|| {
+            // Hands the worker over first, so the woken teardown runs meanwhile.
+            tokio::task::block_in_place(|| std::thread::sleep(Duration::from_millis(500)))
+        });
+        server
+            .write_all(
+                concat!(
+                    "Content-Type: text/event-plain\nContent-Length: 21\n\nEvent-Name: HEARTBEAT\n",
+                    "Content-Type: text/event-plain\nContent-Length: 4\n\n",
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let first = tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("the heartbeat arrives");
+        assert!(matches!(first, Some(Ok(_))), "{first:?}");
+
+        let teardown = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .teardown_for_reexec()
+                    .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        server
+            .write_all(ending)
+            .await
+            .unwrap();
+        if close {
+            drop(server);
+        }
+        let err = tokio::time::timeout(Duration::from_secs(10), teardown)
+            .await
+            .expect("teardown returns")
+            .unwrap()
+            .expect_err("the drain cannot finish");
+        (err, client.status())
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_drain_cut_by_eof_is_published_before_teardown_returns() {
+        let (err, status) = status_when_teardown_fails(b"ab", true).await;
+        assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+        assert_eq!(
+            status,
+            ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_reader_exit_mid_drain_is_published_before_teardown_returns() {
+        let (err, status) =
+            status_when_teardown_fails(b"abcdContent-Type: text/garbage\n\n", false).await;
+        assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+        assert!(
+            matches!(
+                status,
+                ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_))
+            ),
+            "{status:?}"
+        );
     }
 
     /// Teardown switches liveness off before it signals the reader; a teardown

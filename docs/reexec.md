@@ -63,16 +63,28 @@ The drain logic handles this:
      drain timeout) until the body completes. Dispatch the completed
      message normally, then stop at the next `WaitingForHeaders`.
 3. **Drain timeout** (5s, `REEXEC_DRAIN_TIMEOUT_MS`, per read): if the
-   body stops arriving, return `ReexecFailed` rather than hanging.
+   body stops arriving, return `ReexecReaderLost` rather than hanging.
 4. **Teardown deadline** (the drain timeout plus 1s, overall): a body
    that keeps trickling in is abandoned there. Teardown sets the status
-   to `Disconnected(ProtocolError(..))` and returns `ReexecFailed`; the
-   reader sees the caller gone and stops without finishing the drain.
+   to `Disconnected(ProtocolError(..))` and returns `ReexecReaderLost`;
+   the reader sees the caller gone and stops without finishing the
+   drain.
 
-Any drain that fails ends the reader, and the status names why:
-`ConnectionClosed` when the switch closed mid-message, `ProtocolError`
-for a timeout, `IoError` for a read error. Only a `ReexecFailed`
-returned before the stop signal leaves the connection usable.
+## Which error says the connection survived
+
+- `ReexecFailed` is a refusal before the stop signal: a command in
+  flight, or a second call. The reader still runs and the connection
+  stays usable.
+- `ReexecReaderLost` is every failure after the stop signal, and a
+  reader already gone when teardown starts. The connection is over:
+  `is_connection_error()` is true, and the status already reads
+  `Disconnected` when the error returns, naming why:
+  `ConnectionClosed` when the switch closed mid-message,
+  `ProtocolError` for a timeout or a framing fault, `IoError` for a
+  read error.
+
+A daemon carries on after the first and exits, or reconnects, after
+the second.
 
 Messages completed during drain are dispatched normally to the event
 channel, so the caller receives all in-flight events.

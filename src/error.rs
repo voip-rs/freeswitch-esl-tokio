@@ -180,16 +180,14 @@ pub enum EslError {
     #[error("originate command refused")]
     Originate(#[from] OriginateError),
 
-    /// Re-exec teardown failed.
+    /// Re-exec teardown refused before the reader was told to stop: a command
+    /// in flight, or a second call. The connection stays usable.
     ///
-    /// A refusal before the reader was told to stop (a command in flight, a
-    /// second call) leaves the connection as it was. A failure after it means
-    /// the drain did not finish: the reader has stopped, and the connection
-    /// status says why.
+    /// A failure after the stop signal is [`EslError::ReexecReaderLost`].
     #[cfg(unix)]
     #[error("Re-exec teardown failed: {reason}")]
     ReexecFailed {
-        /// What went wrong during teardown.
+        /// Why teardown refused.
         reason: String,
         /// The failure behind it, when one was reported.
         #[source]
@@ -328,6 +326,22 @@ pub enum EslError {
         field: &'static str,
         /// The value as given, in whole seconds.
         seconds: u64,
+    },
+
+    /// Re-exec teardown failed after the reader was told to stop, or found
+    /// it already gone: the drain did not finish and the connection is over.
+    ///
+    /// The status reads `Disconnected` by the time this is returned, naming
+    /// why. Refusals that leave the connection usable are
+    /// [`EslError::ReexecFailed`].
+    #[cfg(unix)]
+    #[error("re-exec teardown lost the reader: {reason}")]
+    ReexecReaderLost {
+        /// What ended the drain.
+        reason: String,
+        /// The failure behind it, when one was reported.
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 }
 
@@ -510,6 +524,8 @@ impl EslError {
             EslError::UnsolicitedReply { .. } => false,
             EslError::LateReply { .. } => false,
             EslError::SecondsOutOfRange { .. } => false,
+            #[cfg(unix)]
+            EslError::ReexecReaderLost { .. } => false,
         }
     }
 
@@ -553,8 +569,7 @@ impl EslError {
             EslError::InvalidHeader { .. } => true,
             EslError::HeaderParse(_) => false,
             EslError::Originate(_) => false,
-            // Whether the socket survived depends on when teardown failed; the
-            // connection status says, so this stays a refusal either way.
+            // Refused before the stop signal: the reader still runs.
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,
@@ -570,6 +585,8 @@ impl EslError {
             EslError::UnsolicitedReply { .. } => false,
             EslError::LateReply { .. } => false,
             EslError::SecondsOutOfRange { .. } => false,
+            #[cfg(unix)]
+            EslError::ReexecReaderLost { .. } => true,
         }
     }
 
