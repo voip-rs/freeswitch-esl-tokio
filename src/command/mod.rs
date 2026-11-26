@@ -51,10 +51,17 @@ fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
     Ok(())
 }
 
-/// Whole seconds of `duration`, refused past `i32::MAX`, where the switch's
-/// `atoi` into an `int` wraps.
+/// Whole seconds of `duration`, truncated but never from a non-zero duration
+/// to zero, and refused past `i32::MAX`, where the switch's `atoi` into an
+/// `int` is undefined.
 fn atoi_seconds(field: &'static str, duration: Duration) -> EslResult<u64> {
-    let seconds = duration.as_secs();
+    let seconds = if duration.is_zero() {
+        0
+    } else {
+        duration
+            .as_secs()
+            .max(1)
+    };
     if i32::try_from(seconds).is_err() {
         return Err(EslError::SecondsOutOfRange { field, seconds });
     }
@@ -309,8 +316,8 @@ pub enum EslCommand {
     },
     /// Keep socket open after channel hangup.
     Linger {
-        /// Linger timeout in whole seconds up to `i32::MAX`, or `None` for
-        /// indefinite.
+        /// Linger timeout in whole seconds up to `i32::MAX`, a non-zero one
+        /// under a second counting as one, or `None` for indefinite.
         timeout: Option<Duration>,
     },
     /// Cancel linger mode.
@@ -1174,8 +1181,8 @@ mod tests {
             .is_err());
     }
 
-    /// mod_event_socket reads the linger seconds with `atoi`, which wraps past
-    /// `i32::MAX` into a negative or short linger.
+    /// mod_event_socket reads the linger seconds with `atoi`, which is
+    /// undefined past `i32::MAX`.
     #[test]
     fn linger_past_the_switch_int_is_refused() {
         let max = u64::try_from(i32::MAX).unwrap();

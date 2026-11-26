@@ -22,7 +22,7 @@ use super::{
     DisconnectReason, EslClient, EslEventStream, ReplyWait,
 };
 
-const ABANDONED_MID_WRITE: &str = "a command was dropped before it was fully written";
+pub(super) const ABANDONED_MID_WRITE: &str = "a command was dropped before it was fully written";
 const WRITE_TIMED_OUT: &str = "a command was not fully written within the command timeout";
 
 impl EslClient {
@@ -731,8 +731,8 @@ impl EslClient {
     /// and keeps the socket open so the client can drain remaining events.
     ///
     /// Pass `None` for indefinite linger, or `Some(Duration)` for a timeout in
-    /// whole seconds; one past `i32::MAX` seconds is refused with
-    /// [`EslError::SecondsOutOfRange`].
+    /// whole seconds, a non-zero one under a second counting as one; one past
+    /// `i32::MAX` seconds is refused with [`EslError::SecondsOutOfRange`].
     pub async fn linger(&self, timeout: Option<Duration>) -> EslResult<()> {
         self.send_command_ok(EslCommand::Linger { timeout })
             .await
@@ -1090,7 +1090,7 @@ impl EslClient {
         EslError::protocol_error(reason)
     }
 
-    async fn close_after_partial_write(
+    pub(super) async fn close_after_partial_write(
         &self,
         writer: &mut OwnedWriteHalf,
         reason: DisconnectReason,

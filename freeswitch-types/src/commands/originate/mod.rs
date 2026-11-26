@@ -263,8 +263,10 @@ impl Originate {
     }
 
     /// Set the originate timeout. Sub-second precision is truncated to whole
-    /// seconds on the wire and in serde round-trips. Refuses more than `i32::MAX`
-    /// seconds, which the switch reads with `atoi` and wraps.
+    /// seconds on the wire and in serde round-trips, but a timeout under a second
+    /// counts as one. Refuses zero, which the switch replaces with its 60 s
+    /// default, and more than `i32::MAX` seconds, past which its `atoi` is
+    /// undefined.
     pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, OriginateError> {
         self.timeout = Some(timeout);
         self.checked()
@@ -359,10 +361,11 @@ impl Originate {
         {
             return Err(OriginateError::UndefPositional("target"));
         }
+        // Zero is the switch's 60 s default, and atoi past an int is undefined.
         if let Some(seconds) = self
             .timeout
-            .map(|timeout| timeout.as_secs())
-            .filter(|&seconds| i32::try_from(seconds).is_err())
+            .map(wire_seconds)
+            .filter(|&seconds| seconds == 0 || i32::try_from(seconds).is_err())
         {
             return Err(OriginateError::TimeoutOutOfRange { seconds });
         }
@@ -391,10 +394,7 @@ impl Originate {
             self.cid_num
                 .clone(),
             self.timeout
-                .map(|t| {
-                    t.as_secs()
-                        .to_string()
-                }),
+                .map(|t| wire_seconds(t).to_string()),
         ];
         let present = slots
             .iter()
@@ -428,6 +428,17 @@ impl Originate {
         }
         Ok(())
     }
+}
+
+/// Whole seconds of a timeout as written: truncated, but never to zero from a
+/// non-zero duration, which the switch would read as its default.
+pub(crate) fn wire_seconds(timeout: Duration) -> u64 {
+    if timeout.is_zero() {
+        return 0;
+    }
+    timeout
+        .as_secs()
+        .max(1)
 }
 
 /// An [`Originate`] written for one parser revision.

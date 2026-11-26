@@ -305,9 +305,7 @@ async fn fail_pending_reply(shared: &SharedState) {
     {
         debug!("Failing in-flight command waiter: reader loop exited");
     }
-    pending
-        .stale
-        .clear();
+    pending.forget_owed();
 }
 
 /// Pick the body format from `Content-Type`, parse the event, hand it over.
@@ -395,10 +393,7 @@ async fn dispatch_message(
                 response: Box::new(EslResponse::from_message(message)),
                 ticket,
             };
-            let report = if let Some(ticket) = pending
-                .stale
-                .pop_front()
-            {
+            let report = if let Some(ticket) = pending.take_owed() {
                 late(ticket, message)
             } else if let Some(waiter) = pending
                 .waiting
@@ -522,8 +517,7 @@ async fn drain_for_reexec(
             .pending_reply
             .lock()
             .await
-            .stale
-            .len();
+            .owed_count();
         debug!(
             "Re-exec drain complete, {} residual bytes, {owed_replies} replies owed",
             residual.len()

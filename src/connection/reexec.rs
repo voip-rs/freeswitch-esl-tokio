@@ -13,7 +13,9 @@ use tracing::info;
 use crate::error::{EslError, EslResult};
 
 #[cfg(unix)]
-use super::{DisconnectReason, EslClient};
+use super::client::ABANDONED_MID_WRITE;
+#[cfg(unix)]
+use super::{ConnectionStatus, DisconnectReason, EslClient};
 
 /// Result type for the reexec drain operation.
 #[cfg(unix)]
@@ -111,19 +113,30 @@ impl EslClient {
     /// - A timed-out command's reply not yet received as
     ///   [`EslError::LateReply`] does not block teardown; it is counted in
     ///   [`ReexecHandoff::owed_replies`] for the new process to adopt with.
-    /// - May only be called once. Returns an error on subsequent calls.
+    /// - The connection must be up. A second call, or one after the
+    ///   connection ended for any reason, returns
+    ///   [`EslError::ReexecReaderLost`].
+    /// - A command dropped before it was fully written left the stream
+    ///   unframeable: teardown closes the connection and returns
+    ///   [`EslError::ReexecReaderLost`].
     ///
     /// # After this call
     ///
     /// - The connection status is set to
     ///   [`DisconnectReason::ReexecTeardown`], so all clones see the
     ///   connection as dead.
-    /// - [`ReexecFailed`](EslError::ReexecFailed) is a refusal before the
-    ///   reader was signalled and leaves the connection usable.
+    /// - [`ReexecFailed`](EslError::ReexecFailed) is the one refusal, a
+    ///   command in flight, and leaves the connection usable.
     ///   [`ReexecReaderLost`](EslError::ReexecReaderLost) means the drain did
     ///   not finish, or the reader was already gone: the connection is over,
     ///   and the status already names why when the error returns. Past
     ///   teardown's own deadline the drain is abandoned and the status reads
+    ///   [`DisconnectReason::ProtocolError`].
+    /// - A `disconnect()` on a clone while the drain runs ends the connection
+    ///   being handed over: teardown returns
+    ///   [`ReexecReaderLost`](EslError::ReexecReaderLost) rather than the fd.
+    /// - Dropping this future after the reader was signalled abandons the
+    ///   drain: nothing is returned, and the connection ends with
     ///   [`DisconnectReason::ProtocolError`].
     /// - The caller **must not drop** the `EslClient` before `exec()` (or
     ///   must [`std::mem::forget`] it) to keep the fd open.
@@ -136,37 +149,55 @@ impl EslClient {
             reason: "command still in-flight".into(),
             source: None,
         };
+        let lost = |reason: &str| EslError::ReexecReaderLost {
+            reason: reason.into(),
+            source: None,
+        };
+        // A connection that already ended has nothing to hand over, and a
+        // ReexecFailed must mean the connection is still usable.
+        if !self.is_connected() {
+            return Err(lost("the connection already ended"));
+        }
         // Held to the end: a command written after the in-flight check would
         // leave its reply to the next process image.
-        let writer = self
+        let mut writer = self
             .writer
             .try_lock()
             .map_err(|_| in_flight())?;
-        if self
+        let unwritten = match &self
             .shared
             .pending_reply
             .lock()
             .await
             .waiting
-            .is_some()
         {
-            return Err(in_flight());
+            None => false,
+            Some(waiter)
+                if waiter
+                    .written
+                    .load(Ordering::Acquire) =>
+            {
+                return Err(in_flight())
+            }
+            Some(_) => true,
+        };
+        if unwritten {
+            self.close_after_partial_write(
+                &mut writer,
+                DisconnectReason::ProtocolError(ABANDONED_MID_WRITE.into()),
+            )
+            .await;
+            return Err(lost(ABANDONED_MID_WRITE));
         }
 
-        // Take the reexec channel (one-shot: fails on second call)
-        let reexec = {
-            let mut guard = self
-                .shared
-                .reexec
-                .lock()
-                .await;
-            guard
-                .take()
-                .ok_or_else(|| EslError::ReexecFailed {
-                    reason: "teardown already called".into(),
-                    source: None,
-                })?
-        };
+        // Taken by the first call, which signalled the reader or found it gone.
+        let reexec = self
+            .shared
+            .reexec
+            .lock()
+            .await
+            .take()
+            .ok_or_else(|| lost("teardown already called"))?;
 
         // Disable liveness to prevent HeartbeatExpired race
         let liveness_ms = self
@@ -200,8 +231,8 @@ impl EslClient {
                 reason: "reader task exited without sending result".into(),
                 source: Some(Box::new(e)),
             })??,
-            // Dropping the result channel stops the drain; the status is set
-            // first so it already reads as ended when the caller sees the error.
+            // The channel is already dropped, which stops the drain with this
+            // same reason; publishing here sets it before the error returns.
             Err(e) => {
                 self.shared
                     .publish_disconnect(DisconnectReason::ProtocolError(REEXEC_ABANDONED.into()));
@@ -216,9 +247,14 @@ impl EslClient {
             .as_ref()
             .as_raw_fd();
 
-        // Mark connection as dead so other clones see it
+        // The reader may have published ReexecTeardown first; any other reason
+        // means a clone ended the connection, and may yet shut the fd down.
         self.shared
             .publish_disconnect(DisconnectReason::ReexecTeardown);
+        let status = self.status();
+        if status != ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown) {
+            return Err(lost("the connection ended during the drain"));
+        }
 
         info!(
             "Re-exec teardown complete, fd={}, {} residual bytes",

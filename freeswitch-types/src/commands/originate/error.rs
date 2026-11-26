@@ -117,8 +117,8 @@ pub enum OriginateError {
     },
     /// A bridge dial string with no groups, which renders as an empty argument.
     NoBridgeLegs,
-    /// A timeout past `i32::MAX` seconds, which `originate_function` reads with `atoi` and
-    /// wraps.
+    /// A timeout of zero, which `switch_ivr_originate` replaces with its 60 s default, or past
+    /// `i32::MAX` seconds, where the `atoi` in `originate_function` is undefined.
     TimeoutOutOfRange {
         /// The timeout in whole seconds.
         seconds: u64,
@@ -217,7 +217,7 @@ impl std::fmt::Display for OriginateError {
             Self::NoBridgeLegs => f.write_str("the bridge dial string has no legs"),
             Self::TimeoutOutOfRange { seconds } => write!(
                 f,
-                "timeout of {seconds} seconds is past what the switch reads into an int"
+                "timeout of {seconds} seconds is zero or past what the switch reads into an int"
             ),
         }
     }

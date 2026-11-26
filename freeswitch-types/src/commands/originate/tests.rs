@@ -1969,8 +1969,8 @@ fn an_enterprise_separator_in_a_variable_value_is_refused() {
     .is_err());
 }
 
-/// The switch reads the timeout with `atoi`, so a value past `i32::MAX` wraps
-/// there; every way of building one refuses it.
+/// The switch reads the timeout with `atoi`, undefined past `i32::MAX`; every
+/// way of building such a value refuses it.
 #[test]
 fn originate_timeout_past_the_switch_int_is_refused() {
     let base = || Originate::extension(test_endpoint(), "1000").unwrap();

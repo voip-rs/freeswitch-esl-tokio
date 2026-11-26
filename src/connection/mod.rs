@@ -243,6 +243,13 @@ struct PendingReply {
     /// Commands whose reply is owed but nobody awaits. Non-empty coexists with
     /// `waiting: Some`: the next command installs while one is still in flight.
     stale: VecDeque<CommandTicket>,
+    /// Replies a previous process image left owed, answered before any of
+    /// this connection's. A count, since it is caller input read back after
+    /// `exec()`: a queue of that many tickets could exhaust memory.
+    inherited: u64,
+    /// Ticket of the next inherited reply; inherited tickets run from 0 and
+    /// this connection's commands start after them.
+    next_inherited_ticket: u64,
     next_ticket: u64,
     /// Set by the reader loop on exit and checked under this same lock before a
     /// waiter is installed, which closes the window after `is_connected()`.
@@ -250,18 +257,46 @@ struct PendingReply {
 }
 
 impl PendingReply {
-    /// `owed` replies a previous process image left unanswered, each under a
-    /// ticket this connection never hands to a command.
+    /// `owed` replies a previous process image left unanswered.
     fn new(owed: usize) -> Self {
-        let next_ticket = u64::try_from(owed).unwrap_or(u64::MAX);
+        let inherited = u64::try_from(owed).unwrap_or(u64::MAX);
         Self {
             waiting: None,
-            stale: (0..next_ticket)
-                .map(CommandTicket)
-                .collect(),
-            next_ticket,
+            stale: VecDeque::new(),
+            inherited,
+            next_inherited_ticket: 0,
+            next_ticket: inherited,
             reader_dead: false,
         }
+    }
+
+    /// The ticket of the oldest reply owed to nobody waiting, taken off the
+    /// books: inherited replies come before this connection's own.
+    fn take_owed(&mut self) -> Option<CommandTicket> {
+        if self.inherited > 0 {
+            self.inherited -= 1;
+            let ticket = CommandTicket(self.next_inherited_ticket);
+            self.next_inherited_ticket += 1;
+            return Some(ticket);
+        }
+        self.stale
+            .pop_front()
+    }
+
+    /// Replies owed to nobody waiting, saturating.
+    fn owed_count(&self) -> usize {
+        usize::try_from(self.inherited)
+            .unwrap_or(usize::MAX)
+            .saturating_add(
+                self.stale
+                    .len(),
+            )
+    }
+
+    fn forget_owed(&mut self) {
+        self.inherited = 0;
+        self.stale
+            .clear();
     }
 
     /// Installs the waiter for a command about to be written, or reports that
@@ -290,7 +325,10 @@ impl PendingReply {
             tx,
             written: written.clone(),
         });
-        self.next_ticket += 1;
+        // Wraps only after an inherited count near u64::MAX, itself bogus.
+        self.next_ticket = self
+            .next_ticket
+            .wrapping_add(1);
         Ok(written)
     }
 }
@@ -936,17 +974,16 @@ mod tests {
                 .is_empty());
         }
 
-        // User-visible symptom: teardown_for_reexec must not report a
-        // phantom "command still in-flight".
+        // The write error closed the connection, so teardown reports it lost,
+        // not a phantom "command still in-flight".
         #[cfg(unix)]
         {
             let result = client
                 .teardown_for_reexec()
                 .await;
             assert!(
-                result.is_ok(),
-                "teardown saw a phantom in-flight command: {:?}",
-                result.err()
+                matches!(result, Err(EslError::ReexecReaderLost { .. })),
+                "{result:?}"
             );
         }
     }

@@ -180,10 +180,10 @@ pub enum EslError {
     #[error("originate command refused")]
     Originate(#[from] OriginateError),
 
-    /// Re-exec teardown refused before the reader was told to stop: a command
-    /// in flight, or a second call. The connection stays usable.
+    /// Re-exec teardown refused because a command was in flight. The
+    /// connection stays usable, which no other teardown failure leaves.
     ///
-    /// A failure after the stop signal is [`EslError::ReexecReaderLost`].
+    /// Every other teardown failure is [`EslError::ReexecReaderLost`].
     #[cfg(unix)]
     #[error("Re-exec teardown failed: {reason}")]
     ReexecFailed {
@@ -319,7 +319,7 @@ pub enum EslError {
     },
 
     /// A number of seconds past `i32::MAX`, which the switch reads with `atoi`
-    /// into an `int` and wraps. Nothing was sent.
+    /// into an `int`, undefined past that range. Nothing was sent.
     #[error("{field} of {seconds} seconds is past what the switch reads")]
     SecondsOutOfRange {
         /// Which command field.
@@ -328,11 +328,13 @@ pub enum EslError {
         seconds: u64,
     },
 
-    /// Re-exec teardown failed after the reader was told to stop, or found
-    /// it already gone: the drain did not finish and the connection is over.
+    /// Re-exec teardown failed and the connection is over: the drain did not
+    /// finish after the reader was told to stop, the reader or the connection
+    /// was already gone (a second call included), a clone disconnected during
+    /// the drain, or a command dropped mid-write left the stream unframeable.
     ///
     /// The status reads `Disconnected` by the time this is returned, naming
-    /// why. Refusals that leave the connection usable are
+    /// why. The one refusal that leaves the connection usable is
     /// [`EslError::ReexecFailed`].
     #[cfg(unix)]
     #[error("re-exec teardown lost the reader: {reason}")]

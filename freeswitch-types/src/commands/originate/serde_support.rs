@@ -57,7 +57,7 @@ impl From<Originate> for OriginateRaw {
             cid_num: o.cid_num,
             timeout_secs: o
                 .timeout
-                .map(|d| d.as_secs()),
+                .map(wire_seconds),
             argv_separator: o.argv_separator,
         }
     }
