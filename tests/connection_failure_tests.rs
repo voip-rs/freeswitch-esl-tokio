@@ -719,26 +719,37 @@ async fn queued_timeouts_each_get_their_late_reply() {
     assert_eq!(reply.body(), Some("1.0"));
 }
 
+/// Sends `api status`, waits until the switch has read all of it, then drops
+/// the future while it waits for the reply.
+async fn abandon_after_write(
+    mock: &mut freeswitch_esl_tokio::mock::MockConnection,
+    client: &EslClient,
+) {
+    let cmd = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("status")
+                .await
+        }
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    cmd.abort();
+    assert!(cmd
+        .await
+        .unwrap_err()
+        .is_cancelled());
+}
+
 /// A command whose future the caller drops while it waits still has a reply
 /// coming; the next command must not take that reply as its own.
 #[tokio::test]
 async fn cancelled_command_reply_does_not_reach_the_next_command() {
     let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
-    let client_a = client.clone();
-    let cmd_a = tokio::spawn(async move {
-        tokio::time::timeout(Duration::from_millis(100), client_a.api("status")).await
-    });
-    mock.read_command()
-        .await
-        .unwrap();
-    assert!(
-        cmd_a
-            .await
-            .expect("cmd_a panicked")
-            .is_err(),
-        "the caller's own timeout drops command A"
-    );
+    abandon_after_write(&mut mock, &client).await;
 
     let client_b = client.clone();
     let cmd_b = tokio::spawn(async move {
@@ -773,16 +784,7 @@ async fn cancelled_command_reply_does_not_reach_the_next_command() {
 async fn cancelled_command_reply_before_the_next_command_is_delivered() {
     let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
-    let dropped = tokio::time::timeout(Duration::from_millis(100), async {
-        client
-            .api("status")
-            .await
-    });
-    let (dropped, _) = tokio::join!(dropped, mock.read_command());
-    assert!(
-        dropped.is_err(),
-        "the caller's own timeout drops the command"
-    );
+    abandon_after_write(&mut mock, &client).await;
 
     mock.reply_ok_text("reply-for-dropped")
         .await
