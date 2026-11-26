@@ -46,6 +46,31 @@ async fn teardown_returns_valid_fd_and_residual() {
     );
 }
 
+/// After a successful teardown the socket belongs to the next process image;
+/// a `disconnect()` on a remaining clone must not shut it down.
+#[tokio::test]
+async fn disconnect_after_teardown_leaves_the_handed_over_socket_open() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let clone = client.clone();
+    let _handoff = client
+        .teardown_for_reexec()
+        .await
+        .expect("teardown succeeds");
+
+    clone
+        .disconnect()
+        .await
+        .expect("disconnect on an ended connection is not an error");
+    assert_eq!(
+        clone.status(),
+        ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+    );
+    // The switch side sees no EOF: nothing arrives, so the read times out.
+    let read =
+        tokio::time::timeout(std::time::Duration::from_millis(300), mock.read_command()).await;
+    assert!(read.is_err(), "the switch saw the socket close: {read:?}");
+}
+
 #[tokio::test]
 async fn teardown_with_buffered_event_delivers_then_stops() {
     let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
