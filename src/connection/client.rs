@@ -3,7 +3,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedWriteHalf;
-use tokio::time::{timeout_at, Instant};
+use tokio::sync::{oneshot, watch};
+use tokio::time::{sleep_until, Instant};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -12,10 +13,14 @@ use crate::{
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     headers::EventHeader,
+    protocol::EslMessage,
     LogLevel,
 };
 
-use super::{AbandonedMidWrite, ConnectionStatus, DisconnectReason, EslClient, EslEventStream};
+use super::{
+    saturating_millis, stored_millis, AbandonedMidWrite, CommandTicket, ConnectionStatus,
+    DisconnectReason, EslClient, EslEventStream, ReplyWait,
+};
 
 const ABANDONED_MID_WRITE: &str = "a command was dropped before it was fully written";
 const WRITE_TIMED_OUT: &str = "a command was not fully written within the command timeout";
@@ -37,30 +42,37 @@ impl EslClient {
     /// The command timeout runs from the start of the write to the reply. A
     /// write it cuts short leaves the stream in the same state, so the
     /// connection is closed and commands queued behind it fail.
+    ///
+    /// Whatever the timeout, the command ends with a connection error once the
+    /// connection status leaves [`Connected`](ConnectionStatus::Connected):
+    /// a liveness expiry, a [`disconnect`](Self::disconnect) or a reader exit
+    /// releases it, and the writer with it.
     pub async fn send_command(&self, command: EslCommand) -> EslResult<EslResponse> {
-        self.send_command_waiting(command, None)
+        self.send_command_waiting(command, ReplyWait::ConnectionDefault)
             .await
     }
 
     /// [`send_command`](Self::send_command) with its own timeout instead of the
     /// connection's [`set_command_timeout`](Self::set_command_timeout).
     ///
+    /// `None` or [`Duration::ZERO`] waits for the reply however long it takes,
+    /// as does a timeout too large to add to the current time.
+    ///
     /// The timeout starts once this command holds the writer: time spent
     /// queued behind another command is not counted.
     pub async fn send_command_with_timeout(
         &self,
         command: EslCommand,
-        reply_timeout: Duration,
+        reply_timeout: impl Into<Option<Duration>>,
     ) -> EslResult<EslResponse> {
-        self.send_command_waiting(command, Some(reply_timeout))
+        self.send_command_waiting(command, ReplyWait::per_call(reply_timeout.into()))
             .await
     }
 
-    /// `None` reads the connection's command timeout once the writer is held.
     async fn send_command_waiting(
         &self,
         command: EslCommand,
-        reply_timeout: Option<Duration>,
+        wait: ReplyWait,
     ) -> EslResult<EslResponse> {
         if !self.is_connected() {
             return Err(EslError::NotConnected);
@@ -74,6 +86,11 @@ impl EslClient {
             .writer
             .lock()
             .await;
+        // The connection ended while this command queued, perhaps behind a
+        // disconnect() or a write cut short: nothing may follow on the wire.
+        if !self.is_connected() {
+            return Err(EslError::ConnectionClosed);
+        }
 
         // Set up reply channel
         let (tx, mut rx) = tokio::sync::oneshot::channel();
@@ -101,27 +118,42 @@ impl EslClient {
             }
         };
 
-        let wait = reply_timeout.unwrap_or_else(|| {
-            Duration::from_millis(
-                self.shared
-                    .command_timeout_ms
-                    .load(Ordering::Relaxed),
-            )
-        });
-        let timeout_ms = u64::try_from(wait.as_millis()).unwrap_or(u64::MAX);
-        let deadline = Instant::now() + wait;
+        let wait = match wait {
+            ReplyWait::ConnectionDefault => match self
+                .shared
+                .command_timeout_ms
+                .load(Ordering::Relaxed)
+            {
+                0 => None,
+                ms => Some(Duration::from_millis(ms)),
+            },
+            ReplyWait::Unbounded => None,
+            ReplyWait::For(wait) => Some(wait),
+        };
+        let deadline = wait.and_then(|wait| Instant::now().checked_add(wait));
+        let timeout_ms = wait.map_or(0, saturating_millis);
+        let expired = deadline_passed(deadline);
+        tokio::pin!(expired);
+        let ended = connection_ended(
+            self.status_rx
+                .clone(),
+        );
+        tokio::pin!(ended);
 
-        // Write command
-        let Ok(written) = timeout_at(deadline, writer.write_all(command_str.as_bytes())).await
-        else {
-            self.shared
-                .pending_reply
-                .lock()
-                .await
-                .waiting = None;
-            return Err(self
-                .close_unframeable(&mut writer, WRITE_TIMED_OUT)
-                .await);
+        let written = tokio::select! {
+            biased;
+            written = writer.write_all(command_str.as_bytes()) => written,
+            () = &mut ended => {
+                self.drop_unwritten_waiter().await;
+                shutdown_after_partial_write(&mut writer).await;
+                return Err(EslError::ConnectionClosed);
+            }
+            () = &mut expired => {
+                self.drop_unwritten_waiter().await;
+                return Err(self
+                    .close_unframeable(&mut writer, WRITE_TIMED_OUT)
+                    .await);
+            }
         };
         if written.is_ok() {
             written_flag.store(true, Ordering::Release);
@@ -140,44 +172,25 @@ impl EslClient {
             return Err(EslError::Io(e));
         }
 
-        // Wait for reply from reader task with command timeout (writer still locked)
-        let message = match timeout_at(deadline, &mut rx).await {
-            Ok(Ok(message)) => message,
-            Ok(Err(e)) => {
-                debug!("pending reply channel closed: {e}");
-                drop(writer);
-                return Err(EslError::ConnectionClosed);
-            }
-            Err(_) => {
-                let mut pending = self
-                    .shared
-                    .pending_reply
-                    .lock()
-                    .await;
-                let owed = pending
-                    .waiting
-                    .take();
-                if let Some(waiter) = owed {
-                    pending
-                        .stale
-                        .push_back(waiter.ticket);
-                    drop(writer);
-                    return Err(EslError::CommandTimeout {
-                        timeout_ms,
-                        ticket: waiter.ticket,
-                    });
+        // Wait for reply from reader task (writer still locked)
+        let message = tokio::select! {
+            biased;
+            received = &mut rx => match received {
+                Ok(message) => message,
+                Err(e) => {
+                    debug!("pending reply channel closed: {e}");
+                    return Err(EslError::ConnectionClosed);
                 }
-                drop(pending);
-                // The reader took the waiter between the timeout and the lock:
-                // the reply was sent, or the reader exited and dropped it.
-                match rx.try_recv() {
-                    Ok(message) => message,
-                    Err(e) => {
-                        debug!("pending reply channel closed: {e}");
-                        return Err(EslError::ConnectionClosed);
-                    }
-                }
-            }
+            },
+            () = &mut ended => match self.abandon_reply(&mut rx).await {
+                Ok(message) => message,
+                Err(_) => return Err(EslError::ConnectionClosed),
+            },
+            () = &mut expired => match self.abandon_reply(&mut rx).await {
+                Ok(message) => message,
+                Err(Some(ticket)) => return Err(EslError::CommandTimeout { timeout_ms, ticket }),
+                Err(None) => return Err(EslError::ConnectionClosed),
+            },
         };
 
         drop(writer);
@@ -185,6 +198,46 @@ impl EslClient {
         let response = EslResponse::from_message(message);
         debug!("Received response: success={}", response.is_success());
         Ok(response)
+    }
+
+    /// Gives up waiting for a written command's reply. `Err(Some)` is the
+    /// ticket its reply stays owed under; `Ok` is the reply the reader handed
+    /// over before the waiter could be taken back, `Err(None)` the reader's
+    /// exit in that same window.
+    async fn abandon_reply(
+        &self,
+        rx: &mut oneshot::Receiver<EslMessage>,
+    ) -> Result<EslMessage, Option<CommandTicket>> {
+        let mut pending = self
+            .shared
+            .pending_reply
+            .lock()
+            .await;
+        if let Some(waiter) = pending
+            .waiting
+            .take()
+        {
+            pending
+                .stale
+                .push_back(waiter.ticket);
+            return Err(Some(waiter.ticket));
+        }
+        drop(pending);
+        rx.try_recv()
+            .map_err(|e| {
+                debug!("pending reply channel closed: {e}");
+                None
+            })
+    }
+
+    /// Clears the waiter of a command whose write did not complete: no reply
+    /// is owed, and the connection is closed behind it.
+    async fn drop_unwritten_waiter(&self) {
+        self.shared
+            .pending_reply
+            .lock()
+            .await
+            .waiting = None;
     }
 
     /// Send a command and require a successful response, discarding the body.
@@ -231,7 +284,7 @@ impl EslClient {
     pub async fn api_with_timeout(
         &self,
         command: &str,
-        reply_timeout: Duration,
+        reply_timeout: impl Into<Option<Duration>>,
     ) -> EslResult<EslResponse> {
         let cmd = EslCommand::Api {
             command: command.to_string(),
@@ -280,7 +333,7 @@ impl EslClient {
     pub async fn bgapi_with_timeout(
         &self,
         command: &str,
-        reply_timeout: Duration,
+        reply_timeout: impl Into<Option<Duration>>,
     ) -> EslResult<EslResponse> {
         let cmd = EslCommand::BgApi {
             command: command.to_string(),
@@ -940,7 +993,9 @@ impl EslClient {
     }
 
     /// Set liveness timeout. Any inbound TCP traffic resets the timer.
-    /// Set to zero to disable (default).
+    /// Set to zero to disable (default). A non-zero timeout is kept to the
+    /// millisecond, rounded up, and expiry is checked on the reader's
+    /// read-timeout tick.
     ///
     /// The library never sends keepalives on its own -- the timer is fed only
     /// by traffic the server pushes. On a busy connection, ordinary event
@@ -961,13 +1016,18 @@ impl EslClient {
     pub fn set_liveness_timeout(&self, duration: Duration) {
         self.shared
             .liveness_timeout_ms
-            .store(duration.as_millis() as u64, Ordering::Relaxed);
+            .store(stored_millis(duration), Ordering::Relaxed);
     }
 
     /// Set command response timeout (default: 5 seconds).
     ///
     /// Applies to `send_command()`, `api()`, `bgapi()`, `subscribe_events()`,
     /// and all other methods that send a command and await a reply.
+    ///
+    /// `None` or [`Duration::ZERO`] removes the timeout: a command then waits
+    /// for its reply until the connection ends, as described on
+    /// [`send_command`](Self::send_command). A non-zero timeout is kept to the
+    /// millisecond, rounded up.
     ///
     /// If increased for long-running `api()` calls, also increase or disable
     /// the liveness timeout -- `api` blocks the socket, starving the liveness timer.
@@ -977,10 +1037,13 @@ impl EslClient {
     /// default bounds a prompt rather than a round trip and any real
     /// `play_and_get_digits` outlives it. See
     /// [outbound-esl-quirks.md](https://github.com/voip-rs/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md).
-    pub fn set_command_timeout(&self, duration: Duration) {
+    pub fn set_command_timeout(&self, timeout: impl Into<Option<Duration>>) {
+        let ms = timeout
+            .into()
+            .map_or(0, stored_millis);
         self.shared
             .command_timeout_ms
-            .store(duration.as_millis() as u64, Ordering::Relaxed);
+            .store(ms, Ordering::Relaxed);
     }
 
     /// Whether the connection is alive (not yet disconnected).
@@ -1004,7 +1067,8 @@ impl EslClient {
     ///
     /// Sets the connection status to [`crate::DisconnectReason::ClientRequested`]
     /// before closing the socket, so callers can distinguish client-initiated
-    /// disconnects from server-initiated ones.
+    /// disconnects from server-initiated ones. A command in flight sees the
+    /// status change and gives up the writer, failing with a connection error.
     pub async fn disconnect(&self) -> EslResult<()> {
         info!("Client requested disconnect");
         self.shared
@@ -1032,13 +1096,38 @@ impl EslClient {
             .send_replace(ConnectionStatus::Disconnected(
                 DisconnectReason::ProtocolError(reason.into()),
             ));
-        if let Err(e) = writer
-            .shutdown()
-            .await
-        {
-            debug!("shutdown after a partial write failed: {e}");
-        }
+        shutdown_after_partial_write(writer).await;
         EslError::protocol_error(reason)
+    }
+}
+
+/// Resolves at `deadline`, or never without one.
+async fn deadline_passed(deadline: Option<Instant>) {
+    match deadline {
+        Some(deadline) => sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// Resolves once the status leaves `Connected`.
+async fn connection_ended(mut status: watch::Receiver<ConnectionStatus>) {
+    // The sender lives in SharedState, which this client holds.
+    if status
+        .wait_for(|status| !matches!(status, ConnectionStatus::Connected))
+        .await
+        .is_err()
+    {
+        debug!("status sender dropped");
+    }
+}
+
+/// The write half is past use once a command is cut short mid-write.
+async fn shutdown_after_partial_write(writer: &mut OwnedWriteHalf) {
+    if let Err(e) = writer
+        .shutdown()
+        .await
+    {
+        debug!("shutdown after a partial write failed: {e}");
     }
 }
 

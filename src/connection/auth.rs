@@ -62,7 +62,7 @@ pub(super) struct Handshake<'a> {
 impl Handshake<'_> {
     /// Read one ESL message, failing the whole handshake on an idle socket.
     async fn recv_message(&mut self, read_timeout: Duration) -> EslResult<EslMessage> {
-        let timeout_ms = read_timeout.as_millis() as u64;
+        let timeout_ms = super::saturating_millis(read_timeout);
         loop {
             if let Some(message) = self
                 .parser

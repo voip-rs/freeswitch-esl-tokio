@@ -111,7 +111,7 @@ async fn tcp_connect_with_timeout(
     port: u16,
     connect_timeout: Duration,
 ) -> EslResult<TcpStream> {
-    let timeout_ms = connect_timeout.as_millis() as u64;
+    let timeout_ms = saturating_millis(connect_timeout);
     let tcp_result = timeout(connect_timeout, TcpStream::connect((host, port))).await;
 
     match tcp_result {
@@ -177,6 +177,41 @@ pub enum ConnectionMode {
 
 /// Default command timeout in milliseconds (5 seconds)
 const DEFAULT_COMMAND_TIMEOUT_MS: u64 = 5000;
+
+/// How long a command may take from the start of its write to its reply.
+#[derive(Debug, Clone, Copy)]
+enum ReplyWait {
+    /// The connection's [`EslClient::set_command_timeout`], read once the
+    /// writer is held.
+    ConnectionDefault,
+    /// Until the reply or the end of the connection.
+    Unbounded,
+    For(Duration),
+}
+
+impl ReplyWait {
+    /// A caller's timeout, where `None` and zero both mean none.
+    fn per_call(timeout: Option<Duration>) -> Self {
+        match timeout {
+            Some(timeout) if !timeout.is_zero() => Self::For(timeout),
+            _ => Self::Unbounded,
+        }
+    }
+}
+
+/// Milliseconds for an error or a log line, saturating rather than wrapping.
+fn saturating_millis(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Milliseconds for a stored timeout where 0 means none: a non-zero duration
+/// under a millisecond rounds up instead of switching the timeout off.
+fn stored_millis(duration: Duration) -> u64 {
+    if duration.is_zero() {
+        return 0;
+    }
+    saturating_millis(duration).max(1)
+}
 
 /// One command sent on a connection, numbered in send order.
 ///
@@ -274,7 +309,7 @@ struct SharedState {
     status_tx: watch::Sender<ConnectionStatus>,
     /// Liveness timeout in milliseconds (0 = disabled)
     liveness_timeout_ms: AtomicU64,
-    /// Command response timeout in milliseconds
+    /// Command response timeout in milliseconds (0 = none)
     command_timeout_ms: AtomicU64,
     /// Set when events have been dropped due to a full queue
     queue_full_notice_armed: AtomicBool,
