@@ -139,37 +139,50 @@ async fn live_liveness_heartbeat_resets_timer() {
 #[tokio::test]
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_command_timeout_msleep() {
-    let (client, _events, _permit) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     // Set a short command timeout, then send a blocking api call
     client.set_command_timeout(Duration::from_secs(1));
 
     let result = client
-        .api("msleep 5000")
+        .api("msleep 3000")
         .await;
+    let Err(EslError::CommandTimeout { ticket, .. }) = result else {
+        panic!("expected CommandTimeout, got: {result:?}");
+    };
 
-    assert!(
-        matches!(result, Err(EslError::CommandTimeout { .. })),
-        "expected Timeout error, got: {:?}",
-        result
-    );
-
-    // Verify the connection is still usable after timeout.
-    // Increase timeout for the recovery command.
+    // Sent while msleep still blocks the listener: its reply comes after
+    // msleep's, which must not be taken for it.
     client.set_command_timeout(Duration::from_secs(10));
-
-    // msleep result may arrive late and consume the next reply slot.
-    // Wait for the blocked msleep to complete on the server side.
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
     let resp = client
         .api("status")
-        .await;
+        .await
+        .expect("command after timeout should succeed");
     assert!(
-        resp.is_ok(),
-        "command after timeout should succeed: {:?}",
-        resp
+        resp.body()
+            .is_some_and(|body| body.contains("UP")),
+        "status got another command's reply: {resp:?}"
     );
+
+    let item = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("the late reply arrives")
+        .expect("the stream stays open");
+    match item {
+        Err(EslError::LateReply {
+            ticket: late_ticket,
+            response,
+        }) => {
+            assert_eq!(late_ticket, ticket);
+            assert!(
+                response
+                    .body()
+                    .is_some_and(|body| body.starts_with("+OK")),
+                "{response:?}"
+            );
+        }
+        other => panic!("expected LateReply, got: {other:?}"),
+    }
 }
 
 #[tokio::test]
