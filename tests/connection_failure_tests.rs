@@ -719,6 +719,54 @@ async fn queued_timeouts_each_get_their_late_reply() {
     assert_eq!(reply.body(), Some("1.0"));
 }
 
+/// A per-call timeout bounds that call alone: it fires under a longer shared
+/// timeout, its late reply keeps its ticket, and the next plain call waits for
+/// the shared timeout again.
+#[tokio::test]
+async fn per_call_timeout_applies_to_that_call_only() {
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_command_timeout(Duration::from_secs(5));
+
+    let started = tokio::time::Instant::now();
+    let (short, _) = tokio::join!(
+        client.api_with_timeout("console_complete show", Duration::from_millis(100)),
+        mock.read_command()
+    );
+    assert!(started.elapsed() < Duration::from_secs(2));
+    let Err(EslError::CommandTimeout { timeout_ms, ticket }) = short else {
+        panic!("expected CommandTimeout, got {short:?}");
+    };
+    assert_eq!(timeout_ms, 100);
+
+    let plain = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("status")
+                .await
+        }
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    // Past the per-call timeout: the plain call must still be waiting.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!plain.is_finished(), "the per-call timeout leaked");
+    mock.reply_api("late")
+        .await
+        .unwrap();
+    mock.reply_api("UP")
+        .await
+        .unwrap();
+    let reply = plain
+        .await
+        .unwrap()
+        .expect("the plain call gets its own reply");
+    assert_eq!(reply.body(), Some("UP"));
+    let (_, late_ticket, _) = next_late_reply(&mut events).await;
+    assert_eq!(late_ticket, ticket);
+}
+
 /// Sends `api status`, waits until the switch has read all of it, then drops
 /// the future while it waits for the reply.
 async fn abandon_after_write(

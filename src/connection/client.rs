@@ -31,6 +31,30 @@ impl EslClient {
     /// on the wire: the next command closes the connection and returns a
     /// connection error.
     pub async fn send_command(&self, command: EslCommand) -> EslResult<EslResponse> {
+        self.send_command_waiting(command, None)
+            .await
+    }
+
+    /// [`send_command`](Self::send_command) with its own reply timeout instead
+    /// of the connection's [`set_command_timeout`](Self::set_command_timeout).
+    ///
+    /// The timeout starts once the command is written: time spent queued
+    /// behind another command for the writer is not counted.
+    pub async fn send_command_with_timeout(
+        &self,
+        command: EslCommand,
+        reply_timeout: Duration,
+    ) -> EslResult<EslResponse> {
+        self.send_command_waiting(command, Some(reply_timeout))
+            .await
+    }
+
+    /// `None` reads the connection's command timeout once the write completes.
+    async fn send_command_waiting(
+        &self,
+        command: EslCommand,
+        reply_timeout: Option<Duration>,
+    ) -> EslResult<EslResponse> {
         if !self.is_connected() {
             return Err(EslError::NotConnected);
         }
@@ -92,11 +116,15 @@ impl EslClient {
         }
 
         // Wait for reply from reader task with command timeout (writer still locked)
-        let timeout_ms = self
-            .shared
-            .command_timeout_ms
-            .load(Ordering::Relaxed);
-        let message = match timeout(Duration::from_millis(timeout_ms), &mut rx).await {
+        let wait = reply_timeout.unwrap_or_else(|| {
+            Duration::from_millis(
+                self.shared
+                    .command_timeout_ms
+                    .load(Ordering::Relaxed),
+            )
+        });
+        let timeout_ms = u64::try_from(wait.as_millis()).unwrap_or(u64::MAX);
+        let message = match timeout(wait, &mut rx).await {
             Ok(Ok(message)) => message,
             Ok(Err(e)) => {
                 debug!("pending reply channel closed: {e}");
@@ -181,6 +209,20 @@ impl EslClient {
             .await
     }
 
+    /// [`api`](Self::api) with its own reply timeout; see
+    /// [`send_command_with_timeout`](Self::send_command_with_timeout).
+    pub async fn api_with_timeout(
+        &self,
+        command: &str,
+        reply_timeout: Duration,
+    ) -> EslResult<EslResponse> {
+        let cmd = EslCommand::Api {
+            command: command.to_string(),
+        };
+        self.send_command_with_timeout(cmd, reply_timeout)
+            .await
+    }
+
     /// Execute background API command.
     ///
     /// Returns immediately with a `Job-UUID` in the response. The actual result
@@ -213,6 +255,20 @@ impl EslClient {
             command: command.to_string(),
         };
         self.send_command(cmd)
+            .await
+    }
+
+    /// [`bgapi`](Self::bgapi) with its own timeout for the `Job-UUID` reply;
+    /// the job's result is not bounded by it.
+    pub async fn bgapi_with_timeout(
+        &self,
+        command: &str,
+        reply_timeout: Duration,
+    ) -> EslResult<EslResponse> {
+        let cmd = EslCommand::BgApi {
+            command: command.to_string(),
+        };
+        self.send_command_with_timeout(cmd, reply_timeout)
             .await
     }
 
