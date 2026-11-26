@@ -303,7 +303,10 @@ pub enum EslError {
     /// correlate.
     ///
     /// A dropped future never received its ticket, so its reply pairs only by
-    /// order. Like any stream item, it is dropped and counted when the event
+    /// order. Neither did a command ended by the connection status changing,
+    /// which fails with `ConnectionClosed`: after `disconnect()` the reader
+    /// still runs until EOF and can deliver its reply here. A reply owed from
+    /// before a re-exec carries a ticket no command of this process held. Like any stream item, it is dropped and counted when the event
     /// queue is full under `EventOverflow::DropIncoming`.
     #[error(
         "late {} for command {ticket} (reply text {} bytes, body {} bytes)",

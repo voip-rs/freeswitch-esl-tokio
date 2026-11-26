@@ -77,11 +77,14 @@ The drain logic handles this:
 
 ## Which error says the connection survived
 
-- `ReexecFailed` is a refusal before the stop signal: a command in
-  flight, or a second call. The reader still runs and the connection
-  stays usable.
-- `ReexecReaderLost` is every failure after the stop signal, and a
-  reader already gone when teardown starts. The connection is over:
+- `ReexecFailed` is the one refusal: a command in flight. The reader
+  still runs and the connection stays usable.
+- `ReexecReaderLost` is every other failure: one after the stop
+  signal, a reader or connection already gone when teardown starts (a
+  second call included), a `disconnect()` from a clone while the
+  drain runs, which withholds the fd rather than hand out one about
+  to be shut down, and a command dropped mid-write, which leaves the
+  stream unframeable and is closed. The connection is over:
   `is_connection_error()` is true, and the status already reads
   `Disconnected` when the error returns, naming why:
   `ConnectionClosed` when the switch closed mid-message,
@@ -90,6 +93,10 @@ The drain logic handles this:
 
 A daemon carries on after the first and exits, or reconnects, after
 the second.
+
+Dropping the teardown future after the stop signal abandons the drain:
+nothing is handed over, and the reader ends the connection with
+`ProtocolError`.
 
 Messages completed during drain are dispatched normally to the event
 channel, so the caller receives all in-flight events.
@@ -100,7 +107,8 @@ channel, so the caller receives all in-flight events.
   `pending_reply` is occupied (a command was sent but the reply hasn't
   arrived), teardown returns `ReexecFailed` at once. The caller must
   wait for commands to complete. A command whose future was dropped
-  before its reply arrived still counts as in flight.
+  after its write but before its reply still counts as in flight; one
+  dropped mid-write is closed as unframeable instead.
 - **Owed replies cross the exec.** A command that timed out does not
   block teardown, but the switch still owes its reply.
   `handoff.owed_replies()` counts those not yet arrived when the reader
@@ -114,7 +122,8 @@ channel, so the caller receives all in-flight events.
   every later reply by one. A caller that needs the result itself
   waits for the `LateReply` before tearing down.
 - **Single call.** Teardown takes the reexec channel from SharedState.
-  Calling it twice returns `ReexecFailed`.
+  Calling it twice returns `ReexecReaderLost`, as does a call on a
+  connection that already ended.
 
 ## Race Prevention
 
