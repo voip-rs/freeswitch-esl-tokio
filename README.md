@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Application::new("hangup", Some(HangupCause::NormalClearing.to_string())),
         ],
     )?
-    .with_timeout(Duration::from_secs(30));
+    .with_timeout(Duration::from_secs(30))?;
 
     // BACKGROUND_JOB is a switch-wide event, so the Job-UUID is what makes a
     // result yours. BgJobTracker keeps that bookkeeping.

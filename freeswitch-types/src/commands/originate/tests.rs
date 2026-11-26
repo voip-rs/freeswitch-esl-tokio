@@ -473,7 +473,8 @@ fn serde_originate_application_round_trip() {
         .unwrap()
         .with_cid_num("5551234")
         .unwrap()
-        .with_timeout(Duration::from_secs(30));
+        .with_timeout(Duration::from_secs(30))
+        .unwrap();
     let json = serde_json::to_string(&orig).unwrap();
     assert!(json.contains("\"application\""));
     let parsed: Originate = serde_json::from_str(&json).unwrap();
@@ -653,7 +654,8 @@ fn originate_timeout_only_fills_positional_gaps() {
     );
     let cmd = Originate::application(ep, Application::simple("park"))
         .unwrap()
-        .with_timeout(Duration::from_secs(30));
+        .with_timeout(Duration::from_secs(30))
+        .unwrap();
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/test &park() undef undef undef undef 30"
@@ -741,7 +743,8 @@ fn serde_originate_full_round_trip_with_variables() {
         .unwrap()
         .with_cid_num("5551234")
         .unwrap()
-        .with_timeout(Duration::from_secs(60));
+        .with_timeout(Duration::from_secs(60))
+        .unwrap();
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
@@ -775,7 +778,8 @@ fn serde_originate_inline_round_trip_with_all_fields() {
     .unwrap()
     .with_cid_num("0000")
     .unwrap()
-    .with_timeout(Duration::from_secs(45));
+    .with_timeout(Duration::from_secs(45))
+    .unwrap();
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: Originate = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, orig);
@@ -914,7 +918,8 @@ fn originate_builders_set_and_clear_every_optional_field() {
         .unwrap()
         .with_cid_num("5551234")
         .unwrap()
-        .with_timeout(Duration::from_secs(30));
+        .with_timeout(Duration::from_secs(30))
+        .unwrap();
     assert_eq!(
         cmd.render(BlockParse::MEASURED),
         "originate loopback/9199/default 1000 XML public Alice 5551234 30"
@@ -950,7 +955,8 @@ fn originate_accessors() {
         .unwrap()
         .with_cid_num("5551234")
         .unwrap()
-        .with_timeout(Duration::from_secs(30));
+        .with_timeout(Duration::from_secs(30))
+        .unwrap();
 
     assert!(matches!(cmd.target(), OriginateTarget::Extension(ref e) if e == "1000"));
     assert_eq!(cmd.dialplan(), Some(&DialplanType::XML));
@@ -1214,6 +1220,7 @@ fn separated_commands() -> Vec<(Originate, &'static str)> {
             Originate::application(test_endpoint(), Application::simple("park"))
                 .unwrap()
                 .with_timeout(Duration::from_secs(30))
+                .unwrap()
                 .with_argv_separator('~')
                 .unwrap(),
             "originate ^^~loopback/9199/test~&park()~undef~undef~undef~undef~30",

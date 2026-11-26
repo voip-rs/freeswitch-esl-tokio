@@ -49,7 +49,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
     )?
     .with_cid_name("Alice")?
     .with_cid_num("5551234")?
-    .with_timeout(Duration::from_secs(30));
+    .with_timeout(Duration::from_secs(30))?;
     // originate sofia/internal/1000@10.0.0.1 1000 undef undef Alice 5551234 30
     println!("{}", cmd.render(block_parse));
 
@@ -64,7 +64,7 @@ fn print_endpoint_examples(block_parse: BlockParse) -> Result<(), Box<dyn std::e
         Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")?),
         Application::simple("park"),
     )?
-    .with_timeout(Duration::from_secs(60));
+    .with_timeout(Duration::from_secs(60))?;
     // originate sofia/gateway/my_provider/18005551234 &park() undef undef undef undef 60
     println!("{}", cmd.render(block_parse));
 
@@ -351,7 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?
     .with_cid_name("ESL Test")?
     .with_cid_num("0000000000")?
-    .with_timeout(Duration::from_secs(10));
+    .with_timeout(Duration::from_secs(10))?;
 
     println!("\n=== Live call via bgapi ===");
     // The wire form has to match the revision the switch runs.

@@ -51,6 +51,16 @@ fn validate_wire_text(s: &str, field: &'static str) -> EslResult<()> {
     Ok(())
 }
 
+/// Whole seconds of `duration`, refused past `i32::MAX`, where the switch's
+/// `atoi` into an `int` wraps.
+fn atoi_seconds(field: &'static str, duration: Duration) -> EslResult<u64> {
+    let seconds = duration.as_secs();
+    if i32::try_from(seconds).is_err() {
+        return Err(EslError::SecondsOutOfRange { field, seconds });
+    }
+    Ok(seconds)
+}
+
 /// Refuse a `userauth` user mod_event_socket would split elsewhere: it starts
 /// the password at a `:` on either side of the `@`, and never escapes one.
 pub(crate) fn check_userauth_user(user: &str) -> EslResult<()> {
@@ -299,7 +309,8 @@ pub enum EslCommand {
     },
     /// Keep socket open after channel hangup.
     Linger {
-        /// Linger timeout, or `None` for indefinite.
+        /// Linger timeout in whole seconds up to `i32::MAX`, or `None` for
+        /// indefinite.
         timeout: Option<Duration>,
     },
     /// Cancel linger mode.
@@ -528,8 +539,7 @@ impl EslCommand {
             EslCommand::Linger { timeout } => Ok(match timeout {
                 Some(d) => Self::format_simple_command(
                     "linger",
-                    &[&d.as_secs()
-                        .to_string()],
+                    &[&atoi_seconds("linger", *d)?.to_string()],
                 ),
                 None => Self::format_simple_command("linger", &[]),
             }),

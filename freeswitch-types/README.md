@@ -122,7 +122,7 @@ let cmd = Originate::application(
 ).unwrap()
 .with_cid_name("Outbound Call").unwrap()
 .with_cid_num("5551234").unwrap()
-.with_timeout(Duration::from_secs(30));
+.with_timeout(Duration::from_secs(30)).unwrap();
 
 // Escaping depends on the switch's parser revision, which the crate never asks
 // the switch for: name the release you target.

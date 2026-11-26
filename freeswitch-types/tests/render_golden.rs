@@ -462,7 +462,7 @@ fn o_positionals_gap_undef() -> Result<Originate, OriginateError> {
     Originate::extension(base_endpoint(), "1000")?.with_cid_num("5551234567")
 }
 fn o_timeout() -> Result<Originate, OriginateError> {
-    Ok(Originate::extension(base_endpoint(), "1000")?.with_timeout(Duration::from_secs(45)))
+    Originate::extension(base_endpoint(), "1000")?.with_timeout(Duration::from_secs(45))
 }
 
 type OriginateBuilder = fn() -> Result<Originate, OriginateError>;

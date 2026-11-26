@@ -112,7 +112,8 @@ async fn live_originate_inline_target() {
 async fn live_originate_timeout_fills_positional_gaps() {
     let cmd = Originate::application(test_9199(), Application::simple("park"))
         .unwrap()
-        .with_timeout(Duration::from_secs(5));
+        .with_timeout(Duration::from_secs(5))
+        .unwrap();
 
     originate_and_reap(&cmd).await;
 }
@@ -211,7 +212,8 @@ async fn originate_positionals(separator: Option<char>) {
     .unwrap()
     .with_cid_num("5551234")
     .unwrap()
-    .with_timeout(Duration::from_secs(6));
+    .with_timeout(Duration::from_secs(6))
+    .unwrap();
     let empty_last = separated(
         park()
             .with_context("test")
@@ -400,6 +402,7 @@ async fn unanswered_originate_elapsed(
     )
     .unwrap()
     .with_timeout(Duration::from_secs(seconds))
+    .unwrap()
     .with_argv_separator('~')
     .expect("'~' separates originate's arguments");
     let line = cmd.render(block_parse_under_test());

@@ -55,7 +55,7 @@ pub use super::endpoint::Endpoint;
 /// )?
 /// .with_cid_name("Alice")?
 /// .with_cid_num("5551234")?
-/// .with_timeout(Duration::from_secs(30));
+/// .with_timeout(Duration::from_secs(30))?;
 /// # Ok::<(), OriginateError>(())
 /// ```
 ///
@@ -263,10 +263,11 @@ impl Originate {
     }
 
     /// Set the originate timeout. Sub-second precision is truncated to whole
-    /// seconds on the wire and in serde round-trips.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+    /// seconds on the wire and in serde round-trips. Refuses more than `i32::MAX`
+    /// seconds, which the switch reads with `atoi` and wraps.
+    pub fn with_timeout(mut self, timeout: Duration) -> Result<Self, OriginateError> {
         self.timeout = Some(timeout);
-        self
+        self.checked()
     }
 
     /// Leave the timeout to the switch.
@@ -357,6 +358,13 @@ impl Originate {
             .eq_ignore_ascii_case(UNDEF)
         {
             return Err(OriginateError::UndefPositional("target"));
+        }
+        if let Some(seconds) = self
+            .timeout
+            .map(|timeout| timeout.as_secs())
+            .filter(|&seconds| i32::try_from(seconds).is_err())
+        {
+            return Err(OriginateError::TimeoutOutOfRange { seconds });
         }
         check_target_readable(&self.target)
     }

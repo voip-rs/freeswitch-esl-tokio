@@ -373,7 +373,8 @@ impl EslConnectOptions {
         Self::default()
     }
 
-    /// Set the event queue capacity.
+    /// Set the event queue capacity. Zero is taken as one, and a size past the
+    /// largest tokio's channel holds as that size.
     pub fn with_event_queue_size(mut self, size: usize) -> Self {
         self.event_queue_size = size;
         self
@@ -670,7 +671,7 @@ impl EslClient {
     ) -> (Self, EslEventStream) {
         let queue_size = options
             .event_queue_size
-            .max(1);
+            .clamp(1, tokio::sync::Semaphore::MAX_PERMITS);
 
         let (read_half, write_half) = stream.into_split();
 

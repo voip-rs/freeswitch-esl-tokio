@@ -140,7 +140,9 @@ pub(crate) fn build_originate(spec: &OriginateSpec) -> Option<Originate> {
             .ok()?;
     }
     if let Some(timeout) = spec.timeout {
-        originate = originate.with_timeout(Duration::from_secs(timeout));
+        originate = originate
+            .with_timeout(Duration::from_secs(timeout))
+            .ok()?;
     }
     match spec.argv_separator {
         Some(sep) => originate

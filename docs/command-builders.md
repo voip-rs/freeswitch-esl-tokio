@@ -17,7 +17,7 @@ each naming its target; the rest implement `Display`/`FromStr`.
 
 ```rust
 let block_parse = BlockParse::for_version(&"1.10.12".parse()?)?;
-let cmd = Originate::application(endpoint, app)?.with_timeout(Duration::from_secs(30));
+let cmd = Originate::application(endpoint, app)?.with_timeout(Duration::from_secs(30))?;
 let line = cmd.render(block_parse);
 client.bgapi(&line).await?;
 

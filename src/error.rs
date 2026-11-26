@@ -313,6 +313,16 @@ pub enum EslError {
         /// The command this answers.
         ticket: CommandTicket,
     },
+
+    /// A number of seconds past `i32::MAX`, which the switch reads with `atoi`
+    /// into an `int` and wraps. Nothing was sent.
+    #[error("{field} of {seconds} seconds is past what the switch reads")]
+    SecondsOutOfRange {
+        /// Which command field.
+        field: &'static str,
+        /// The value as given, in whole seconds.
+        seconds: u64,
+    },
 }
 
 fn reply_content_type(response: &EslResponse) -> &str {
@@ -493,6 +503,7 @@ impl EslError {
             EslError::InvalidBodyLine { .. } => false,
             EslError::UnsolicitedReply { .. } => false,
             EslError::LateReply { .. } => false,
+            EslError::SecondsOutOfRange { .. } => false,
         }
     }
 
@@ -552,6 +563,7 @@ impl EslError {
             EslError::InvalidBodyLine { .. } => false,
             EslError::UnsolicitedReply { .. } => false,
             EslError::LateReply { .. } => false,
+            EslError::SecondsOutOfRange { .. } => false,
         }
     }
 

@@ -735,7 +735,9 @@ impl EslClient {
     /// FreeSWITCH sends a `text/disconnect-notice` with `Content-Disposition: linger`
     /// and keeps the socket open so the client can drain remaining events.
     ///
-    /// Pass `None` for indefinite linger, or `Some(Duration)` for a timeout.
+    /// Pass `None` for indefinite linger, or `Some(Duration)` for a timeout in
+    /// whole seconds; one past `i32::MAX` seconds is refused with
+    /// [`EslError::SecondsOutOfRange`].
     pub async fn linger(&self, timeout: Option<Duration>) -> EslResult<()> {
         self.send_command_ok(EslCommand::Linger { timeout })
             .await

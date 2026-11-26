@@ -117,6 +117,12 @@ pub enum OriginateError {
     },
     /// A bridge dial string with no groups, which renders as an empty argument.
     NoBridgeLegs,
+    /// A timeout past `i32::MAX` seconds, which `originate_function` reads with `atoi` and
+    /// wraps.
+    TimeoutOutOfRange {
+        /// The timeout in whole seconds.
+        seconds: u64,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -209,6 +215,10 @@ impl std::fmt::Display for OriginateError {
             ),
             Self::EmptyBridgeGroup { group } => write!(f, "bridge group {group} has no legs"),
             Self::NoBridgeLegs => f.write_str("the bridge dial string has no legs"),
+            Self::TimeoutOutOfRange { seconds } => write!(
+                f,
+                "timeout of {seconds} seconds is past what the switch reads into an int"
+            ),
         }
     }
 }
@@ -239,7 +249,8 @@ impl std::error::Error for OriginateError {
             | Self::UndeliverableVariable { .. }
             | Self::ChannelScopeGlobalVariables
             | Self::EmptyBridgeGroup { .. }
-            | Self::NoBridgeLegs => None,
+            | Self::NoBridgeLegs
+            | Self::TimeoutOutOfRange { .. } => None,
         }
     }
 }
