@@ -1,6 +1,6 @@
 //! Connection management for ESL
 
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::tcp::OwnedWriteHalf;
@@ -174,10 +174,12 @@ const DEFAULT_COMMAND_TIMEOUT_MS: u64 = 5000;
 /// ESL carries no correlation IDs, so a reply owed to a command that timed out,
 /// or whose future was dropped while it waited, has to be counted here before
 /// the next waiter can consume it by mistake. A waiter found on install is such
-/// a dropped command's.
+/// a dropped command's. One dropped before its write completed left an unknown
+/// prefix of its command on the wire: no reply can be assumed owed and the next
+/// command cannot be framed after it, so the connection is closed instead.
 struct PendingReply {
     /// Waiter for the currently in-flight command (`None` between commands).
-    waiting: Option<oneshot::Sender<EslMessage>>,
+    waiting: Option<Waiter>,
     /// Late replies the reader drains before dispatching to `waiting`. Non-zero
     /// coexists with `waiting: Some`: the next command installs while one is
     /// still in flight.
@@ -195,7 +197,45 @@ impl PendingReply {
             reader_dead: false,
         }
     }
+
+    /// Installs the waiter for a command about to be written, or reports that
+    /// a previous command was dropped mid-write. The returned flag is the
+    /// writer's to set once its write completes.
+    fn install(
+        &mut self,
+        tx: oneshot::Sender<EslMessage>,
+    ) -> Result<Arc<AtomicBool>, AbandonedMidWrite> {
+        if let Some(abandoned) = self
+            .waiting
+            .take()
+        {
+            if !abandoned
+                .written
+                .load(Ordering::Acquire)
+            {
+                return Err(AbandonedMidWrite);
+            }
+            self.stale_replies += 1;
+        }
+        let written = Arc::new(AtomicBool::new(false));
+        self.waiting = Some(Waiter {
+            tx,
+            written: written.clone(),
+        });
+        Ok(written)
+    }
 }
+
+/// The command awaiting the next reply.
+struct Waiter {
+    tx: oneshot::Sender<EslMessage>,
+    /// Set with no await point after the write completes, so a future
+    /// dropped after its write cannot leave it unset.
+    written: Arc<AtomicBool>,
+}
+
+/// A command's future was dropped before its bytes all reached the socket.
+struct AbandonedMidWrite;
 
 /// Shared state between EslClient and the reader task
 struct SharedState {

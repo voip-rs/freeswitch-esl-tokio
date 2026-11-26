@@ -370,11 +370,12 @@ async fn dispatch_message(
                      command-reply correlation; {} stale replies remaining",
                     message.message_type, reply_text, pending.stale_replies,
                 );
-            } else if let Some(tx) = pending
+            } else if let Some(waiter) = pending
                 .waiting
                 .take()
             {
-                if tx
+                if waiter
+                    .tx
                     .send(message)
                     .is_err()
                 {
