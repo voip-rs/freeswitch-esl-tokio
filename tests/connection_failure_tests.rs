@@ -846,7 +846,14 @@ async fn dropped_event_stream_is_reported_in_the_status() {
     while client.is_connected() && tokio::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    assert!(!client.is_connected(), "{:?}", client.status());
+    assert!(
+        matches!(
+            client.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::EventStreamDropped)
+        ),
+        "{:?}",
+        client.status()
+    );
 }
 
 #[tokio::test]

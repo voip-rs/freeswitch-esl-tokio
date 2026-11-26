@@ -340,7 +340,7 @@ async fn dispatch_parsed_event(
                     }),
                 ) {
                     debug!("Event channel closed, reader exiting");
-                    return ControlFlow::Break(None);
+                    return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
                 }
                 return ControlFlow::Continue(());
             }
@@ -351,7 +351,7 @@ async fn dispatch_parsed_event(
     let event_result = parser.parse_event(message, format);
     if !dispatch_event(sink, shared, event_result).await {
         debug!("Event channel closed, reader exiting");
-        return ControlFlow::Break(None);
+        return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
     }
     ControlFlow::Continue(())
 }
@@ -368,7 +368,7 @@ async fn dispatch_reply_report(
     warn!("{error}; delivered on the event stream");
     if !dispatch_event(sink, shared, Err(error)).await {
         debug!("Event channel closed, reader exiting");
-        return ControlFlow::Break(None);
+        return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
     }
     ControlFlow::Continue(())
 }

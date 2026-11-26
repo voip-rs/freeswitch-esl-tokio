@@ -74,6 +74,9 @@ pub enum DisconnectReason {
     ProtocolError(String),
     /// Connection rejected by ACL (`text/rude-rejection`)
     AccessDenied(String),
+    /// The application dropped its [`EslEventStream`]; the reader stopped at
+    /// the next event, error or late reply it had to deliver.
+    EventStreamDropped,
 }
 
 impl std::fmt::Display for DisconnectReason {
@@ -97,6 +100,7 @@ impl std::fmt::Display for DisconnectReason {
             DisconnectReason::ReexecTeardown => write!(f, "re-exec teardown"),
             DisconnectReason::ProtocolError(msg) => write!(f, "protocol error: {}", msg),
             DisconnectReason::AccessDenied(msg) => write!(f, "access denied: {}", msg),
+            DisconnectReason::EventStreamDropped => write!(f, "event stream dropped"),
         }
     }
 }
