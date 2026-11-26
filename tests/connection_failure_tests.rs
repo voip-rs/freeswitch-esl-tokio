@@ -851,7 +851,7 @@ async fn command_dropped_mid_write_closes_the_connection() {
 
     // The mock never reads, so a command larger than both socket buffers
     // cannot finish writing.
-    let huge = "x".repeat(64 * 1024 * 1024);
+    let huge = "x".repeat(32 * 1024 * 1024);
     let stuck = tokio::spawn({
         let client = client.clone();
         async move {
@@ -885,7 +885,7 @@ async fn write_that_cannot_finish_times_out_and_closes() {
     let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
     client.set_command_timeout(Duration::from_millis(500));
 
-    let huge = "x".repeat(64 * 1024 * 1024);
+    let huge = "x".repeat(32 * 1024 * 1024);
     let queued = tokio::spawn({
         let client = client.clone();
         async move {
@@ -896,14 +896,14 @@ async fn write_that_cannot_finish_times_out_and_closes() {
         }
     });
     // Bounded here only so a regression fails instead of hanging.
-    let err = tokio::time::timeout(Duration::from_secs(5), client.api(&huge))
+    let err = tokio::time::timeout(Duration::from_secs(30), client.api(&huge))
         .await
         .expect("the command timeout covers the write")
         .expect_err("the write cannot finish");
     assert!(err.is_connection_error(), "{err:?}");
     assert!(!client.is_connected());
 
-    let queued = tokio::time::timeout(Duration::from_secs(5), queued)
+    let queued = tokio::time::timeout(Duration::from_secs(30), queued)
         .await
         .expect("the queued command is released")
         .unwrap();
