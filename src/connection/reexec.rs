@@ -81,6 +81,9 @@ impl EslClient {
     ///
     /// - No ESL command may be in-flight (pending reply). Returns
     ///   [`EslError::ReexecFailed`] if a command is pending.
+    /// - A timed-out command's reply not yet received as
+    ///   [`EslError::LateReply`] does not block teardown; the new process
+    ///   receives it as [`EslError::UnsolicitedReply`].
     /// - May only be called once. Returns an error on subsequent calls.
     ///
     /// # After this call

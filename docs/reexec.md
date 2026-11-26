@@ -72,7 +72,14 @@ channel, so the caller receives all in-flight events.
 
 - **No command in-flight.** If `pending_reply` is occupied (a command
   was sent but the reply hasn't arrived), teardown returns
-  `ReexecFailed`. The caller must wait for commands to complete.
+  `ReexecFailed`. The caller must wait for commands to complete. A
+  command whose future was dropped before its reply arrived still
+  counts as in flight.
+- **Owed replies cross the exec.** A command that timed out does not
+  block teardown, but the switch still owes its reply. If it has not
+  arrived as `LateReply` before teardown, the new process receives it
+  as `UnsolicitedReply`, with no ticket to pair it with. A caller that
+  needs that result waits for the `LateReply` before tearing down.
 - **Single call.** Teardown takes the reexec channel from SharedState.
   Calling it twice returns `ReexecFailed`.
 
