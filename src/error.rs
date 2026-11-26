@@ -180,7 +180,12 @@ pub enum EslError {
     #[error("originate command refused")]
     Originate(#[from] OriginateError),
 
-    /// Re-exec teardown failed
+    /// Re-exec teardown failed.
+    ///
+    /// A refusal before the reader was told to stop (a command in flight, a
+    /// second call) leaves the connection as it was. A failure after it means
+    /// the drain did not finish: the reader has stopped, and the connection
+    /// status says why.
     #[cfg(unix)]
     #[error("Re-exec teardown failed: {reason}")]
     ReexecFailed {
@@ -547,8 +552,8 @@ impl EslError {
             EslError::InvalidHeader { .. } => true,
             EslError::HeaderParse(_) => false,
             EslError::Originate(_) => false,
-            // Re-exec teardown attempt failed; the original socket is
-            // still alive — caller can keep using it.
+            // Whether the socket survived depends on when teardown failed; the
+            // connection status says, so this stays a refusal either way.
             #[cfg(unix)]
             EslError::ReexecFailed { .. } => false,
             EslError::FilterDeleteAllHeader { .. } => false,

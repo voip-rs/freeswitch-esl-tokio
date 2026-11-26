@@ -18,9 +18,7 @@ use crate::{
 };
 
 use super::reexec::ReexecReader;
-use super::{
-    read_into_parser, ConnectionStatus, DisconnectReason, EventOverflow, ReadStep, SharedState,
-};
+use super::{read_into_parser, DisconnectReason, EventOverflow, ReadStep, SharedState};
 
 /// Per-iteration view of the event channel: the overflow policy, the re-exec
 /// stop signal the wait races against, and what the wait cost.
@@ -256,20 +254,12 @@ pub(super) async fn reader_loop(
         Err(payload) => {
             let reason = describe_panic(payload.as_ref());
             tracing::error!("{reason}");
-            Some(DisconnectReason::IoError(reason))
+            DisconnectReason::IoError(reason)
         }
     };
     // `event_tx` is still alive here: a consumer that sees recv() -> None must
     // find the disconnect status already published, not a stale Connected.
-    if let Some(reason) = reason {
-        if shared
-            .status_tx
-            .send(ConnectionStatus::Disconnected(reason))
-            .is_err()
-        {
-            debug!("No status receiver left to observe the disconnect");
-        }
-    }
+    shared.publish_disconnect(reason);
     fail_pending_reply(&shared).await;
 }
 
@@ -317,7 +307,7 @@ async fn dispatch_parsed_event(
     parser: &EslParser,
     shared: &SharedState,
     sink: &mut EventSink<'_>,
-) -> ControlFlow<Option<DisconnectReason>> {
+) -> ControlFlow<DisconnectReason> {
     let ct = message
         .headers
         .header_str(HEADER_CONTENT_TYPE);
@@ -340,7 +330,7 @@ async fn dispatch_parsed_event(
                     }),
                 ) {
                     debug!("Event channel closed, reader exiting");
-                    return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
+                    return ControlFlow::Break(DisconnectReason::EventStreamDropped);
                 }
                 return ControlFlow::Continue(());
             }
@@ -351,7 +341,7 @@ async fn dispatch_parsed_event(
     let event_result = parser.parse_event(message, format);
     if !dispatch_event(sink, shared, event_result).await {
         debug!("Event channel closed, reader exiting");
-        return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
+        return ControlFlow::Break(DisconnectReason::EventStreamDropped);
     }
     ControlFlow::Continue(())
 }
@@ -363,12 +353,12 @@ async fn dispatch_reply_report(
     error: EslError,
     shared: &SharedState,
     sink: &mut EventSink<'_>,
-) -> ControlFlow<Option<DisconnectReason>> {
+) -> ControlFlow<DisconnectReason> {
     // Display names the content type and lengths, never the text.
     warn!("{error}; delivered on the event stream");
     if !dispatch_event(sink, shared, Err(error)).await {
         debug!("Event channel closed, reader exiting");
-        return ControlFlow::Break(Some(DisconnectReason::EventStreamDropped));
+        return ControlFlow::Break(DisconnectReason::EventStreamDropped);
     }
     ControlFlow::Continue(())
 }
@@ -381,7 +371,7 @@ async fn dispatch_message(
     parser: &EslParser,
     shared: &SharedState,
     sink: &mut EventSink<'_>,
-) -> ControlFlow<Option<DisconnectReason>> {
+) -> ControlFlow<DisconnectReason> {
     match message.message_type {
         MessageType::Event => return dispatch_parsed_event(message, parser, shared, sink).await,
         MessageType::CommandReply | MessageType::ApiResponse => {
@@ -431,10 +421,10 @@ async fn dispatch_message(
                 .header_str("Controlled-Session-UUID")
                 .map(str::to_string);
             info!("Received disconnect notice from server");
-            ControlFlow::Break(Some(DisconnectReason::ServerNotice {
+            ControlFlow::Break(DisconnectReason::ServerNotice {
                 controlled_session_uuid,
                 body: message.body,
-            }))
+            })
         }
         MessageType::RudeRejection => {
             let reason = message
@@ -450,7 +440,7 @@ async fn dispatch_message(
             ) {
                 debug!("Event channel closed before the rude rejection was delivered");
             }
-            ControlFlow::Break(Some(DisconnectReason::AccessDenied(reason)))
+            ControlFlow::Break(DisconnectReason::AccessDenied(reason))
         }
         MessageType::AuthRequest => {
             // Post-authentication it means FreeSWITCH and the client are out of
@@ -464,7 +454,7 @@ async fn dispatch_message(
             ) {
                 debug!("Event channel closed before the desync error was delivered");
             }
-            ControlFlow::Break(Some(DisconnectReason::ProtocolError(reason)))
+            ControlFlow::Break(DisconnectReason::ProtocolError(reason))
         }
     }
 }
@@ -496,7 +486,7 @@ async fn drain_for_reexec(
     parser: &mut EslParser,
     read_buffer: &mut [u8],
     reexec: &mut ReexecReader,
-) -> ControlFlow<Option<DisconnectReason>> {
+) -> ControlFlow<DisconnectReason> {
     use crate::constants::REEXEC_DRAIN_TIMEOUT_MS;
 
     if parser.is_waiting_for_headers() {
@@ -515,7 +505,7 @@ async fn drain_for_reexec(
                 warn!("Re-exec caller gone before the residual bytes were delivered");
             }
         }
-        return ControlFlow::Break(Some(DisconnectReason::ReexecTeardown));
+        return ControlFlow::Break(DisconnectReason::ReexecTeardown);
     }
 
     // WaitingForBody: more socket data is needed to finish the current message.
@@ -531,27 +521,40 @@ async fn drain_for_reexec(
                     source: None,
                 },
             );
-            ControlFlow::Break(None)
+            ControlFlow::Break(DisconnectReason::ConnectionClosed)
         }
         Ok(ReadStep::Idle) => {
-            warn!("Re-exec drain timeout waiting for message body");
+            let reason = "drain timeout waiting for message body";
+            warn!("Re-exec {reason}");
             fail_reexec(
                 reexec,
                 EslError::ReexecFailed {
-                    reason: "drain timeout waiting for message body".into(),
+                    reason: reason.into(),
                     source: None,
                 },
             );
-            ControlFlow::Break(None)
+            ControlFlow::Break(DisconnectReason::ProtocolError(reason.into()))
         }
         Err(e) => {
             warn!(
                 "Re-exec drain failed while reading the message body: {}",
                 e.display_chain()
             );
+            let reason = read_failure_reason(&e);
             fail_reexec(reexec, e);
-            ControlFlow::Break(None)
+            ControlFlow::Break(reason)
         }
+    }
+}
+
+/// The reason a failed socket read or parser feed ends the reader with.
+fn read_failure_reason(error: &EslError) -> DisconnectReason {
+    match error {
+        EslError::Io(e) => DisconnectReason::IoError(e.to_string()),
+        e => DisconnectReason::ProtocolError(
+            e.display_chain()
+                .to_string(),
+        ),
     }
 }
 
@@ -589,9 +592,8 @@ fn liveness_expired(shared: &SharedState, last_recv: Instant) -> bool {
     true
 }
 
-/// Returns the reason its caller broadcasts, or `None` for the exits that
-/// publish none: a closed event channel, or a re-exec failure already delivered
-/// on the teardown result channel.
+/// Returns the reason its caller publishes, a re-exec drain's failure
+/// included: the teardown result channel reaches only the teardown caller.
 async fn reader_loop_inner(
     mut reader: OwnedReadHalf,
     mut parser: EslParser,
@@ -599,7 +601,7 @@ async fn reader_loop_inner(
     event_tx: &mpsc::Sender<Result<EslEvent, EslError>>,
     overflow: EventOverflow,
     #[cfg_attr(not(unix), allow(unused_variables, unused_mut))] mut reexec: ReexecReader,
-) -> Option<DisconnectReason> {
+) -> DisconnectReason {
     let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
     let mut last_recv = Instant::now();
     #[cfg(unix)]
@@ -668,7 +670,7 @@ async fn reader_loop_inner(
                     .display_chain()
                     .to_string();
                 warn!("Parser error: {}", reason);
-                return Some(DisconnectReason::ProtocolError(reason));
+                return DisconnectReason::ProtocolError(reason);
             }
         }
 
@@ -702,23 +704,16 @@ async fn reader_loop_inner(
             Ok(ReadStep::Fed) => last_recv = Instant::now(),
             Ok(ReadStep::Eof) => {
                 info!("Connection closed (EOF)");
-                return Some(DisconnectReason::ConnectionClosed);
+                return DisconnectReason::ConnectionClosed;
             }
             Ok(ReadStep::Idle) => {
                 if liveness_expired(&shared, last_recv) {
-                    return Some(DisconnectReason::HeartbeatExpired);
+                    return DisconnectReason::HeartbeatExpired;
                 }
             }
-            Err(EslError::Io(e)) => {
-                warn!("Read error: {}", e);
-                return Some(DisconnectReason::IoError(e.to_string()));
-            }
             Err(e) => {
-                let reason = e
-                    .display_chain()
-                    .to_string();
-                warn!("Buffer error: {}", reason);
-                return Some(DisconnectReason::ProtocolError(reason));
+                warn!("Read error: {}", e.display_chain());
+                return read_failure_reason(&e);
             }
         }
     }

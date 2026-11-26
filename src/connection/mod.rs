@@ -331,6 +331,22 @@ struct SharedState {
     induced_panic: std::sync::Mutex<Option<fn()>>,
 }
 
+impl SharedState {
+    /// Moves the status from `Connected` to `Disconnected(reason)`. The first
+    /// reason stands: a later one, such as the EOF the switch answers a
+    /// `disconnect()` with, is a consequence of it.
+    fn publish_disconnect(&self, reason: DisconnectReason) {
+        self.status_tx
+            .send_if_modified(|status| {
+                if !matches!(status, ConnectionStatus::Connected) {
+                    return false;
+                }
+                *status = ConnectionStatus::Disconnected(reason);
+                true
+            });
+    }
+}
+
 /// What the reader does when the event queue is full.
 ///
 /// Waiting is only sound on a connection that issues no commands: the reader

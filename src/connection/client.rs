@@ -159,16 +159,10 @@ impl EslClient {
             written_flag.store(true, Ordering::Release);
         }
         if let Err(e) = written {
-            let mut pending = self
-                .shared
-                .pending_reply
-                .lock()
+            self.drop_unwritten_waiter()
                 .await;
-            // Never hit the wire, so no reply is owed: drop the waiter rather
-            // than move it to `stale`, or reexec sees a phantom in-flight command.
-            pending.waiting = None;
-            drop(pending);
-            drop(writer);
+            self.close_after_partial_write(&mut writer, DisconnectReason::IoError(e.to_string()))
+                .await;
             return Err(EslError::Io(e));
         }
 
@@ -231,7 +225,8 @@ impl EslClient {
     }
 
     /// Clears the waiter of a command whose write did not complete: no reply
-    /// is owed, and the connection is closed behind it.
+    /// can be counted on, and the connection is closed behind it. Moving it to
+    /// `stale` instead would leave teardown a phantom command in flight.
     async fn drop_unwritten_waiter(&self) {
         self.shared
             .pending_reply
@@ -1069,15 +1064,13 @@ impl EslClient {
     ///
     /// Sets the connection status to [`crate::DisconnectReason::ClientRequested`]
     /// before closing the socket, so callers can distinguish client-initiated
-    /// disconnects from server-initiated ones. A command in flight sees the
+    /// disconnects from server-initiated ones. A connection that had already
+    /// ended keeps the reason it ended with. A command in flight sees the
     /// status change and gives up the writer, failing with a connection error.
     pub async fn disconnect(&self) -> EslResult<()> {
         info!("Client requested disconnect");
         self.shared
-            .status_tx
-            .send_replace(ConnectionStatus::Disconnected(
-                super::DisconnectReason::ClientRequested,
-            ));
+            .publish_disconnect(DisconnectReason::ClientRequested);
         let mut writer = self
             .writer
             .lock()
@@ -1092,14 +1085,20 @@ impl EslClient {
     /// Closes a connection a partial write left unframeable, and returns the
     /// error the command reports.
     async fn close_unframeable(&self, writer: &mut OwnedWriteHalf, reason: &str) -> EslError {
+        self.close_after_partial_write(writer, DisconnectReason::ProtocolError(reason.into()))
+            .await;
+        EslError::protocol_error(reason)
+    }
+
+    async fn close_after_partial_write(
+        &self,
+        writer: &mut OwnedWriteHalf,
+        reason: DisconnectReason,
+    ) {
         warn!("{reason}; closing the connection");
         self.shared
-            .status_tx
-            .send_replace(ConnectionStatus::Disconnected(
-                DisconnectReason::ProtocolError(reason.into()),
-            ));
+            .publish_disconnect(reason);
         shutdown_after_partial_write(writer).await;
-        EslError::protocol_error(reason)
     }
 }
 
