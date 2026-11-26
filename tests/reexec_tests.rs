@@ -497,3 +497,127 @@ async fn a_drain_past_the_teardown_deadline_is_abandoned() {
     assert!(end.is_ok(), "the reader kept running");
     assert_eq!(client.status(), status);
 }
+
+/// What the next process image gets: the handed-over socket, dup'ed so it
+/// registers afresh with the reactor, the old client forgotten as `exec()`
+/// would.
+// qual:allow(unsafe) reason: "fd dup/close is what the re-exec handoff test exercises"
+fn adopt_handoff(
+    client: EslClient,
+    handoff: &freeswitch_esl_tokio::ReexecHandoff,
+    options: EslConnectOptions,
+) -> (EslClient, freeswitch_esl_tokio::EslEventStream) {
+    use std::os::unix::io::FromRawFd;
+
+    let fd = handoff.fd();
+    std::mem::forget(client);
+    let new_fd = unsafe { libc::dup(fd) };
+    assert!(
+        new_fd >= 0,
+        "dup() failed: {}",
+        std::io::Error::last_os_error()
+    );
+    unsafe { libc::close(fd) };
+    let std_stream = unsafe { std::net::TcpStream::from_raw_fd(new_fd) };
+    std_stream
+        .set_nonblocking(true)
+        .expect("set_nonblocking failed");
+    let stream = tokio::net::TcpStream::from_std(std_stream).expect("from_std failed");
+    EslClient::adopt_stream_with_options(stream, handoff.residual(), options).unwrap()
+}
+
+/// Tears down with one timed-out command's reply still owed, adopts the
+/// socket with or without that count, and has the switch answer the owed
+/// command and then the new process's first command. Returns that command's
+/// result and the next item on the new event stream.
+async fn owed_reply_across_reexec(
+    carry_count: bool,
+) -> (
+    Result<freeswitch_esl_tokio::EslResponse, EslError>,
+    Result<freeswitch_esl_tokio::EslEvent, EslError>,
+) {
+    use std::time::Duration;
+
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_command_timeout(Duration::from_millis(100));
+    let (timed_out, _) = tokio::join!(client.api("msleep 3000"), mock.read_command());
+    assert!(
+        matches!(timed_out, Err(EslError::CommandTimeout { .. })),
+        "{timed_out:?}"
+    );
+
+    let handoff = client
+        .teardown_for_reexec()
+        .await
+        .expect("a timed-out command does not block teardown");
+    assert_eq!(handoff.owed_replies(), 1);
+    let options = if carry_count {
+        EslConnectOptions::new().with_owed_replies(handoff.owed_replies())
+    } else {
+        EslConnectOptions::new()
+    };
+    let (client, mut events) = adopt_handoff(client, &handoff, options);
+
+    let first = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("status")
+                .await
+        }
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    mock.reply_api("owed-reply")
+        .await
+        .unwrap();
+    mock.reply_api("own-reply")
+        .await
+        .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), first)
+        .await
+        .expect("the command returns")
+        .unwrap();
+    let next = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("an item arrives")
+        .expect("the stream stays open");
+    (result, next)
+}
+
+/// With the count carried across, the owed reply comes out as a `LateReply`
+/// and the new process's command gets its own.
+#[tokio::test]
+async fn an_owed_reply_carried_across_reexec_stays_late() {
+    let (result, next) = owed_reply_across_reexec(true).await;
+    assert_eq!(
+        result
+            .expect("the command gets a reply")
+            .body(),
+        Some("own-reply")
+    );
+    match next {
+        Err(EslError::LateReply { response, .. }) => {
+            assert_eq!(response.body(), Some("owed-reply"))
+        }
+        other => panic!("expected LateReply, got {other:?}"),
+    }
+}
+
+/// Control: without the count the new process takes the owed reply as its
+/// first command's, and its own reply is left over.
+#[tokio::test]
+async fn an_owed_reply_not_carried_across_reexec_is_misrouted() {
+    let (result, next) = owed_reply_across_reexec(false).await;
+    assert_eq!(
+        result
+            .expect("the command gets a reply")
+            .body(),
+        Some("owed-reply")
+    );
+    assert!(
+        matches!(next, Err(EslError::UnsolicitedReply { .. })),
+        "{next:?}"
+    );
+}
