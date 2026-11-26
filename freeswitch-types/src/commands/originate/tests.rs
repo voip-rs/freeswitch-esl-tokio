@@ -1961,3 +1961,39 @@ fn an_enterprise_separator_in_a_variable_value_is_refused() {
     )
     .is_err());
 }
+
+/// The switch reads the timeout with `atoi`, so a value past `i32::MAX` wraps
+/// there; every way of building one refuses it.
+#[test]
+fn originate_timeout_past_the_switch_int_is_refused() {
+    let base = || Originate::extension(test_endpoint(), "1000").unwrap();
+    let max = u64::try_from(i32::MAX).unwrap();
+
+    let at_max = base()
+        .with_timeout(Duration::from_secs(max))
+        .unwrap();
+    assert!(at_max
+        .render(BlockParse::MEASURED)
+        .ends_with(" 2147483647"));
+    assert_eq!(
+        base().with_timeout(Duration::from_secs(max + 1)),
+        Err(OriginateError::TimeoutOutOfRange { seconds: max + 1 })
+    );
+    assert_eq!(
+        Originate::parse_for(
+            "originate loopback/9199 1000 XML default undef undef 2147483648",
+            BlockParse::MEASURED
+        ),
+        Err(OriginateError::TimeoutOutOfRange { seconds: max + 1 })
+    );
+    let json = |secs: u64| {
+        format!(
+            r#"{{"endpoint": {{"loopback": {{"extension": "9199"}}}}, "extension": "1000", "timeout_secs": {secs}}}"#
+        )
+    };
+    assert!(serde_json::from_str::<Originate>(&json(max)).is_ok());
+    let msg = serde_json::from_str::<Originate>(&json(max + 1))
+        .expect_err("past i32::MAX")
+        .to_string();
+    assert!(msg.contains("timeout"), "{msg}");
+}

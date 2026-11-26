@@ -1326,3 +1326,20 @@ async fn a_sub_millisecond_liveness_timeout_is_armed() {
         ConnectionStatus::Disconnected(DisconnectReason::HeartbeatExpired)
     );
 }
+
+/// An event queue size past what tokio's channel holds is clamped to it, as
+/// zero is clamped to one, rather than panicking once the session is up.
+#[tokio::test]
+async fn an_event_queue_size_past_the_channel_limit_is_clamped() {
+    for size in [0, usize::MAX] {
+        let options = EslConnectOptions::default().with_event_queue_size(size);
+        let (mut mock, client, mut events) =
+            mock_server::setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
+        mock.send_heartbeat()
+            .await
+            .unwrap();
+        let event = recv_event(&mut events).await;
+        assert_eq!(event.event_type(), Some(EslEventType::Heartbeat), "{size}");
+        assert!(client.is_connected());
+    }
+}

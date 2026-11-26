@@ -1163,4 +1163,34 @@ mod tests {
             .header("X-Bad\0", "value")
             .is_err());
     }
+
+    /// mod_event_socket reads the linger seconds with `atoi`, which wraps past
+    /// `i32::MAX` into a negative or short linger.
+    #[test]
+    fn linger_past_the_switch_int_is_refused() {
+        let max = u64::try_from(i32::MAX).unwrap();
+        let linger = |secs| EslCommand::Linger {
+            timeout: Some(Duration::from_secs(secs)),
+        };
+        assert_eq!(
+            linger(max)
+                .to_wire_format()
+                .unwrap(),
+            "linger 2147483647\n\n"
+        );
+        let err = linger(max + 1)
+            .to_wire_format()
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EslError::SecondsOutOfRange {
+                    field: "linger",
+                    seconds,
+                } if seconds == max + 1
+            ),
+            "{err:?}"
+        );
+        assert!(!err.is_connection_error() && !err.is_recoverable());
+    }
 }
