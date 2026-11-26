@@ -1137,3 +1137,192 @@ async fn a_silent_handshake_is_a_connection_error() {
         assert!(!err.is_recoverable(), "{err:?}");
     }
 }
+
+/// Spawns `api status` under `reply_timeout`, lets the switch take `delay` to
+/// answer, and returns the result.
+async fn api_answered_after(
+    mock: &mut freeswitch_esl_tokio::mock::MockConnection,
+    client: &EslClient,
+    reply_timeout: Option<Option<Duration>>,
+    delay: Duration,
+) -> Result<freeswitch_esl_tokio::EslResponse, EslError> {
+    let cmd = tokio::spawn({
+        let client = client.clone();
+        async move {
+            match reply_timeout {
+                Some(per_call) => {
+                    client
+                        .api_with_timeout("status", per_call)
+                        .await
+                }
+                None => {
+                    client
+                        .api("status")
+                        .await
+                }
+            }
+        }
+    });
+    // Bounded so a command that panicked before writing fails the test.
+    tokio::time::timeout(Duration::from_secs(5), mock.read_command())
+        .await
+        .expect("the command reaches the switch")
+        .unwrap();
+    tokio::time::sleep(delay).await;
+    mock.reply_api("UP")
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), cmd)
+        .await
+        .expect("the command returns once answered")
+        .expect("the command task panicked")
+}
+
+/// `None` and `Duration::ZERO` both mean no timeout, per call and for the
+/// connection, so a slow reply still reaches its command.
+#[tokio::test]
+async fn a_command_without_timeout_waits_for_its_reply() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let slow = Duration::from_millis(300);
+
+    client.set_command_timeout(Duration::from_millis(50));
+    for per_call in [None, Some(Duration::ZERO)] {
+        let reply = api_answered_after(&mut mock, &client, Some(per_call), slow).await;
+        assert_eq!(
+            reply
+                .expect("{per_call:?}")
+                .body(),
+            Some("UP")
+        );
+    }
+
+    client.set_command_timeout(None);
+    let reply = api_answered_after(&mut mock, &client, None, slow).await;
+    assert_eq!(
+        reply
+            .expect("set to None")
+            .body(),
+        Some("UP")
+    );
+
+    client.set_command_timeout(Some(Duration::ZERO));
+    let reply = api_answered_after(&mut mock, &client, None, slow).await;
+    assert_eq!(
+        reply
+            .expect("set to zero")
+            .body(),
+        Some("UP")
+    );
+}
+
+/// A timeout no clock can add to now is no timeout, never a panic; one whose
+/// milliseconds overflow a u64 does not wrap to a short one either.
+#[tokio::test]
+async fn a_timeout_past_the_clock_range_does_not_panic() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let wraps_to_384ms = Duration::from_secs(18_446_744_073_709_552);
+    let slow = Duration::from_millis(600);
+
+    for huge in [Duration::MAX, wraps_to_384ms] {
+        let reply = api_answered_after(&mut mock, &client, Some(Some(huge)), slow).await;
+        assert_eq!(
+            reply
+                .expect("per call")
+                .body(),
+            Some("UP")
+        );
+
+        client.set_command_timeout(huge);
+        let reply = api_answered_after(&mut mock, &client, None, slow).await;
+        assert_eq!(
+            reply
+                .expect("for the connection")
+                .body(),
+            Some("UP")
+        );
+    }
+}
+
+/// Waits for the reader to end the event stream, then returns the status.
+async fn status_once_closed(
+    client: &EslClient,
+    events: &mut freeswitch_esl_tokio::EslEventStream,
+) -> ConnectionStatus {
+    loop {
+        let item = tokio::time::timeout(Duration::from_secs(10), events.recv())
+            .await
+            .expect("the reader exits");
+        if item.is_none() {
+            return client.status();
+        }
+    }
+}
+
+/// `disconnect()` publishes its status and takes the writer from a command
+/// that would otherwise wait forever, which then fails as a connection error.
+#[tokio::test]
+async fn disconnect_releases_a_command_waiting_without_timeout() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    let cmd = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api_with_timeout("status", None)
+                .await
+        }
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+
+    tokio::time::timeout(Duration::from_secs(5), client.disconnect())
+        .await
+        .expect("disconnect does not queue behind the in-flight command")
+        .expect("the shutdown succeeds");
+    let err = tokio::time::timeout(Duration::from_secs(5), cmd)
+        .await
+        .expect("the in-flight command is released")
+        .unwrap()
+        .expect_err("no reply came");
+    assert!(err.is_connection_error(), "{err:?}");
+    assert_eq!(
+        client.status(),
+        ConnectionStatus::Disconnected(DisconnectReason::ClientRequested)
+    );
+}
+
+/// A write the switch never reads ends when liveness expires, with or without
+/// a command timeout, rather than outliving the connection.
+#[tokio::test]
+async fn liveness_expiry_ends_a_blocked_write() {
+    for reply_timeout in [None, Some(Duration::from_secs(600))] {
+        let (_mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+        client.set_liveness_timeout(Duration::from_secs(1));
+        let huge = "x".repeat(32 * 1024 * 1024);
+        // Bounded here only so a regression fails instead of hanging.
+        let err = tokio::time::timeout(
+            Duration::from_secs(30),
+            client.api_with_timeout(&huge, reply_timeout),
+        )
+        .await
+        .expect("the write ends with the connection")
+        .expect_err("the write cannot finish");
+        assert!(err.is_connection_error(), "{reply_timeout:?}: {err:?}");
+        assert_eq!(
+            status_once_closed(&client, &mut events).await,
+            ConnectionStatus::Disconnected(DisconnectReason::HeartbeatExpired),
+            "{reply_timeout:?}"
+        );
+    }
+}
+
+/// A non-zero liveness timeout under a millisecond still arms the check.
+#[tokio::test]
+async fn a_sub_millisecond_liveness_timeout_is_armed() {
+    let (_mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client.set_liveness_timeout(Duration::from_micros(500));
+    assert_eq!(
+        status_once_closed(&client, &mut events).await,
+        ConnectionStatus::Disconnected(DisconnectReason::HeartbeatExpired)
+    );
+}
