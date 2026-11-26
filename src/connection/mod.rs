@@ -250,11 +250,16 @@ struct PendingReply {
 }
 
 impl PendingReply {
-    fn new() -> Self {
+    /// `owed` replies a previous process image left unanswered, each under a
+    /// ticket this connection never hands to a command.
+    fn new(owed: usize) -> Self {
+        let next_ticket = u64::try_from(owed).unwrap_or(u64::MAX);
         Self {
             waiting: None,
-            stale: VecDeque::new(),
-            next_ticket: 0,
+            stale: (0..next_ticket)
+                .map(CommandTicket)
+                .collect(),
+            next_ticket,
             reader_dead: false,
         }
     }
@@ -385,6 +390,7 @@ pub struct EslConnectOptions {
     connect_timeout: Duration,
     strict_header_utf8: bool,
     event_overflow: EventOverflow,
+    owed_replies: usize,
 }
 
 impl EslConnectOptions {
@@ -423,6 +429,19 @@ impl EslConnectOptions {
         self
     }
 
+    /// Replies the switch still owes the process image that handed this
+    /// socket over, from [`ReexecHandoff::owed_replies`](crate::ReexecHandoff::owed_replies).
+    ///
+    /// Read only by [`EslClient::adopt_stream_with_options`]: the first `n`
+    /// replies then arrive as [`EslError::LateReply`] under tickets no command
+    /// here was given, instead of being taken as the next commands' own. A
+    /// connection this process opened owes nothing, so `connect` and
+    /// `accept_outbound` ignore it.
+    pub fn with_owed_replies(mut self, n: usize) -> Self {
+        self.owed_replies = n;
+        self
+    }
+
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub fn event_queue_size(&self) -> usize {
         self.event_queue_size
@@ -444,6 +463,11 @@ impl EslConnectOptions {
     pub fn event_overflow(&self) -> EventOverflow {
         self.event_overflow
     }
+
+    /// Replies owed on an adopted socket. Default: 0.
+    pub fn owed_replies(&self) -> usize {
+        self.owed_replies
+    }
 }
 
 impl Default for EslConnectOptions {
@@ -453,6 +477,7 @@ impl Default for EslConnectOptions {
             connect_timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             strict_header_utf8: false,
             event_overflow: EventOverflow::DropIncoming,
+            owed_replies: 0,
         }
     }
 }
@@ -571,7 +596,7 @@ impl EslClient {
         Ok(Self::split_and_spawn_with_options(
             stream,
             parser,
-            options,
+            options.with_owed_replies(0),
             Some(auth_response),
             ConnectionMode::Inbound,
         ))
@@ -639,7 +664,7 @@ impl EslClient {
         Self::split_and_spawn_with_options(
             stream,
             EslParser::new().with_strict_header_utf8(options.strict_header_utf8()),
-            options,
+            options.with_owed_replies(0),
             None,
             ConnectionMode::Outbound,
         )
@@ -665,7 +690,9 @@ impl EslClient {
     /// Create an `EslClient` from an already-authenticated TCP stream
     /// with custom options.
     ///
-    /// See [`adopt_stream()`](Self::adopt_stream) for details.
+    /// See [`adopt_stream()`](Self::adopt_stream) for details. Pass the
+    /// handoff's owed reply count through
+    /// [`EslConnectOptions::with_owed_replies`], which `adopt_stream` cannot.
     pub fn adopt_stream_with_options(
         stream: TcpStream,
         residual_bytes: &[u8],
@@ -706,7 +733,7 @@ impl EslClient {
         let (result_tx, result_rx) = oneshot::channel();
 
         let shared = Arc::new(SharedState {
-            pending_reply: Mutex::new(PendingReply::new()),
+            pending_reply: Mutex::new(PendingReply::new(options.owed_replies)),
             status_tx,
             liveness_timeout_ms: AtomicU64::new(0),
             command_timeout_ms: AtomicU64::new(DEFAULT_COMMAND_TIMEOUT_MS),

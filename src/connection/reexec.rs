@@ -15,9 +15,18 @@ use crate::error::{EslError, EslResult};
 #[cfg(unix)]
 use super::{DisconnectReason, EslClient};
 
-/// Result type for the reexec drain operation (residual bytes or error).
+/// Result type for the reexec drain operation.
 #[cfg(unix)]
-pub(crate) type ReexecResult = Result<Vec<u8>, EslError>;
+pub(crate) type ReexecResult = Result<Drained, EslError>;
+
+/// What the reader leaves once it stops at a message boundary.
+#[cfg(unix)]
+pub(crate) struct Drained {
+    pub(crate) residual: Vec<u8>,
+    /// Replies still owed when the reader stopped; the writer is held by
+    /// teardown, so no command can add to them.
+    pub(crate) owed_replies: usize,
+}
 
 /// Why a drain whose teardown caller stopped waiting ends the connection.
 #[cfg(unix)]
@@ -28,11 +37,12 @@ pub(crate) const REEXEC_ABANDONED: &str = "re-exec teardown gave up before the d
 /// The fd stays open only while the old [`EslClient`] is alive, and its
 /// `CLOEXEC` flag is still set: the caller clears it before `exec()`.
 #[cfg(unix)]
-#[must_use = "the fd and residual bytes are what the next process adopts"]
+#[must_use = "the fd, residual bytes and owed replies are what the next process adopts"]
 #[derive(Debug)]
 pub struct ReexecHandoff {
     fd: std::os::unix::io::RawFd,
     residual: Vec<u8>,
+    owed_replies: usize,
 }
 
 #[cfg(unix)]
@@ -46,6 +56,17 @@ impl ReexecHandoff {
     /// [`EslClient::adopt_stream`] to seed its parser with.
     pub fn residual(&self) -> &[u8] {
         &self.residual
+    }
+
+    /// Replies the switch still owes for commands that timed out or were
+    /// dropped, counted when the reader stopped.
+    ///
+    /// Carry it across `exec()` with the fd and pass it to
+    /// [`EslConnectOptions::with_owed_replies`](super::EslConnectOptions::with_owed_replies):
+    /// without it, an owed reply arriving after the new process's first
+    /// command is taken as that command's, and every later reply shifts.
+    pub fn owed_replies(&self) -> usize {
+        self.owed_replies
     }
 }
 
@@ -88,8 +109,8 @@ impl EslClient {
     ///   does; a command sent while teardown runs waits for it and then fails
     ///   with a connection error, never reaching the wire.
     /// - A timed-out command's reply not yet received as
-    ///   [`EslError::LateReply`] does not block teardown; the new process
-    ///   receives it as [`EslError::UnsolicitedReply`].
+    ///   [`EslError::LateReply`] does not block teardown; it is counted in
+    ///   [`ReexecHandoff::owed_replies`] for the new process to adopt with.
     /// - May only be called once. Returns an error on subsequent calls.
     ///
     /// # After this call
@@ -173,7 +194,7 @@ impl EslClient {
         // Extra 1s margin so the reader's own drain timeout fires first
         // with a descriptive error.
         let outer_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS) + Duration::from_secs(1);
-        let residual = match timeout(outer_timeout, reexec.result_rx).await {
+        let drained = match timeout(outer_timeout, reexec.result_rx).await {
             // The reader publishes its status before it drops the channel.
             Ok(result) => result.map_err(|e| EslError::ReexecReaderLost {
                 reason: "reader task exited without sending result".into(),
@@ -202,8 +223,14 @@ impl EslClient {
         info!(
             "Re-exec teardown complete, fd={}, {} residual bytes",
             fd,
-            residual.len()
+            drained
+                .residual
+                .len()
         );
-        Ok(ReexecHandoff { fd, residual })
+        Ok(ReexecHandoff {
+            fd,
+            residual: drained.residual,
+            owed_replies: drained.owed_replies,
+        })
     }
 }

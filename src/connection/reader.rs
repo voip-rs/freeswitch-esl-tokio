@@ -19,7 +19,7 @@ use crate::{
 
 use super::reexec::ReexecReader;
 #[cfg(unix)]
-use super::reexec::REEXEC_ABANDONED;
+use super::reexec::{Drained, REEXEC_ABANDONED};
 use super::{read_into_parser, DisconnectReason, EventOverflow, ReadStep, SharedState};
 
 /// Per-iteration view of the event channel: the overflow policy, the re-exec
@@ -513,13 +513,25 @@ async fn drain_for_reexec(
         let residual = parser
             .remaining_bytes()
             .to_vec();
-        debug!("Re-exec drain complete, {} residual bytes", residual.len());
+        let owed_replies = shared
+            .pending_reply
+            .lock()
+            .await
+            .stale
+            .len();
+        debug!(
+            "Re-exec drain complete, {} residual bytes, {owed_replies} replies owed",
+            residual.len()
+        );
         let delivered = reexec
             .result_tx
             .take()
             .is_some_and(|tx| {
-                tx.send(Ok(residual))
-                    .is_ok()
+                tx.send(Ok(Drained {
+                    residual,
+                    owed_replies,
+                }))
+                .is_ok()
             });
         if !delivered {
             warn!("Re-exec caller gone before the residual bytes were delivered");

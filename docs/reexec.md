@@ -15,11 +15,13 @@ the connection using the preserved fd and any residual parser bytes.
 ```rust
 #[cfg(unix)]
 let handoff = client.teardown_for_reexec().await?;
-let (fd, residual) = (handoff.fd(), handoff.residual());
+let (fd, residual, owed) = (handoff.fd(), handoff.residual(), handoff.owed_replies());
 ```
 
-Returns a `ReexecHandoff` carrying the raw socket fd and any unparsed
-bytes remaining in the parser buffer. After this call:
+Returns a `ReexecHandoff` carrying the raw socket fd, any unparsed
+bytes remaining in the parser buffer, and the number of replies the
+switch still owes for commands that timed out or were dropped. All
+three cross `exec()`. After this call:
 
 - The connection status is `Disconnected(ReexecTeardown)`.
 - The caller must clear `CLOEXEC` on the fd before `exec()`.
@@ -32,12 +34,15 @@ bytes remaining in the parser buffer. After this call:
 let stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
 stream.set_nonblocking(true)?;
 let tokio_stream = tokio::net::TcpStream::from_std(stream)?;
-let (client, events) = EslClient::adopt_stream(tokio_stream, &residual)?;
+let options = EslConnectOptions::new().with_owed_replies(owed);
+let (client, events) = EslClient::adopt_stream_with_options(tokio_stream, &residual, options)?;
 ```
 
 Creates a new `EslClient` from an already-authenticated TCP stream.
 The parser is pre-seeded with any residual bytes from the previous
-process.
+process, and the first `owed` replies are routed to the event stream
+as `LateReply`. `adopt_stream` takes no owed count, so it is right
+only when the handoff reported none.
 
 ## Drain Protocol
 
@@ -97,10 +102,17 @@ channel, so the caller receives all in-flight events.
   wait for commands to complete. A command whose future was dropped
   before its reply arrived still counts as in flight.
 - **Owed replies cross the exec.** A command that timed out does not
-  block teardown, but the switch still owes its reply. If it has not
-  arrived as `LateReply` before teardown, the new process receives it
-  as `UnsolicitedReply`, with no ticket to pair it with. A caller that
-  needs that result waits for the `LateReply` before tearing down.
+  block teardown, but the switch still owes its reply.
+  `handoff.owed_replies()` counts those not yet arrived when the reader
+  stopped; teardown holds the writer, so no command adds to them.
+  Passed to `with_owed_replies` on the adopting side, each arrives
+  there as `LateReply` under a ticket no command of the new process
+  holds, so its result is visible but cannot be paired with the old
+  command. Without the count, an owed reply arriving before the new
+  process sends anything is an `UnsolicitedReply`, and one arriving
+  after its first command is taken as that command's reply, shifting
+  every later reply by one. A caller that needs the result itself
+  waits for the `LateReply` before tearing down.
 - **Single call.** Teardown takes the reexec channel from SharedState.
   Calling it twice returns `ReexecFailed`.
 
@@ -176,7 +188,8 @@ SIGUSR2 received:
   // 2. Wait for pending commands to complete
   let handoff = client.teardown_for_reexec().await?;
   let fd = handoff.fd();
-  // 3. Serialize app state + handoff.residual() to disk/env
+  // 3. Serialize app state, handoff.residual() and
+  //    handoff.owed_replies() to disk/env
   // 4. Clear CLOEXEC on fd
   nix::fcntl::fcntl(fd, nix::fcntl::FcntlArg::F_SETFD(nix::fcntl::FdFlag::empty()))?;
   // 5. mem::forget(client) to keep fd open
@@ -184,12 +197,14 @@ SIGUSR2 received:
   // 6. exec()
 
 New process starts:
-  // 1. Read fd and residual from disk/env
+  // 1. Read fd, residual and the owed reply count from disk/env
   let stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
   stream.set_nonblocking(true)?;
   let tokio_stream = tokio::net::TcpStream::from_std(stream)?;
   // 2. Adopt the stream
-  let (client, mut events) = EslClient::adopt_stream(tokio_stream, &residual)?;
+  let options = EslConnectOptions::new().with_owed_replies(owed);
+  let (client, mut events) =
+      EslClient::adopt_stream_with_options(tokio_stream, &residual, options)?;
   // 3. Restore app state
   // 4. Enter event loop
 ```

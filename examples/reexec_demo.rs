@@ -16,7 +16,9 @@ mod common;
 #[cfg(unix)]
 mod demo {
     use crate::common;
-    use freeswitch_esl_tokio::{EslClient, EslEventStream, EslEventType, EventFormat, EventHeader};
+    use freeswitch_esl_tokio::{
+        EslClient, EslConnectOptions, EslEventStream, EslEventType, EventFormat, EventHeader,
+    };
     use std::os::unix::io::BorrowedFd;
     use std::time::Duration;
     use tracing::info;
@@ -91,8 +93,11 @@ mod demo {
         std_stream.set_nonblocking(true)?;
         let tokio_stream = tokio::net::TcpStream::from_std(std_stream)?;
 
+        // Replies the switch still owes the old process must not be taken as
+        // the new process's: the count crosses exec() with the fd.
+        let options = EslConnectOptions::new().with_owed_replies(handoff.owed_replies());
         let (new_client, mut new_events) =
-            EslClient::adopt_stream(tokio_stream, handoff.residual())?;
+            EslClient::adopt_stream_with_options(tokio_stream, handoff.residual(), options)?;
 
         // Exercise the write half too. Reading alone would leave the demo
         // claiming a working connection on the evidence of one direction.
