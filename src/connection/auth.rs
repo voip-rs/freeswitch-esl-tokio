@@ -1,6 +1,7 @@
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Instant};
 use tracing::{debug, trace, warn};
 
 use super::{read_into_parser, ReadStep};
@@ -60,9 +61,8 @@ pub(super) struct Handshake<'a> {
 }
 
 impl Handshake<'_> {
-    /// Read one ESL message, failing the whole handshake on an idle socket.
-    async fn recv_message(&mut self, read_timeout: Duration) -> EslResult<EslMessage> {
-        let timeout_ms = super::saturating_millis(read_timeout);
+    /// Read one ESL message, failing the whole handshake at the deadline.
+    async fn recv_message(&mut self, deadline: &HandshakeDeadline) -> EslResult<EslMessage> {
         loop {
             if let Some(message) = self
                 .parser
@@ -76,12 +76,46 @@ impl Handshake<'_> {
             }
 
             trace!("[RECV] Buffer needs more data, reading from socket");
-            match read_into_parser(self.stream, self.parser, self.read_buffer, read_timeout).await?
-            {
+            let remaining = deadline.remaining();
+            match read_into_parser(self.stream, self.parser, self.read_buffer, remaining).await? {
                 ReadStep::Fed => {}
                 ReadStep::Eof => return Err(EslError::ConnectionClosed),
-                ReadStep::Idle => return Err(EslError::HandshakeTimeout { timeout_ms }),
+                ReadStep::Idle => return Err(deadline.expired()),
             }
+        }
+    }
+}
+
+/// One deadline from the TCP connect through the auth reply.
+pub(super) struct HandshakeDeadline {
+    /// `None` when the connect timeout is too large to add to now.
+    at: Option<Instant>,
+    timeout_ms: u64,
+}
+
+impl HandshakeDeadline {
+    pub(super) fn starting_now(connect_timeout: Duration) -> Self {
+        Self {
+            at: Instant::now().checked_add(connect_timeout),
+            timeout_ms: super::saturating_millis(connect_timeout),
+        }
+    }
+
+    /// Time left, zero once past; a step given zero still gets one poll.
+    pub(super) fn remaining(&self) -> Duration {
+        self.at
+            .map_or(Duration::MAX, |at| {
+                at.saturating_duration_since(Instant::now())
+            })
+    }
+
+    pub(super) fn timeout_ms(&self) -> u64 {
+        self.timeout_ms
+    }
+
+    fn expired(&self) -> EslError {
+        EslError::HandshakeTimeout {
+            timeout_ms: self.timeout_ms,
         }
     }
 }
@@ -93,11 +127,11 @@ impl Handshake<'_> {
 pub(super) async fn authenticate(
     io: &mut Handshake<'_>,
     method: &AuthMethod,
-    connect_timeout: Duration,
+    deadline: &HandshakeDeadline,
 ) -> EslResult<EslResponse> {
     debug!("[AUTH] Waiting for auth request from FreeSWITCH");
     let message = io
-        .recv_message(connect_timeout)
+        .recv_message(deadline)
         .await?;
 
     if message.message_type == MessageType::RudeRejection {
@@ -123,13 +157,17 @@ pub(super) async fn authenticate(
 
     let command_str = auth_cmd.to_wire_format()?;
     debug!(">> {}", auth_cmd.redact_wire(&command_str));
-    io.stream
-        .write_all(command_str.as_bytes())
-        .await
-        .map_err(EslError::Io)?;
+    timeout(
+        deadline.remaining(),
+        io.stream
+            .write_all(command_str.as_bytes()),
+    )
+    .await
+    .map_err(|_| deadline.expired())?
+    .map_err(EslError::Io)?;
 
     let response_msg = match io
-        .recv_message(connect_timeout)
+        .recv_message(deadline)
         .await
     {
         Ok(msg) => msg,
@@ -394,7 +432,7 @@ mod tests {
                 read_buffer: &mut read_buffer,
             },
             &AuthMethod::password("ClueCon"),
-            Duration::from_millis(200),
+            &HandshakeDeadline::starting_now(Duration::from_millis(200)),
         )
         .await
         .expect_err("a non-auth truncated reply must not authenticate");

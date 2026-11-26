@@ -29,7 +29,7 @@ pub use client::SwallowedEventTypes;
 #[cfg(unix)]
 pub use reexec::ReexecHandoff;
 
-use auth::{authenticate, Handshake};
+use auth::{authenticate, Handshake, HandshakeDeadline};
 use reader::reader_loop;
 #[cfg(unix)]
 use reexec::ReexecCaller;
@@ -105,14 +105,14 @@ impl std::fmt::Display for DisconnectReason {
     }
 }
 
-/// Establish a TCP connection with a timeout.
+/// Establish a TCP connection within the handshake's deadline.
 async fn tcp_connect_with_timeout(
     host: &str,
     port: u16,
-    connect_timeout: Duration,
+    deadline: &HandshakeDeadline,
 ) -> EslResult<TcpStream> {
-    let timeout_ms = saturating_millis(connect_timeout);
-    let tcp_result = timeout(connect_timeout, TcpStream::connect((host, port))).await;
+    let timeout_ms = deadline.timeout_ms();
+    let tcp_result = timeout(deadline.remaining(), TcpStream::connect((host, port))).await;
 
     match tcp_result {
         Ok(Ok(s)) => {
@@ -396,7 +396,7 @@ impl EslConnectOptions {
         self
     }
 
-    /// Set the timeout for TCP connect and auth handshake.
+    /// Set the deadline for the TCP connect and the auth handshake together.
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
         self
@@ -424,7 +424,9 @@ impl EslConnectOptions {
         self.event_queue_size
     }
 
-    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
+    /// One deadline from the start of the TCP connect through the auth reply,
+    /// the auth command's write included; a timeout too large to add to the
+    /// current time is none. Default: 2s.
     pub fn connect_timeout(&self) -> Duration {
         self.connect_timeout
     }
@@ -545,8 +547,8 @@ impl EslClient {
 
         info!("Connecting to FreeSWITCH at {}:{}", host, port);
 
-        let connect_timeout = options.connect_timeout;
-        let mut stream = tcp_connect_with_timeout(host, port, connect_timeout).await?;
+        let deadline = HandshakeDeadline::starting_now(options.connect_timeout);
+        let mut stream = tcp_connect_with_timeout(host, port, &deadline).await?;
         let mut parser = EslParser::new().with_strict_header_utf8(options.strict_header_utf8());
         let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
 
@@ -557,7 +559,7 @@ impl EslClient {
                 read_buffer: &mut read_buffer,
             },
             &method,
-            connect_timeout,
+            &deadline,
         )
         .await?;
 

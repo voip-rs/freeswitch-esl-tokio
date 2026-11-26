@@ -249,11 +249,12 @@ pub enum EslError {
         timeout_ms: u64,
     },
 
-    /// The socket connected but the switch sent nothing for the connect
-    /// timeout while the auth handshake waited on it, so no session exists.
-    #[error("ESL handshake idle for {timeout_ms}ms")]
+    /// The socket connected but the auth handshake did not complete within
+    /// the connect timeout, which runs from the start of the TCP connect, so no
+    /// session exists.
+    #[error("ESL handshake did not complete within {timeout_ms}ms")]
     HandshakeTimeout {
-        /// The connect timeout in milliseconds, which bounds each handshake read.
+        /// The connect timeout in milliseconds.
         timeout_ms: u64,
     },
 
