@@ -622,6 +622,51 @@ async fn timeout_stale_reply_does_not_corrupt_next_command() {
     );
 }
 
+/// A command whose future the caller drops while it waits still has a reply
+/// coming; the next command must not take that reply as its own.
+#[tokio::test]
+async fn cancelled_command_reply_does_not_reach_the_next_command() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    let client_a = client.clone();
+    let cmd_a = tokio::spawn(async move {
+        tokio::time::timeout(Duration::from_millis(100), client_a.api("status")).await
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    assert!(
+        cmd_a
+            .await
+            .expect("cmd_a panicked")
+            .is_err(),
+        "the caller's own timeout drops command A"
+    );
+
+    let client_b = client.clone();
+    let cmd_b = tokio::spawn(async move {
+        client_b
+            .api("version")
+            .await
+    });
+    mock.read_command()
+        .await
+        .unwrap();
+    mock.reply_ok_text("reply-for-A")
+        .await
+        .unwrap();
+    mock.reply_ok_text("reply-for-B")
+        .await
+        .unwrap();
+
+    let b_result = tokio::time::timeout(Duration::from_secs(2), cmd_b)
+        .await
+        .expect("cmd_b join timeout")
+        .expect("cmd_b panicked")
+        .expect("command B should succeed");
+    assert_eq!(b_result.reply_text(), Some("+OK reply-for-B"));
+}
+
 #[tokio::test]
 async fn timeout_normal_reply_still_routes_correctly() {
     // Regression: verify reply routing works normally when there is no timeout.
