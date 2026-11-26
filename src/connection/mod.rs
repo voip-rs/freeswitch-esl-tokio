@@ -174,8 +174,10 @@ const DEFAULT_COMMAND_TIMEOUT_MS: u64 = 5000;
 
 /// Slot for the in-flight command waiter and its stale-reply counter.
 ///
-/// ESL carries no correlation IDs, so a reply arriving after its command timed
-/// out has to be discarded before the next waiter can consume it by mistake.
+/// ESL carries no correlation IDs, so a reply owed to a command that timed out,
+/// or whose future was dropped while it waited, has to be counted here before
+/// the next waiter can consume it by mistake. A waiter found on install is such
+/// a dropped command's.
 struct PendingReply {
     /// Waiter for the currently in-flight command (`None` between commands).
     waiting: Option<oneshot::Sender<EslMessage>>,
