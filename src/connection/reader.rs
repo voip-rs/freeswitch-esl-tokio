@@ -398,14 +398,17 @@ async fn dispatch_message(
                 .pop_front()
             {
                 late(ticket, message)
-            } else if let Some((ticket, tx)) = pending
+            } else if let Some(waiter) = pending
                 .waiting
                 .take()
             {
                 // Fails only when the command's future was dropped mid-wait.
-                match tx.send(message) {
+                match waiter
+                    .tx
+                    .send(message)
+                {
                     Ok(()) => return ControlFlow::Continue(()),
-                    Err(message) => late(ticket, message),
+                    Err(message) => late(waiter.ticket, message),
                 }
             } else {
                 EslError::UnsolicitedReply {

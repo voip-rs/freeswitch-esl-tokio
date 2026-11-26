@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::tcp::OwnedWriteHalf;
@@ -194,10 +194,13 @@ impl fmt::Display for CommandTicket {
 /// oldest first. A command that timed out, or whose future was dropped while
 /// it waited, moves to `stale`; its reply is then delivered as
 /// [`EslError::LateReply`] and never reaches the next waiter. A waiter found on
-/// install is such a dropped command's.
+/// install is such a dropped command's. One dropped before its write completed
+/// left an unknown prefix of its command on the wire: no reply can be assumed
+/// owed and the next command cannot be framed after it, so the connection is
+/// closed instead.
 struct PendingReply {
     /// Waiter for the currently in-flight command (`None` between commands).
-    waiting: Option<(CommandTicket, oneshot::Sender<EslMessage>)>,
+    waiting: Option<Waiter>,
     /// Commands whose reply is owed but nobody awaits. Non-empty coexists with
     /// `waiting: Some`: the next command installs while one is still in flight.
     stale: VecDeque<CommandTicket>,
@@ -217,20 +220,48 @@ impl PendingReply {
         }
     }
 
-    /// Installs the waiter for a command about to be written.
-    fn install(&mut self, tx: oneshot::Sender<EslMessage>) -> CommandTicket {
-        let ticket = CommandTicket(self.next_ticket);
-        self.next_ticket += 1;
-        if let Some((abandoned, _)) = self
+    /// Installs the waiter for a command about to be written, or reports that
+    /// a previous command was dropped mid-write. The returned flag is the
+    /// writer's to set once its write completes.
+    fn install(
+        &mut self,
+        tx: oneshot::Sender<EslMessage>,
+    ) -> Result<Arc<AtomicBool>, AbandonedMidWrite> {
+        if let Some(abandoned) = self
             .waiting
-            .replace((ticket, tx))
+            .take()
         {
+            if !abandoned
+                .written
+                .load(Ordering::Acquire)
+            {
+                return Err(AbandonedMidWrite);
+            }
             self.stale
-                .push_back(abandoned);
+                .push_back(abandoned.ticket);
         }
-        ticket
+        let written = Arc::new(AtomicBool::new(false));
+        self.waiting = Some(Waiter {
+            ticket: CommandTicket(self.next_ticket),
+            tx,
+            written: written.clone(),
+        });
+        self.next_ticket += 1;
+        Ok(written)
     }
 }
+
+/// The command awaiting the next reply.
+struct Waiter {
+    ticket: CommandTicket,
+    tx: oneshot::Sender<EslMessage>,
+    /// Set with no await point after the write completes, so a future
+    /// dropped after its write cannot leave it unset.
+    written: Arc<AtomicBool>,
+}
+
+/// A command's future was dropped before its bytes all reached the socket.
+struct AbandonedMidWrite;
 
 /// Shared state between EslClient and the reader task
 struct SharedState {

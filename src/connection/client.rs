@@ -2,8 +2,9 @@ use std::borrow::Borrow;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
+use tokio::net::tcp::OwnedWriteHalf;
 use tokio::time::timeout;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{
     command::{DivertMode, EslCommand, EslResponse, ExecuteOptions},
@@ -14,7 +15,7 @@ use crate::{
     LogLevel,
 };
 
-use super::{ConnectionStatus, EslClient, EslEventStream};
+use super::{AbandonedMidWrite, ConnectionStatus, DisconnectReason, EslClient, EslEventStream};
 
 impl EslClient {
     /// Send a command and wait for the reply.
@@ -26,6 +27,9 @@ impl EslClient {
     /// Dropping the future once the command is written keeps correlation: its
     /// reply is still owed and arrives on the event stream as
     /// [`EslError::LateReply`], as does that of a command that timed out.
+    /// Dropping it while the write is still pending leaves part of the command
+    /// on the wire: the next command closes the connection and returns a
+    /// connection error.
     pub async fn send_command(&self, command: EslCommand) -> EslResult<EslResponse> {
         if !self.is_connected() {
             return Err(EslError::NotConnected);
@@ -42,7 +46,7 @@ impl EslClient {
 
         // Set up reply channel
         let (tx, mut rx) = tokio::sync::oneshot::channel();
-        {
+        let written_flag = {
             let mut pending = self
                 .shared
                 .pending_reply
@@ -55,14 +59,25 @@ impl EslClient {
             if pending.reader_dead {
                 return Err(EslError::ConnectionClosed);
             }
-            pending.install(tx);
-        }
+            match pending.install(tx) {
+                Ok(flag) => flag,
+                Err(AbandonedMidWrite) => {
+                    drop(pending);
+                    return Err(self
+                        .close_after_abandoned_write(&mut writer)
+                        .await);
+                }
+            }
+        };
 
         // Write command
-        if let Err(e) = writer
+        let written = writer
             .write_all(command_str.as_bytes())
-            .await
-        {
+            .await;
+        if written.is_ok() {
+            written_flag.store(true, Ordering::Release);
+        }
+        if let Err(e) = written {
             let mut pending = self
                 .shared
                 .pending_reply
@@ -97,12 +112,15 @@ impl EslClient {
                 let owed = pending
                     .waiting
                     .take();
-                if let Some((ticket, _)) = owed {
+                if let Some(waiter) = owed {
                     pending
                         .stale
-                        .push_back(ticket);
+                        .push_back(waiter.ticket);
                     drop(writer);
-                    return Err(EslError::CommandTimeout { timeout_ms, ticket });
+                    return Err(EslError::CommandTimeout {
+                        timeout_ms,
+                        ticket: waiter.ticket,
+                    });
                 }
                 drop(pending);
                 // The reader took the waiter between the timeout and the lock:
@@ -914,6 +932,25 @@ impl EslClient {
             .await
             .map_err(EslError::Io)?;
         Ok(())
+    }
+
+    /// Closes the connection after finding a command dropped mid-write, and
+    /// returns the error the next command reports.
+    async fn close_after_abandoned_write(&self, writer: &mut OwnedWriteHalf) -> EslError {
+        const REASON: &str = "a command was dropped before it was fully written";
+        warn!("{REASON}; closing the connection");
+        self.shared
+            .status_tx
+            .send_replace(ConnectionStatus::Disconnected(
+                DisconnectReason::ProtocolError(REASON.into()),
+            ));
+        if let Err(e) = writer
+            .shutdown()
+            .await
+        {
+            debug!("shutdown after an abandoned write failed: {e}");
+        }
+        EslError::protocol_error(REASON)
     }
 }
 
