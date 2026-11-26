@@ -136,6 +136,60 @@ async fn live_liveness_heartbeat_resets_timer() {
     );
 }
 
+/// With no timeout a blocking `api` waits for its reply, however short the
+/// connection's default.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_command_without_timeout_waits_for_its_reply() {
+    let (client, _events, _permit) = connect().await;
+    client.set_command_timeout(Duration::from_millis(50));
+
+    let started = Instant::now();
+    let reply = client
+        .api_with_timeout("msleep 1500", None)
+        .await
+        .expect("no timeout: the reply arrives");
+    assert!(started.elapsed() >= Duration::from_millis(1400));
+    assert!(
+        reply
+            .body()
+            .is_some_and(|body| body.starts_with("+OK")),
+        "{reply:?}"
+    );
+}
+
+/// `disconnect()` must not queue behind a command that has no timeout.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_disconnect_releases_a_command_without_timeout() {
+    let (client, _events, _permit) = connect().await;
+    client.set_command_timeout(None);
+
+    let blocked = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("msleep 5000")
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(2), client.disconnect())
+        .await
+        .expect("disconnect does not wait for the blocked command")
+        .expect("disconnect succeeds");
+    let result = tokio::time::timeout(Duration::from_secs(2), blocked)
+        .await
+        .expect("the blocked command is released")
+        .unwrap();
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert!(
+        result.is_err_and(|e| e.is_connection_error()),
+        "the blocked command ends with a connection error"
+    );
+}
+
 #[tokio::test]
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_command_timeout_msleep() {
