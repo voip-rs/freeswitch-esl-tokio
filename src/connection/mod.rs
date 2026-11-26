@@ -1101,6 +1101,88 @@ mod tests {
         assert!(read.is_err(), "the command reached the wire: {read:?}");
     }
 
+    /// A `disconnect()` from a clone while teardown drains ends the connection
+    /// teardown is about to hand over; the handoff must be withheld, or the
+    /// fd goes out with a shutdown queued behind it.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_disconnect_during_the_drain_withholds_the_handoff() {
+        use tokio::io::AsyncWriteExt;
+
+        let (mut server, client, mut events) = hand_driven_pair().await;
+        server
+            .write_all(
+                concat!(
+                    "Content-Type: text/event-plain\nContent-Length: 21\n\nEvent-Name: HEARTBEAT\n",
+                    "Content-Type: text/event-plain\nContent-Length: 4\n\n",
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let first = tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .expect("the heartbeat arrives");
+        assert!(matches!(first, Some(Ok(_))), "{first:?}");
+
+        let teardown = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .teardown_for_reexec()
+                    .await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while client
+                .writer
+                .try_lock()
+                .is_ok()
+            {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("teardown takes the writer");
+        let disconnect = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .disconnect()
+                    .await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while client.is_connected() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("disconnect publishes its status");
+        server
+            .write_all(b"abcd")
+            .await
+            .unwrap();
+
+        let result = tokio::time::timeout(Duration::from_secs(10), teardown)
+            .await
+            .expect("teardown returns")
+            .unwrap();
+        assert!(
+            matches!(result, Err(EslError::ReexecReaderLost { .. })),
+            "{result:?}"
+        );
+        assert_eq!(
+            client.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ClientRequested)
+        );
+        tokio::time::timeout(Duration::from_secs(5), disconnect)
+            .await
+            .expect("disconnect returns once teardown lets go")
+            .unwrap()
+            .expect("the shutdown succeeds");
+    }
+
     /// Starts a teardown mid-body, lets the server end the drain with `ending`
     /// (closing the socket after it when `close`), and returns the error with
     /// the status read the moment teardown returned. The reader stalls once it

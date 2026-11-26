@@ -1203,4 +1203,36 @@ mod tests {
         );
         assert!(!err.is_connection_error() && !err.is_recoverable());
     }
+
+    /// A linger under a second would render 0 seconds; it rounds up to one,
+    /// while an explicit zero stays zero, which the switch honours as such.
+    /// Past a second the fraction is truncated, as before.
+    #[test]
+    fn a_sub_second_linger_rounds_up() {
+        let linger = |timeout| EslCommand::Linger {
+            timeout: Some(timeout),
+        };
+        assert_eq!(
+            linger(Duration::from_millis(500))
+                .to_wire_format()
+                .unwrap(),
+            "linger 1\n\n"
+        );
+        assert_eq!(
+            linger(Duration::from_millis(1500))
+                .to_wire_format()
+                .unwrap(),
+            "linger 1\n\n"
+        );
+        assert_eq!(
+            linger(Duration::ZERO)
+                .to_wire_format()
+                .unwrap(),
+            "linger 0\n\n"
+        );
+        assert!(matches!(
+            linger(Duration::MAX).to_wire_format(),
+            Err(EslError::SecondsOutOfRange { .. })
+        ));
+    }
 }

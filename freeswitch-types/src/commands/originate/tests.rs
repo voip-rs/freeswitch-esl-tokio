@@ -2004,3 +2004,30 @@ fn originate_timeout_past_the_switch_int_is_refused() {
         .to_string();
     assert!(msg.contains("timeout"), "{msg}");
 }
+
+/// `switch_ivr_originate` takes a timeout of 0 as its 60 s default, so zero is
+/// refused, and a non-zero one under a second, which would render 0, is
+/// rounded up to one.
+#[test]
+fn originate_timeout_never_renders_zero() {
+    let base = || Originate::extension(test_endpoint(), "1000").unwrap();
+    assert_eq!(
+        base().with_timeout(Duration::ZERO),
+        Err(OriginateError::TimeoutOutOfRange { seconds: 0 })
+    );
+    let half = base()
+        .with_timeout(Duration::from_millis(500))
+        .unwrap();
+    assert!(half
+        .render(BlockParse::MEASURED)
+        .ends_with(" 1"));
+    assert_eq!(
+        Originate::parse_for(
+            "originate loopback/9199 1000 XML default undef undef 0",
+            BlockParse::MEASURED
+        ),
+        Err(OriginateError::TimeoutOutOfRange { seconds: 0 })
+    );
+    let json = r#"{"endpoint": {"loopback": {"extension": "9199"}}, "extension": "1000", "timeout_secs": 0}"#;
+    assert!(serde_json::from_str::<Originate>(json).is_err());
+}

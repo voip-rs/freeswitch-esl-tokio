@@ -85,19 +85,111 @@ async fn teardown_twice_fails() {
         .await;
     assert!(first.is_ok());
 
+    // The first handed the socket over, so the connection is not usable.
     let second = client
         .teardown_for_reexec()
         .await;
-    assert!(second.is_err());
-    match second.unwrap_err() {
-        EslError::ReexecFailed { reason, .. } => {
-            assert!(
-                reason.contains("already called"),
-                "unexpected reason: {}",
-                reason
-            );
+    match second {
+        Err(EslError::ReexecReaderLost { .. }) => {}
+        other => panic!("expected ReexecReaderLost, got: {other:?}"),
+    }
+}
+
+/// A connection already ended, here by `disconnect()`, has nothing to hand
+/// over; the refusal must not read as a usable connection.
+#[tokio::test]
+async fn teardown_after_disconnect_is_a_lost_reader() {
+    let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    client
+        .disconnect()
+        .await
+        .unwrap();
+    let err = client
+        .teardown_for_reexec()
+        .await
+        .expect_err("the connection ended");
+    assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+    assert_eq!(
+        client.status(),
+        ConnectionStatus::Disconnected(DisconnectReason::ClientRequested)
+    );
+}
+
+/// A command dropped mid-write left the stream unframeable: teardown cannot
+/// hand it over, and must say so rather than report a command in flight that
+/// will never finish.
+#[tokio::test]
+async fn teardown_after_a_command_dropped_mid_write_closes() {
+    use std::time::Duration;
+
+    let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+    // The mock never reads, so this cannot finish writing.
+    let huge = "x".repeat(32 * 1024 * 1024);
+    let stuck = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api_with_timeout(&huge, None)
+                .await
         }
-        e => panic!("expected ReexecFailed, got: {}", e),
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!stuck.is_finished(), "the write was expected to block");
+    stuck.abort();
+    assert!(stuck
+        .await
+        .unwrap_err()
+        .is_cancelled());
+
+    let err = tokio::time::timeout(Duration::from_secs(5), client.teardown_for_reexec())
+        .await
+        .expect("teardown returns")
+        .expect_err("the stream is unframeable");
+    assert!(matches!(err, EslError::ReexecReaderLost { .. }), "{err:?}");
+    assert!(
+        matches!(
+            client.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ProtocolError(_))
+        ),
+        "{:?}",
+        client.status()
+    );
+}
+
+/// An owed count read back after `exec()` is caller input: an absurd one is a
+/// counter, not a ticket per reply, and every reply goes to the stream late.
+#[tokio::test]
+async fn an_absurd_owed_reply_count_neither_panics_nor_allocates() {
+    use std::time::Duration;
+
+    let (listener, port) = setup_raw_pair().await;
+    let accept = tokio::spawn(async move {
+        let (stream, _) = listener
+            .accept()
+            .await
+            .unwrap();
+        MockConnection::from_stream(stream)
+    });
+    let stream = tokio::net::TcpStream::connect(("localhost", port))
+        .await
+        .unwrap();
+    let mut mock = accept
+        .await
+        .unwrap();
+
+    let options = EslConnectOptions::new().with_owed_replies(usize::MAX);
+    let (_client, mut events) = EslClient::adopt_stream_with_options(stream, &[], options).unwrap();
+    mock.reply_api("owed-reply")
+        .await
+        .unwrap();
+    match tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("the reply arrives")
+    {
+        Some(Err(EslError::LateReply { response, .. })) => {
+            assert_eq!(response.body(), Some("owed-reply"))
+        }
+        other => panic!("expected LateReply, got {other:?}"),
     }
 }
 
